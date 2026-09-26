@@ -1,0 +1,975 @@
+import {
+  type AdminRideDetail,
+  type AdminRideListItem,
+  adminRefundSchema,
+  adminReviewQuerySchema,
+  adminRideQuerySchema,
+  type AdminSupportDetail,
+  type AdminSupportItem,
+  adminSupportQuerySchema,
+  type OperatorMe,
+  type Page,
+  type ReviewCategory,
+  type ReviewItem,
+  reviewResolveSchema,
+  rideIdSchema,
+  supportNoteSchema,
+  supportReopenSchema,
+  supportResolveSchema,
+  supportVersionSchema,
+} from "../../shared/contracts";
+import { ApiError, notFound } from "../errors";
+import { type Deps, parseInput, readJson } from "../http";
+import {
+  audit,
+  type OperatorRow,
+  permissionsOf,
+  requireOperator,
+} from "../operators";
+import {
+  applyRefundSnapshot,
+  createOperatorRefund,
+  inFlightCents,
+  refundableSummary,
+} from "../refunds";
+import { settlementState } from "../rides";
+
+import type { RideRow } from "../lifecycle";
+
+export const stripeMode = (): OperatorMe["stripeMode"] => {
+  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  if (key.startsWith("sk_test_")) return "test";
+  if (key.startsWith("sk_live_") || key.startsWith("rk_live_")) return "live";
+  return "unconfigured";
+};
+
+const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
+const maskAccount = (clerkId: string) => `user_…${clerkId.slice(-4)}`;
+const query = (request: Request) =>
+  Object.fromEntries(new URL(request.url).searchParams);
+
+export function encodeCursor(at: Date | string, id: string) {
+  return Buffer.from(JSON.stringify([new Date(at).toISOString(), id])).toString(
+    "base64url",
+  );
+}
+
+export function decodeCursor(cursor?: string): [string, string] | null {
+  if (!cursor) return null;
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (
+      Array.isArray(value) &&
+      value.length === 2 &&
+      !Number.isNaN(Date.parse(value[0])) &&
+      /^[0-9a-f-]{36}$/i.test(value[1])
+    ) {
+      return [value[0], value[1]];
+    }
+  } catch {
+    return badCursor();
+  }
+  return badCursor();
+}
+
+function badCursor(): never {
+  throw new ApiError(
+    400,
+    "INVALID_CURSOR",
+    "That page link is no longer valid.",
+  );
+}
+
+function page<T>(
+  rows: T[],
+  limit: number,
+  key: (row: T) => [Date | string, string],
+) {
+  const more = rows.length > limit;
+  const items = more ? rows.slice(0, limit) : rows;
+  const last = items[items.length - 1];
+  return {
+    items,
+    nextCursor: more && last ? encodeCursor(...key(last)) : null,
+  };
+}
+
+export async function adminMe(request: Request, _params: unknown, deps: Deps) {
+  const operator = await requireOperator(request, deps, "view");
+  const body: OperatorMe = {
+    id: operator.id,
+    displayName: operator.display_name,
+    permissions: permissionsOf(operator),
+    stripeMode: stripeMode(),
+  };
+  return Response.json({ data: body });
+}
+
+const REVIEW_CATEGORY_SQL = `
+  CASE WHEN r.needs_review AND r.review_resolved_at IS NULL
+       THEN COALESCE(r.review_reason, 'settlement_failing')
+       ELSE 'settlement_retrying' END`;
+
+export async function listReview(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  await requireOperator(request, deps, "view");
+  const q = parseInput(adminReviewQuerySchema, query(request));
+  const cursor = decodeCursor(q.cursor);
+  const { rows } = await deps.db.query<RideRow & { category: ReviewCategory }>(
+    `SELECT r.*, ${REVIEW_CATEGORY_SQL} AS category
+       FROM mobility.rides r
+      WHERE ((r.needs_review AND r.review_resolved_at IS NULL)
+             OR (r.settled_at IS NULL AND r.settlement_attempts > 0
+                 AND r.status IN ('completed', 'cancelled', 'no_driver', 'interrupted')))
+        AND ($1::text IS NULL OR ${REVIEW_CATEGORY_SQL} = $1::text)
+        AND ($2::timestamptz IS NULL OR r.updated_at >= $2::timestamptz)
+        AND ($3::timestamptz IS NULL OR r.updated_at < $3::timestamptz)
+        AND ($4::timestamptz IS NULL OR (r.updated_at, r.id) < ($4::timestamptz, $5::uuid))
+      ORDER BY r.updated_at DESC, r.id DESC
+      LIMIT $6`,
+    [
+      q.category ?? null,
+      q.from ?? null,
+      q.to ?? null,
+      cursor?.[0] ?? null,
+      cursor?.[1] ?? null,
+      q.limit + 1,
+    ],
+  );
+  const result = page(rows, q.limit, (r) => [r.updated_at, r.id]);
+  const body: Page<ReviewItem> = {
+    nextCursor: result.nextCursor,
+    items: result.items.map((r) => ({
+      rideId: r.id,
+      category: r.category,
+      status: r.status,
+      paymentStatus: r.payment_status,
+      fareCents: r.fare_cents,
+      capturedCents: r.captured_cents,
+      settlementAttempts: r.settlement_attempts,
+      settlementError: r.settlement_error,
+      createdAt: iso(r.created_at)!,
+      updatedAt: iso(r.updated_at)!,
+    })),
+  };
+  return Response.json({ data: body });
+}
+
+export async function resolveReview(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const rideId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "ride",
+    id: rideId,
+    action: "review_resolve",
+  });
+  const { note } = await readJson(request, reviewResolveSchema);
+  const { rows } = await deps.db.query<{ id: string }>(
+    `UPDATE mobility.rides
+        SET review_resolved_at = now(), review_resolved_by = $2, review_note = $3,
+            updated_at = now()
+      WHERE id = $1 AND needs_review AND review_resolved_at IS NULL
+      RETURNING id`,
+    [rideId, operator.id, note],
+  );
+  await audit(deps.db, {
+    operator,
+    action: "review_resolve",
+    targetType: "ride",
+    targetId: rideId,
+    reason: note,
+    result: rows[0] ? "succeeded" : "failed",
+    detail: rows[0] ? {} : { error: "not_open" },
+  });
+  if (!rows[0]) {
+    throw new ApiError(
+      409,
+      "ALREADY_RESOLVED",
+      "This review item is already resolved or doesn't need review.",
+    );
+  }
+  return Response.json({ data: { rideId, resolved: true } });
+}
+
+export async function searchRides(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  await requireOperator(request, deps, "view");
+  const q = parseInput(adminRideQuerySchema, query(request));
+  const cursor = decodeCursor(q.cursor);
+  const { rows } = await deps.db.query<RideRow>(
+    `SELECT r.* FROM mobility.rides r
+      WHERE ($1::uuid IS NULL OR r.id = $1::uuid)
+        AND ($2::text IS NULL OR r.status = $2::text)
+        AND ($3::text IS NULL OR r.payment_status = $3::text)
+        AND ($4::timestamptz IS NULL OR r.created_at >= $4::timestamptz)
+        AND ($5::timestamptz IS NULL OR r.created_at < $5::timestamptz)
+        AND ($6::timestamptz IS NULL OR (r.created_at, r.id) < ($6::timestamptz, $7::uuid))
+      ORDER BY r.created_at DESC, r.id DESC
+      LIMIT $8`,
+    [
+      q.rideId ?? null,
+      q.status ?? null,
+      q.paymentStatus ?? null,
+      q.from ?? null,
+      q.to ?? null,
+      cursor?.[0] ?? null,
+      cursor?.[1] ?? null,
+      q.limit + 1,
+    ],
+  );
+  const result = page(rows, q.limit, (r) => [r.created_at, r.id]);
+  const body: Page<AdminRideListItem> = {
+    nextCursor: result.nextCursor,
+    items: result.items.map((r) => ({
+      rideId: r.id,
+      status: r.status,
+      paymentStatus: r.payment_status,
+      fareCents: r.fare_cents,
+      capturedCents: r.captured_cents,
+      refundedCents: r.refunded_cents,
+      needsReview: r.needs_review && !r.review_resolved_at,
+      createdAt: iso(r.created_at)!,
+      pickupAddress: r.origin_address,
+      destinationAddress: r.destination_address,
+    })),
+  };
+  return Response.json({ data: body });
+}
+
+export async function rideDetail(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const rideId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "view", {
+    type: "ride",
+    id: rideId,
+    action: "ride_view",
+  });
+  const { rows } = await deps.db.query<
+    RideRow & {
+      passenger_name: string | null;
+      passenger_clerk_id: string;
+      driver_name: string | null;
+      vehicle_make: string | null;
+      vehicle_model: string | null;
+      vehicle_plate: string | null;
+      review_resolver: string | null;
+    }
+  >(
+    `SELECT r.*, u.name AS passenger_name, u.clerk_id AS passenger_clerk_id,
+            dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model, dp.vehicle_plate,
+            o.display_name AS review_resolver
+       FROM mobility.rides r
+       JOIN mobility.users u ON u.id = r.user_id
+       LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
+       LEFT JOIN mobility.operators o ON o.id = r.review_resolved_by
+      WHERE r.id = $1`,
+    [rideId],
+  );
+  const r = rows[0];
+  if (!r) throw notFound("Ride");
+
+  const [events, offers, ledger, notifications, refunds, support, auditRows] =
+    await Promise.all([
+      deps.db.query<{
+        from_status: string;
+        to_status: string;
+        actor: string;
+        reason: string | null;
+        created_at: Date;
+      }>(
+        "SELECT from_status, to_status, actor, reason, created_at FROM mobility.ride_events WHERE ride_id = $1 ORDER BY id",
+        [rideId],
+      ),
+      deps.db.query<{
+        driver_name: string;
+        status: string;
+        distance_meters: number;
+        created_at: Date;
+        expires_at: Date;
+        responded_at: Date | null;
+      }>(
+        `SELECT dp.display_name AS driver_name, o.status, o.distance_meters,
+                o.created_at, o.expires_at, o.responded_at
+           FROM mobility.ride_offers o
+           JOIN mobility.driver_profiles dp ON dp.id = o.driver_profile_id
+          WHERE o.ride_id = $1 ORDER BY o.created_at`,
+        [rideId],
+      ),
+      deps.db.query<{
+        kind: string;
+        amount_cents: number | null;
+        actor: string;
+        detail: string | null;
+        created_at: Date;
+      }>(
+        "SELECT kind, amount_cents, actor, detail, created_at FROM mobility.payment_events WHERE ride_id = $1 ORDER BY id",
+        [rideId],
+      ),
+      deps.db.query<{
+        kind: string;
+        user_id: string;
+        status: string;
+        attempts: number;
+        last_error: string | null;
+        created_at: Date;
+        sent_at: Date | null;
+      }>(
+        "SELECT kind, user_id, status, attempts, last_error, created_at, sent_at FROM mobility.notifications WHERE ride_id = $1 ORDER BY id",
+        [rideId],
+      ),
+      deps.db.query<{
+        id: string;
+        amount_cents: number;
+        status: string;
+        reason: string;
+        operator: string;
+        operator_id: string | null;
+        operator_name: string | null;
+        stripe_refund_id: string | null;
+        last_error: string | null;
+        support_request_id: string | null;
+        created_at: Date;
+        updated_at: Date;
+      }>(
+        `SELECT f.*, o.display_name AS operator_name FROM mobility.refunds f
+           LEFT JOIN mobility.operators o ON o.id = f.operator_id
+          WHERE f.ride_id = $1 ORDER BY f.created_at`,
+        [rideId],
+      ),
+      deps.db.query<{
+        id: string;
+        status: string;
+        category: string;
+        created_at: Date;
+      }>(
+        "SELECT id, status, category, created_at FROM mobility.support_requests WHERE ride_id = $1 ORDER BY created_at",
+        [rideId],
+      ),
+      deps.db.query<{
+        action: string;
+        actor: string;
+        result: string;
+        reason: string | null;
+        created_at: Date;
+      }>(
+        `SELECT action, actor, result, reason, created_at FROM mobility.audit_log
+          WHERE target_type = 'ride' AND target_id = $1 AND action <> 'ride_view'
+          ORDER BY id DESC LIMIT 50`,
+        [rideId],
+      ),
+    ]);
+
+  const body: AdminRideDetail = {
+    ride: {
+      id: r.id,
+      status: r.status,
+      paymentStatus: r.payment_status,
+      fareCents: r.fare_cents,
+      capturedCents: r.captured_cents,
+      refundedCents: r.refunded_cents,
+      currency: "usd",
+      pickupAddress: r.origin_address,
+      destinationAddress: r.destination_address,
+      createdAt: iso(r.created_at)!,
+      requestedAt: iso(r.requested_at),
+      completedAt: iso(r.completed_at),
+      endedAt: iso(r.completed_at ?? r.interrupted_at ?? r.cancelled_at),
+      cancelledBy: r.cancelled_by,
+      cancelReason: r.cancel_reason,
+      rematchCount: r.rematch_count,
+      stripePaymentIntentId: r.stripe_payment_intent_id,
+      isLegacyDemo: r.status === "legacy",
+    },
+    passenger: {
+      name: r.passenger_name,
+      account: maskAccount(r.passenger_clerk_id),
+    },
+    driver:
+      r.driver_profile_id && r.driver_name
+        ? {
+            name: r.driver_name,
+            vehicle: `${r.vehicle_make} ${r.vehicle_model}`,
+            plate: r.vehicle_plate ?? "",
+          }
+        : null,
+    settlement: {
+      state: settlementState(r),
+      attempts: r.settlement_attempts,
+      lastError: r.settlement_error,
+      nextAttemptAt: iso(r.next_settlement_at),
+      settledAt: iso(r.settled_at),
+      authorizationExpiresAt: iso(r.authorization_expires_at),
+    },
+    review: {
+      open: r.needs_review && !r.review_resolved_at,
+      reason: r.review_reason,
+      resolvedAt: iso(r.review_resolved_at),
+      resolvedBy: r.review_resolver,
+      note: r.review_note,
+    },
+    events: events.rows.map((e) => ({
+      fromStatus: e.from_status,
+      toStatus: e.to_status,
+      actor: e.actor,
+      reason: e.reason,
+      createdAt: iso(e.created_at)!,
+    })),
+    offers: offers.rows.map((o) => ({
+      driverName: o.driver_name,
+      status: o.status,
+      distanceMeters: o.distance_meters,
+      createdAt: iso(o.created_at)!,
+      expiresAt: iso(o.expires_at)!,
+      respondedAt: iso(o.responded_at),
+    })),
+    ledger: ledger.rows.map((l) => ({
+      kind: l.kind,
+      amountCents: l.amount_cents,
+      actor: l.actor,
+      detail: l.detail,
+      createdAt: iso(l.created_at)!,
+    })),
+    notifications: notifications.rows.map((n) => ({
+      kind: n.kind,
+      recipient: n.user_id === r.user_id ? "passenger" : "driver",
+      status: n.status,
+      attempts: n.attempts,
+      lastError: n.last_error,
+      createdAt: iso(n.created_at)!,
+      sentAt: iso(n.sent_at),
+    })),
+    refunds: refunds.rows.map((f) => ({
+      id: f.id,
+      amountCents: f.amount_cents,
+      status: f.status,
+      reason: f.reason,
+      operatorName: f.operator_name ?? f.operator,
+      verifiedOperator: f.operator_id !== null,
+      stripeRefundId: f.stripe_refund_id,
+      lastError: f.last_error,
+      supportRequestId: f.support_request_id,
+      createdAt: iso(f.created_at)!,
+      updatedAt: iso(f.updated_at)!,
+    })),
+    refundable: refundableSummary(r, await inFlightCents(deps.db, rideId)),
+    support: support.rows.map((s) => ({
+      id: s.id,
+      status: s.status as AdminSupportItem["status"],
+      category: s.category,
+      createdAt: iso(s.created_at)!,
+    })),
+    audit: auditRows.rows.map((a) => ({
+      action: a.action,
+      actor: a.actor,
+      result: a.result,
+      reason: a.reason,
+      createdAt: iso(a.created_at)!,
+    })),
+  };
+  await audit(deps.db, {
+    operator,
+    action: "ride_view",
+    targetType: "ride",
+    targetId: rideId,
+    result: "succeeded",
+  });
+  return Response.json({ data: body });
+}
+
+export async function createRefund(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const rideId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "refund", {
+    type: "ride",
+    id: rideId,
+    action: "refund_create",
+  });
+  const input = await readJson(request, adminRefundSchema);
+  if (stripeMode() !== "test") {
+    await audit(deps.db, {
+      operator,
+      action: "refund_create",
+      targetType: "ride",
+      targetId: rideId,
+      reason: input.reason,
+      result: "denied",
+      detail: { error: "live_refunds_disabled" },
+    });
+    throw new ApiError(
+      503,
+      "LIVE_REFUNDS_DISABLED",
+      "Refunds from the console are limited to Stripe test mode in this version.",
+    );
+  }
+  try {
+    const result = await createOperatorRefund(deps, {
+      rideId,
+      ...input,
+      operator,
+    });
+    await audit(deps.db, {
+      operator,
+      action: "refund_create",
+      targetType: "ride",
+      targetId: rideId,
+      reason: input.reason,
+      result:
+        result.refund.status === "succeeded"
+          ? "succeeded"
+          : result.refund.status === "failed" ||
+              result.refund.status === "canceled"
+            ? "failed"
+            : "pending",
+      detail: {
+        refundId: result.refund.id,
+        amountCents: result.refund.amount_cents,
+        stripeStatus: result.refund.status,
+        outcome: result.outcome,
+        supportRequestId: input.supportRequestId ?? null,
+      },
+    });
+    return Response.json(
+      {
+        data: {
+          refundId: result.refund.id,
+          status: result.refund.status,
+          amountCents: result.refund.amount_cents,
+          duplicate: !result.created,
+          stripeReachable: result.outcome !== "unknown",
+        },
+      },
+      { status: result.created ? 201 : 200 },
+    );
+  } catch (error) {
+    await audit(deps.db, {
+      operator,
+      action: "refund_create",
+      targetType: "ride",
+      targetId: rideId,
+      reason: input.reason,
+      result: "failed",
+      detail: {
+        amountCents: input.amountCents,
+        error: error instanceof ApiError ? error.code : "internal_error",
+      },
+    });
+    if (
+      (error as { code?: string })?.code === "23505" &&
+      (error as { constraint?: string })?.constraint ===
+        "refunds_one_in_flight_per_ride"
+    ) {
+      throw new ApiError(
+        409,
+        "REFUND_IN_PROGRESS",
+        "Another refund for this ride is still in progress.",
+      );
+    }
+    throw error;
+  }
+}
+
+export async function syncRefund(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const refundId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "refund", {
+    type: "refund",
+    id: refundId,
+    action: "refund_sync",
+  });
+  const { rows } = await deps.db.query<{
+    stripe_refund_id: string | null;
+    ride_id: string;
+  }>("SELECT stripe_refund_id, ride_id FROM mobility.refunds WHERE id = $1", [
+    refundId,
+  ]);
+  if (!rows[0]) throw notFound("Refund");
+  if (rows[0].stripe_refund_id) {
+    await applyRefundSnapshot(
+      deps.db,
+      await deps.payments.retrieveRefund(rows[0].stripe_refund_id),
+    );
+  }
+  const { rows: after } = await deps.db.query<{ status: string }>(
+    "SELECT status FROM mobility.refunds WHERE id = $1",
+    [refundId],
+  );
+  await audit(deps.db, {
+    operator,
+    action: "refund_sync",
+    targetType: "ride",
+    targetId: rows[0].ride_id,
+    result: "succeeded",
+    detail: { refundId, stripeStatus: after[0].status },
+  });
+  return Response.json({ data: { refundId, status: after[0].status } });
+}
+
+interface SupportRow {
+  id: string;
+  ride_id: string;
+  user_id: string;
+  category: string;
+  message: string;
+  status: AdminSupportItem["status"];
+  version: number;
+  assigned_operator_id: string | null;
+  assigned_name: string | null;
+  resolved_by_name: string | null;
+  resolution_message: string | null;
+  created_at: Date;
+  updated_at: Date;
+  resolved_at: Date | null;
+  passenger_name: string | null;
+  passenger_clerk_id: string;
+}
+
+const SUPPORT_SQL = `
+  SELECT s.*, ao.display_name AS assigned_name, ro.display_name AS resolved_by_name,
+         u.name AS passenger_name, u.clerk_id AS passenger_clerk_id
+    FROM mobility.support_requests s
+    JOIN mobility.users u ON u.id = s.user_id
+    LEFT JOIN mobility.operators ao ON ao.id = s.assigned_operator_id
+    LEFT JOIN mobility.operators ro ON ro.id = s.resolved_by`;
+
+const supportItem = (
+  s: SupportRow,
+  operator: OperatorRow,
+): AdminSupportItem => ({
+  id: s.id,
+  rideId: s.ride_id,
+  category: s.category,
+  status: s.status,
+  version: s.version,
+  assignedTo: s.assigned_name,
+  assignedToMe: s.assigned_operator_id === operator.id,
+  preview: s.message.slice(0, 120),
+  createdAt: iso(s.created_at)!,
+  updatedAt: iso(s.updated_at)!,
+  resolvedAt: iso(s.resolved_at),
+});
+
+export async function listSupport(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const operator = await requireOperator(request, deps, "view");
+  const q = parseInput(adminSupportQuerySchema, query(request));
+  const cursor = decodeCursor(q.cursor);
+  const { rows } = await deps.db.query<SupportRow>(
+    `${SUPPORT_SQL}
+      WHERE ($1::text IS NULL OR s.status = $1::text)
+        AND ($2::text = 'any'
+             OR ($2::text = 'me' AND s.assigned_operator_id = $3::uuid)
+             OR ($2::text = 'unassigned' AND s.assigned_operator_id IS NULL))
+        AND ($4::uuid IS NULL OR s.ride_id = $4::uuid)
+        AND ($5::timestamptz IS NULL OR s.created_at >= $5::timestamptz)
+        AND ($6::timestamptz IS NULL OR s.created_at < $6::timestamptz)
+        AND ($7::timestamptz IS NULL OR (s.created_at, s.id) < ($7::timestamptz, $8::uuid))
+      ORDER BY s.created_at DESC, s.id DESC
+      LIMIT $9`,
+    [
+      q.status ?? null,
+      q.assigned,
+      operator.id,
+      q.rideId ?? null,
+      q.from ?? null,
+      q.to ?? null,
+      cursor?.[0] ?? null,
+      cursor?.[1] ?? null,
+      q.limit + 1,
+    ],
+  );
+  const result = page(rows, q.limit, (s) => [s.created_at, s.id]);
+  const body: Page<AdminSupportItem> = {
+    nextCursor: result.nextCursor,
+    items: result.items.map((s) => supportItem(s, operator)),
+  };
+  return Response.json({ data: body });
+}
+
+async function loadSupport(deps: Deps, id: string) {
+  const { rows } = await deps.db.query<SupportRow>(
+    `${SUPPORT_SQL} WHERE s.id = $1`,
+    [id],
+  );
+  if (!rows[0]) throw notFound("Support request");
+  return rows[0];
+}
+
+async function supportDetailBody(
+  deps: Deps,
+  id: string,
+  operator: OperatorRow,
+): Promise<AdminSupportDetail> {
+  const s = await loadSupport(deps, id);
+  const [notes, history] = await Promise.all([
+    deps.db.query<{ author: string; note: string; created_at: Date }>(
+      `SELECT o.display_name AS author, n.note, n.created_at
+         FROM mobility.support_notes n JOIN mobility.operators o ON o.id = n.operator_id
+        WHERE n.support_request_id = $1 ORDER BY n.id`,
+      [id],
+    ),
+    deps.db.query<{
+      action: string;
+      operator: string | null;
+      from_status: string | null;
+      to_status: string | null;
+      created_at: Date;
+    }>(
+      `SELECT e.action, o.display_name AS operator, e.from_status, e.to_status, e.created_at
+         FROM mobility.support_events e LEFT JOIN mobility.operators o ON o.id = e.operator_id
+        WHERE e.support_request_id = $1 ORDER BY e.id`,
+      [id],
+    ),
+  ]);
+  return {
+    ...supportItem(s, operator),
+    message: s.message,
+    passenger: {
+      name: s.passenger_name,
+      account: maskAccount(s.passenger_clerk_id),
+    },
+    resolutionMessage: s.resolution_message,
+    resolvedBy: s.resolved_by_name,
+    notes: notes.rows.map((n) => ({
+      author: n.author,
+      note: n.note,
+      createdAt: iso(n.created_at)!,
+    })),
+    history: history.rows.map((h) => ({
+      action: h.action,
+      operator: h.operator,
+      fromStatus: h.from_status,
+      toStatus: h.to_status,
+      createdAt: iso(h.created_at)!,
+    })),
+  };
+}
+
+export async function supportDetail(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "view", {
+    type: "support_request",
+    id,
+    action: "support_view",
+  });
+  return Response.json({ data: await supportDetailBody(deps, id, operator) });
+}
+
+async function supportChange(
+  deps: Deps,
+  operator: OperatorRow,
+  id: string,
+  action: "assigned" | "resolved" | "reopened",
+  sql: string,
+  values: unknown[],
+  reason: string | null,
+) {
+  const before = await loadSupport(deps, id);
+  const { rows } = await deps.db.query<{ status: string }>(sql, values);
+  if (!rows[0]) {
+    const current = await loadSupport(deps, id);
+    const code =
+      action === "resolved" && current.status === "resolved"
+        ? "ALREADY_RESOLVED"
+        : action === "resolved" && current.assigned_operator_id !== operator.id
+          ? "NOT_ASSIGNED_TO_YOU"
+          : action === "assigned" &&
+              current.assigned_operator_id &&
+              current.assigned_operator_id !== operator.id
+            ? "ASSIGNED_TO_OTHER"
+            : "VERSION_CONFLICT";
+    await audit(deps.db, {
+      operator,
+      action: `support_${action === "assigned" ? "assign" : action === "resolved" ? "resolve" : "reopen"}`,
+      targetType: "support_request",
+      targetId: id,
+      reason,
+      result: "failed",
+      detail: {
+        error: code,
+        currentStatus: current.status,
+        currentVersion: current.version,
+      },
+    });
+    throw new ApiError(
+      409,
+      code,
+      code === "ALREADY_RESOLVED"
+        ? "Another operator already resolved this request."
+        : code === "NOT_ASSIGNED_TO_YOU"
+          ? "Assign this request to yourself before resolving it."
+          : code === "ASSIGNED_TO_OTHER"
+            ? `This request is assigned to ${current.assigned_name}.`
+            : "This request changed since you opened it. Reload and try again.",
+    );
+  }
+  await deps.db.query(
+    `INSERT INTO mobility.support_events (support_request_id, operator_id, action, from_status, to_status)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, operator.id, action, before.status, rows[0].status],
+  );
+  await audit(deps.db, {
+    operator,
+    action: `support_${action === "assigned" ? "assign" : action === "resolved" ? "resolve" : "reopen"}`,
+    targetType: "support_request",
+    targetId: id,
+    reason,
+    result: "succeeded",
+    detail: { fromStatus: before.status, toStatus: rows[0].status },
+  });
+  return Response.json({ data: await supportDetailBody(deps, id, operator) });
+}
+
+export async function assignSupport(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "support_request",
+    id,
+    action: "support_assign",
+  });
+  const { expectedVersion } = await readJson(request, supportVersionSchema);
+  return supportChange(
+    deps,
+    operator,
+    id,
+    "assigned",
+    `UPDATE mobility.support_requests
+        SET assigned_operator_id = $2,
+            status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END,
+            version = version + 1, updated_at = now()
+      WHERE id = $1 AND version = $3 AND status <> 'resolved'
+        AND (assigned_operator_id IS NULL OR assigned_operator_id = $2)
+      RETURNING status`,
+    [id, operator.id, expectedVersion],
+    null,
+  );
+}
+
+export async function resolveSupport(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "support_request",
+    id,
+    action: "support_resolve",
+  });
+  const { expectedVersion, resolutionMessage } = await readJson(
+    request,
+    supportResolveSchema,
+  );
+  return supportChange(
+    deps,
+    operator,
+    id,
+    "resolved",
+    `UPDATE mobility.support_requests
+        SET status = 'resolved', resolved_at = now(), resolved_by = $2,
+            resolution_message = $4, version = version + 1, updated_at = now()
+      WHERE id = $1 AND version = $3 AND status <> 'resolved'
+        AND assigned_operator_id = $2
+      RETURNING status`,
+    [id, operator.id, expectedVersion, resolutionMessage],
+    resolutionMessage,
+  );
+}
+
+export async function reopenSupport(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "support_request",
+    id,
+    action: "support_reopen",
+  });
+  const { expectedVersion, reason } = await readJson(
+    request,
+    supportReopenSchema,
+  );
+  return supportChange(
+    deps,
+    operator,
+    id,
+    "reopened",
+    `UPDATE mobility.support_requests
+        SET status = 'open', resolved_at = NULL, resolved_by = NULL,
+            assigned_operator_id = NULL, version = version + 1, updated_at = now()
+      WHERE id = $1 AND version = $2 AND status = 'resolved'
+      RETURNING status`,
+    [id, expectedVersion],
+    reason,
+  );
+}
+
+export async function addSupportNote(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "support_request",
+    id,
+    action: "support_note",
+  });
+  const { note } = await readJson(request, supportNoteSchema);
+  await loadSupport(deps, id);
+  await deps.db.query(
+    "INSERT INTO mobility.support_notes (support_request_id, operator_id, note) VALUES ($1, $2, $3)",
+    [id, operator.id, note],
+  );
+  await deps.db.query(
+    `INSERT INTO mobility.support_events (support_request_id, operator_id, action)
+     VALUES ($1, $2, 'note_added')`,
+    [id, operator.id],
+  );
+  await deps.db.query(
+    "UPDATE mobility.support_requests SET updated_at = now() WHERE id = $1",
+    [id],
+  );
+  await audit(deps.db, {
+    operator,
+    action: "support_note",
+    targetType: "support_request",
+    targetId: id,
+    result: "succeeded",
+    detail: { length: note.length },
+  });
+  return Response.json(
+    { data: await supportDetailBody(deps, id, operator) },
+    { status: 201 },
+  );
+}

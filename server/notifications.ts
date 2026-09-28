@@ -80,6 +80,7 @@ const TTL_SECONDS: Record<string, number> = {
   ride_interrupted: 60 * 60,
   no_driver: 30 * 60,
   hold_released: 24 * 3600,
+  chat_message: 10 * 60,
 };
 const MAX_ATTEMPTS = 5;
 const RECLAIM_SECONDS = 60;

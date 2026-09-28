@@ -185,7 +185,7 @@ export async function updateRideStatus(
   });
 }
 
-async function ensureStripeCustomer(
+export async function ensureStripeCustomer(
   deps: Deps,
   user: AppUser,
 ): Promise<string> {

@@ -1,5 +1,7 @@
 import { transaction } from "./db";
+import { recordFareRefund } from "./earnings";
 import { ApiError } from "./errors";
+import { flagRideReview } from "./review";
 
 import type { Database, SqlClient } from "./db";
 import type { PaymentGateway, RefundSnapshot } from "./payments";
@@ -18,6 +20,7 @@ const OPEN = ["creating", "pending", "requires_action"];
 export async function applyRefundSnapshot(
   db: Database,
   snapshot: RefundSnapshot,
+  now: Date = new Date(),
 ): Promise<boolean> {
   const status = (REFUND_STATUSES as readonly string[]).includes(
     snapshot.status,
@@ -25,18 +28,62 @@ export async function applyRefundSnapshot(
     ? snapshot.status
     : "pending";
   return transaction(db, async (tx) => {
-    const { rows } = await tx.query<{
-      id: string;
-      ride_id: string;
-      status: string;
-      amount_cents: number;
-    }>(
-      "SELECT id, ride_id, status, amount_cents FROM mobility.refunds WHERE stripe_refund_id = $1 FOR UPDATE",
-      [snapshot.id],
-    );
-    const refund = rows[0];
-    if (!refund) return false;
+    const lock = () =>
+      tx.query<{
+        id: string;
+        ride_id: string;
+        status: string;
+        amount_cents: number;
+      }>(
+        "SELECT id, ride_id, status, amount_cents FROM mobility.refunds WHERE stripe_refund_id = $1 FOR UPDATE",
+        [snapshot.id],
+      );
+    let refund = (await lock()).rows[0];
+    if (!refund) {
+      if (!snapshot.paymentIntentId) return false;
+      const { rows: rides } = await tx.query<{
+        id: string;
+        payment_status: string;
+      }>(
+        "SELECT id, payment_status FROM mobility.rides WHERE stripe_payment_intent_id = $1",
+        [snapshot.paymentIntentId],
+      );
+      const ride = rides[0];
+      if (!ride) return false;
+      const { rows: inserted } = await tx.query(
+        `INSERT INTO mobility.refunds
+           (ride_id, amount_cents, status, reason, operator, idempotency_key,
+            stripe_refund_id, source, created_at, updated_at)
+         VALUES ($1, $2, 'creating', 'Refunded outside the app (Stripe Dashboard or API)',
+                 'stripe', $3, $4, 'stripe', $5, $5)
+         ON CONFLICT (stripe_refund_id) DO NOTHING
+         RETURNING id`,
+        [ride.id, snapshot.amount, `stripe:${snapshot.id}`, snapshot.id, now],
+      );
+      if (inserted[0]) {
+        await tx.query(
+          `INSERT INTO mobility.payment_events (ride_id, kind, amount_cents, stripe_object_id, actor, detail)
+           VALUES ($1, 'refund_requested', $2, $3, 'stripe', 'created outside the app')`,
+          [ride.id, snapshot.amount, snapshot.id],
+        );
+        if (ride.payment_status !== "paid") {
+          await flagRideReview(tx, ride.id, "refund_mismatch");
+        }
+      }
+      refund = (await lock()).rows[0];
+      if (!refund) return false;
+    }
     if (refund.status === status) return true;
+    if (refund.status === "succeeded") {
+      if (status === "failed" || status === "canceled") {
+        await flagRideReview(tx, refund.ride_id, "refund_reversed");
+        await tx.query(
+          "UPDATE mobility.refunds SET last_error = $2, updated_at = now() WHERE id = $1",
+          [refund.id, `Stripe now reports this refund as ${status}`],
+        );
+      }
+      return true;
+    }
     if (!OPEN.includes(refund.status) && status !== "succeeded") return true;
 
     await tx.query(
@@ -72,26 +119,28 @@ export async function applyRefundSnapshot(
         WHERE r.id = $1`,
       [refund.ride_id],
     );
+    if (status === "succeeded") {
+      await recordFareRefund(
+        tx,
+        refund.ride_id,
+        snapshot.id,
+        refund.amount_cents,
+        now,
+      );
+    }
     return true;
   });
 }
 
 export async function syncRefundsForIntent(
-  deps: { db: Database; payments: PaymentGateway },
+  deps: { db: Database; payments: PaymentGateway; now: () => Date },
   paymentIntentId: string,
 ) {
-  const { rows } = await deps.db.query<{ stripe_refund_id: string }>(
-    `SELECT f.stripe_refund_id FROM mobility.refunds f
-       JOIN mobility.rides r ON r.id = f.ride_id
-      WHERE r.stripe_payment_intent_id = $1 AND f.stripe_refund_id IS NOT NULL`,
-    [paymentIntentId],
-  );
-  for (const { stripe_refund_id } of rows) {
-    await applyRefundSnapshot(
-      deps.db,
-      await deps.payments.retrieveRefund(stripe_refund_id),
-    );
+  const refunds = await deps.payments.listRefunds(paymentIntentId);
+  for (const refund of refunds) {
+    await applyRefundSnapshot(deps.db, refund, deps.now());
   }
+  return refunds.length;
 }
 
 export async function syncOpenRefunds(
@@ -111,6 +160,7 @@ export async function syncOpenRefunds(
       await applyRefundSnapshot(
         deps.db,
         await deps.payments.retrieveRefund(stripe_refund_id),
+        deps.now(),
       );
     } catch {
       continue;
@@ -130,6 +180,7 @@ export interface RefundableRow {
 export function refundableSummary(
   ride: RefundableRow,
   inFlightCents: number,
+  openDispute = false,
 ): RefundableSummary {
   const captured = ride.captured_cents ?? 0;
   const max = Math.max(0, captured - ride.refunded_cents - inFlightCents);
@@ -138,11 +189,13 @@ export function refundableSummary(
       ? "Legacy demo bookings can't be refunded here."
       : ride.payment_status !== "paid" || !ride.captured_cents
         ? "Nothing was captured. An uncaptured hold is released, not refunded."
-        : inFlightCents > 0
-          ? "Another refund for this ride is still in progress."
-          : max === 0
-            ? "The captured amount has already been refunded."
-            : null;
+        : openDispute
+          ? "This fare is under a payment dispute. Handle it in the Stripe Dashboard."
+          : inFlightCents > 0
+            ? "Another refund for this ride is still in progress."
+            : max === 0
+              ? "The captured amount has already been refunded."
+              : null;
   return {
     capturedCents: captured,
     refundedCents: ride.refunded_cents,
@@ -151,6 +204,14 @@ export function refundableSummary(
     refundable: reason === null,
     reasonNotRefundable: reason,
   };
+}
+
+export async function fareHasOpenDispute(db: SqlClient, rideId: string) {
+  const { rows } = await db.query(
+    "SELECT 1 FROM mobility.disputes WHERE ride_id = $1 AND subject = 'fare' AND closed_at IS NULL",
+    [rideId],
+  );
+  return rows.length > 0;
 }
 
 export async function inFlightCents(db: SqlClient, rideId: string) {
@@ -176,13 +237,14 @@ async function recordSubmission(
   db: Database,
   refund: RefundRecord,
   snapshot: RefundSnapshot,
+  now: Date,
 ) {
   await db.query(
     `UPDATE mobility.refunds SET stripe_refund_id = $2, status = 'pending', updated_at = now()
       WHERE id = $1 AND stripe_refund_id IS NULL`,
     [refund.id, snapshot.id],
   );
-  await applyRefundSnapshot(db, snapshot);
+  await applyRefundSnapshot(db, snapshot, now);
   const { rows } = await db.query<RefundRecord>(
     "SELECT * FROM mobility.refunds WHERE id = $1",
     [refund.id],
@@ -191,7 +253,7 @@ async function recordSubmission(
 }
 
 export async function submitRefund(
-  deps: { db: Database; payments: PaymentGateway },
+  deps: { db: Database; payments: PaymentGateway; now?: () => Date },
   refund: RefundRecord,
   paymentIntentId: string,
 ): Promise<{
@@ -231,13 +293,18 @@ export async function submitRefund(
     return { refund, outcome: "unknown" };
   }
   return {
-    refund: await recordSubmission(deps.db, refund, snapshot),
+    refund: await recordSubmission(
+      deps.db,
+      refund,
+      snapshot,
+      deps.now ? deps.now() : new Date(),
+    ),
     outcome: "submitted",
   };
 }
 
 export async function createOperatorRefund(
-  deps: { db: Database; payments: PaymentGateway },
+  deps: { db: Database; payments: PaymentGateway; now?: () => Date },
   input: {
     rideId: string;
     amountCents: number;
@@ -278,7 +345,11 @@ export async function createOperatorRefund(
       return { ride, refund: existing[0], created: false };
     }
 
-    const summary = refundableSummary(ride, await inFlightCents(tx, ride.id));
+    const summary = refundableSummary(
+      ride,
+      await inFlightCents(tx, ride.id),
+      await fareHasOpenDispute(tx, ride.id),
+    );
     if (!summary.refundable) {
       throw new ApiError(
         409,

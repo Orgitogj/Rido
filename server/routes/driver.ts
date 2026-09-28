@@ -12,6 +12,7 @@ import { type Deps, parseInput, readJson } from "../http";
 import { ASSIGNED_STATUSES, transitionRide } from "../lifecycle";
 import { clearDriverLocation, recordDriverLocation } from "../location";
 import { advanceRide, offerToNextDriver } from "../matching";
+import { summarySql, toSummary } from "../ratings";
 import { advanceRideById, rideViews, sweep, withLockedRide } from "../rides";
 import { type AppUser, ensureUser } from "../users";
 
@@ -25,6 +26,7 @@ interface ProfileRow {
   vehicle_plate: string;
   vehicle_seats: number;
   online: boolean;
+  rating_summary?: { count: number; avg: number | null } | null;
 }
 
 const profileView = (p: ProfileRow): DriverProfileView => ({
@@ -36,6 +38,7 @@ const profileView = (p: ProfileRow): DriverProfileView => ({
   vehiclePlate: p.vehicle_plate,
   vehicleSeats: p.vehicle_seats,
   online: p.online,
+  rating: toSummary(p.rating_summary ?? null),
 });
 
 export async function currentUser(request: Request, deps: Deps) {
@@ -45,8 +48,9 @@ export async function currentUser(request: Request, deps: Deps) {
 
 async function findProfile(deps: Deps, user: AppUser) {
   const { rows } = await deps.db.query<ProfileRow>(
-    "SELECT * FROM mobility.driver_profiles WHERE user_id = $1",
-    [user.id],
+    `SELECT dp.*, ${summarySql("dp.user_id", "passenger", "$2::timestamptz")} AS rating_summary
+       FROM mobility.driver_profiles dp WHERE dp.user_id = $1`,
+    [user.id, deps.now()],
   );
   return rows[0] ?? null;
 }
@@ -94,11 +98,13 @@ async function dashboard(
     destination_longitude: number;
     fare_cents: number;
     trip_distance: number | null;
+    passenger_summary: { count: number; avg: number | null } | null;
   }>(
     `SELECT o.id, o.ride_id, o.expires_at, o.distance_meters,
             r.origin_address, r.origin_latitude, r.origin_longitude,
             r.destination_address, r.destination_latitude, r.destination_longitude,
-            r.fare_cents, r.distance_meters AS trip_distance
+            r.fare_cents, r.distance_meters AS trip_distance,
+            ${summarySql("r.user_id", "driver", "$2::timestamptz")} AS passenger_summary
        FROM mobility.ride_offers o
        JOIN mobility.rides r ON r.id = o.ride_id
       WHERE o.driver_profile_id = $1 AND o.status = 'pending'
@@ -128,6 +134,7 @@ async function dashboard(
           0,
           Math.floor((new Date(o.expires_at).getTime() - now.getTime()) / 1000),
         ),
+        passengerRating: toSummary(o.passenger_summary),
       }
     : null;
 

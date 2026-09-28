@@ -1,13 +1,19 @@
 import {
+  adminFeedbackQuerySchema,
+  type AdminFeedbackItem,
   type AdminRideDetail,
   type AdminRideListItem,
+  type AdminDispute,
+  type AdminRefund,
   adminRefundSchema,
+  adminTipRefundSchema,
   adminReviewQuerySchema,
   adminRideQuerySchema,
   type AdminSupportDetail,
   type AdminSupportItem,
   adminSupportQuerySchema,
   type OperatorMe,
+  feedbackModerationSchema,
   type Page,
   type ReviewCategory,
   type ReviewItem,
@@ -18,6 +24,8 @@ import {
   supportResolveSchema,
   supportVersionSchema,
 } from "../../shared/contracts";
+import { type DisputeRow, syncDisputesForIntent } from "../disputes";
+import { entryView, type EntryRow, reconcileRide } from "../earnings";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
 import {
@@ -29,11 +37,23 @@ import {
 import {
   applyRefundSnapshot,
   createOperatorRefund,
+  fareHasOpenDispute,
   inFlightCents,
   refundableSummary,
+  syncRefundsForIntent,
 } from "../refunds";
 import { settlementState } from "../rides";
+import {
+  applyTipRefundSnapshot,
+  createTipRefund,
+  syncTipRefundsForIntent,
+  tipHasOpenDispute,
+  tipInFlightCents,
+  tipRefundableSummary,
+  type TipRefundRow,
+} from "../tipRefunds";
 
+import type { TipStatus } from "../../shared/contracts";
 import type { RideRow } from "../lifecycle";
 
 export const stripeMode = (): OperatorMe["stripeMode"] => {
@@ -280,96 +300,169 @@ export async function rideDetail(
   const r = rows[0];
   if (!r) throw notFound("Ride");
 
-  const [events, offers, ledger, notifications, refunds, support, auditRows] =
-    await Promise.all([
-      deps.db.query<{
-        from_status: string;
-        to_status: string;
-        actor: string;
-        reason: string | null;
-        created_at: Date;
-      }>(
-        "SELECT from_status, to_status, actor, reason, created_at FROM mobility.ride_events WHERE ride_id = $1 ORDER BY id",
-        [rideId],
-      ),
-      deps.db.query<{
-        driver_name: string;
-        status: string;
-        distance_meters: number;
-        created_at: Date;
-        expires_at: Date;
-        responded_at: Date | null;
-      }>(
-        `SELECT dp.display_name AS driver_name, o.status, o.distance_meters,
+  const [
+    events,
+    offers,
+    ledger,
+    notifications,
+    refunds,
+    support,
+    auditRows,
+    ratings,
+    earning,
+    entries,
+    tips,
+    reconciliation,
+  ] = await Promise.all([
+    deps.db.query<{
+      from_status: string;
+      to_status: string;
+      actor: string;
+      reason: string | null;
+      created_at: Date;
+    }>(
+      "SELECT from_status, to_status, actor, reason, created_at FROM mobility.ride_events WHERE ride_id = $1 ORDER BY id",
+      [rideId],
+    ),
+    deps.db.query<{
+      driver_name: string;
+      status: string;
+      distance_meters: number;
+      created_at: Date;
+      expires_at: Date;
+      responded_at: Date | null;
+    }>(
+      `SELECT dp.display_name AS driver_name, o.status, o.distance_meters,
                 o.created_at, o.expires_at, o.responded_at
            FROM mobility.ride_offers o
            JOIN mobility.driver_profiles dp ON dp.id = o.driver_profile_id
           WHERE o.ride_id = $1 ORDER BY o.created_at`,
-        [rideId],
-      ),
-      deps.db.query<{
-        kind: string;
-        amount_cents: number | null;
-        actor: string;
-        detail: string | null;
-        created_at: Date;
-      }>(
-        "SELECT kind, amount_cents, actor, detail, created_at FROM mobility.payment_events WHERE ride_id = $1 ORDER BY id",
-        [rideId],
-      ),
-      deps.db.query<{
-        kind: string;
-        user_id: string;
-        status: string;
-        attempts: number;
-        last_error: string | null;
-        created_at: Date;
-        sent_at: Date | null;
-      }>(
-        "SELECT kind, user_id, status, attempts, last_error, created_at, sent_at FROM mobility.notifications WHERE ride_id = $1 ORDER BY id",
-        [rideId],
-      ),
-      deps.db.query<{
-        id: string;
-        amount_cents: number;
-        status: string;
-        reason: string;
-        operator: string;
-        operator_id: string | null;
-        operator_name: string | null;
-        stripe_refund_id: string | null;
-        last_error: string | null;
-        support_request_id: string | null;
-        created_at: Date;
-        updated_at: Date;
-      }>(
-        `SELECT f.*, o.display_name AS operator_name FROM mobility.refunds f
+      [rideId],
+    ),
+    deps.db.query<{
+      kind: string;
+      amount_cents: number | null;
+      actor: string;
+      detail: string | null;
+      created_at: Date;
+    }>(
+      "SELECT kind, amount_cents, actor, detail, created_at FROM mobility.payment_events WHERE ride_id = $1 ORDER BY id",
+      [rideId],
+    ),
+    deps.db.query<{
+      kind: string;
+      user_id: string;
+      status: string;
+      attempts: number;
+      last_error: string | null;
+      created_at: Date;
+      sent_at: Date | null;
+    }>(
+      "SELECT kind, user_id, status, attempts, last_error, created_at, sent_at FROM mobility.notifications WHERE ride_id = $1 ORDER BY id",
+      [rideId],
+    ),
+    deps.db.query<{
+      id: string;
+      amount_cents: number;
+      status: string;
+      reason: string;
+      operator: string;
+      operator_id: string | null;
+      operator_name: string | null;
+      source: "operator" | "stripe";
+      stripe_refund_id: string | null;
+      last_error: string | null;
+      support_request_id: string | null;
+      created_at: Date;
+      updated_at: Date;
+    }>(
+      `SELECT f.*, o.display_name AS operator_name FROM mobility.refunds f
            LEFT JOIN mobility.operators o ON o.id = f.operator_id
           WHERE f.ride_id = $1 ORDER BY f.created_at`,
-        [rideId],
-      ),
-      deps.db.query<{
-        id: string;
-        status: string;
-        category: string;
-        created_at: Date;
-      }>(
-        "SELECT id, status, category, created_at FROM mobility.support_requests WHERE ride_id = $1 ORDER BY created_at",
-        [rideId],
-      ),
-      deps.db.query<{
-        action: string;
-        actor: string;
-        result: string;
-        reason: string | null;
-        created_at: Date;
-      }>(
-        `SELECT action, actor, result, reason, created_at FROM mobility.audit_log
+      [rideId],
+    ),
+    deps.db.query<{
+      id: string;
+      status: string;
+      category: string;
+      created_at: Date;
+    }>(
+      "SELECT id, status, category, created_at FROM mobility.support_requests WHERE ride_id = $1 ORDER BY created_at",
+      [rideId],
+    ),
+    deps.db.query<{
+      action: string;
+      actor: string;
+      result: string;
+      reason: string | null;
+      created_at: Date;
+    }>(
+      `SELECT action, actor, result, reason, created_at FROM mobility.audit_log
           WHERE target_type = 'ride' AND target_id = $1 AND action <> 'ride_view'
           ORDER BY id DESC LIMIT 50`,
-        [rideId],
-      ),
-    ]);
+      [rideId],
+    ),
+    deps.db.query<FeedbackRow>(
+      `${FEEDBACK_SQL} WHERE g.ride_id = $1 ORDER BY g.created_at`,
+      [rideId],
+    ),
+    deps.db.query<{
+      driver_name: string;
+      fare_cents: number;
+      commission_rate_bps: number;
+      commission_cents: number;
+      driver_share_cents: number;
+      commission_policy_version: string;
+      earned_at: Date;
+    }>(
+      `SELECT re.*, dp.display_name AS driver_name FROM mobility.ride_earnings re
+         JOIN mobility.driver_profiles dp ON dp.id = re.driver_profile_id
+        WHERE re.ride_id = $1`,
+      [rideId],
+    ),
+    deps.db.query<EntryRow>(
+      "SELECT * FROM mobility.earning_entries WHERE ride_id = $1 ORDER BY id",
+      [rideId],
+    ),
+    deps.db.query<{
+      id: string;
+      amount_cents: number;
+      status: TipStatus;
+      refunded_cents: number;
+      stripe_payment_intent_id: string | null;
+      last_error: string | null;
+      created_at: Date;
+      paid_at: Date | null;
+    }>(
+      `SELECT id, amount_cents, status, refunded_cents, stripe_payment_intent_id,
+              last_error, created_at, paid_at
+         FROM mobility.tips WHERE ride_id = $1
+        ORDER BY (status = 'canceled'), created_at DESC LIMIT 1`,
+      [rideId],
+    ),
+    reconcileRide(deps.db, rideId),
+  ]);
+  const tip = tips.rows[0] ?? null;
+  const [tipRefundRows, disputeRows, fareDisputed] = await Promise.all([
+    deps.db.query<TipRefundRow & { operator_name: string | null }>(
+      `SELECT f.*, o.display_name AS operator_name FROM mobility.tip_refunds f
+         LEFT JOIN mobility.operators o ON o.id = f.operator_id
+        WHERE f.ride_id = $1 ORDER BY f.created_at`,
+      [rideId],
+    ),
+    deps.db.query<DisputeRow>(
+      "SELECT * FROM mobility.disputes WHERE ride_id = $1 ORDER BY created_at",
+      [rideId],
+    ),
+    fareHasOpenDispute(deps.db, rideId),
+  ]);
+  const tipRefundable = tip
+    ? tipRefundableSummary(
+        tip,
+        await tipInFlightCents(deps.db, tip.id),
+        await tipHasOpenDispute(deps.db, tip.id),
+      )
+    : null;
 
   const body: AdminRideDetail = {
     ride: {
@@ -455,21 +548,60 @@ export async function rideDetail(
       amountCents: f.amount_cents,
       status: f.status,
       reason: f.reason,
-      operatorName: f.operator_name ?? f.operator,
+      operatorName:
+        f.source === "stripe"
+          ? "Stripe (outside the app)"
+          : (f.operator_name ?? f.operator),
       verifiedOperator: f.operator_id !== null,
+      source: f.source,
       stripeRefundId: f.stripe_refund_id,
       lastError: f.last_error,
       supportRequestId: f.support_request_id,
       createdAt: iso(f.created_at)!,
       updatedAt: iso(f.updated_at)!,
     })),
-    refundable: refundableSummary(r, await inFlightCents(deps.db, rideId)),
+    refundable: refundableSummary(
+      r,
+      await inFlightCents(deps.db, rideId),
+      fareDisputed,
+    ),
     support: support.rows.map((s) => ({
       id: s.id,
       status: s.status as AdminSupportItem["status"],
       category: s.category,
       createdAt: iso(s.created_at)!,
     })),
+    ratings: ratings.rows.map(feedbackItem),
+    earnings: {
+      record: earning.rows[0]
+        ? {
+            driverName: earning.rows[0].driver_name,
+            fareCents: earning.rows[0].fare_cents,
+            commissionRateBps: earning.rows[0].commission_rate_bps,
+            commissionCents: earning.rows[0].commission_cents,
+            driverShareCents: earning.rows[0].driver_share_cents,
+            policyVersion: earning.rows[0].commission_policy_version,
+            earnedAt: iso(earning.rows[0].earned_at)!,
+          }
+        : null,
+      entries: entries.rows.map(entryView),
+      tip: tips.rows[0]
+        ? {
+            id: tips.rows[0].id,
+            amountCents: tips.rows[0].amount_cents,
+            status: tips.rows[0].status,
+            refundedCents: tips.rows[0].refunded_cents,
+            stripePaymentIntentId: tips.rows[0].stripe_payment_intent_id,
+            lastError: tips.rows[0].last_error,
+            createdAt: iso(tips.rows[0].created_at)!,
+            paidAt: iso(tips.rows[0].paid_at),
+          }
+        : null,
+      tipRefunds: tipRefundRows.rows.map(tipRefundView),
+      tipRefundable,
+      disputes: disputeRows.rows.map(disputeView),
+      reconciliation,
+    },
     audit: auditRows.rows.map((a) => ({
       action: a.action,
       actor: a.actor,
@@ -605,6 +737,7 @@ export async function syncRefund(
     await applyRefundSnapshot(
       deps.db,
       await deps.payments.retrieveRefund(rows[0].stripe_refund_id),
+      deps.now(),
     );
   }
   const { rows: after } = await deps.db.query<{ status: string }>(
@@ -972,4 +1105,399 @@ export async function addSupportNote(
     { data: await supportDetailBody(deps, id, operator) },
     { status: 201 },
   );
+}
+
+interface FeedbackRow {
+  id: string;
+  ride_id: string;
+  rater_role: "passenger" | "driver";
+  stars: number;
+  comment: string | null;
+  moderation_status: AdminFeedbackItem["status"];
+  moderation_note: string | null;
+  moderated_at: Date | null;
+  version: number;
+  edit_count: number;
+  created_at: Date;
+  updated_at: Date;
+  rater_name: string | null;
+  rater_clerk_id: string;
+  ratee_name: string | null;
+  ratee_clerk_id: string;
+  moderator_name: string | null;
+}
+
+const FEEDBACK_SQL = `
+  SELECT g.*, ru.name AS rater_name, ru.clerk_id AS rater_clerk_id,
+         eu.name AS ratee_name, eu.clerk_id AS ratee_clerk_id,
+         o.display_name AS moderator_name
+    FROM mobility.ratings g
+    JOIN mobility.users ru ON ru.id = g.rater_user_id
+    JOIN mobility.users eu ON eu.id = g.ratee_user_id
+    LEFT JOIN mobility.operators o ON o.id = g.moderated_by`;
+
+function feedbackItem(g: FeedbackRow): AdminFeedbackItem {
+  return {
+    id: g.id,
+    rideId: g.ride_id,
+    raterRole: g.rater_role,
+    rater: { name: g.rater_name, account: maskAccount(g.rater_clerk_id) },
+    ratee: { name: g.ratee_name, account: maskAccount(g.ratee_clerk_id) },
+    stars: g.stars,
+    comment: g.comment,
+    status: g.moderation_status,
+    version: g.version,
+    editCount: g.edit_count,
+    moderationNote: g.moderation_note,
+    moderatedBy: g.moderator_name,
+    moderatedAt: iso(g.moderated_at),
+    createdAt: iso(g.created_at)!,
+    updatedAt: iso(g.updated_at)!,
+  };
+}
+
+export async function listFeedback(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  await requireOperator(request, deps, "view");
+  const q = parseInput(adminFeedbackQuerySchema, query(request));
+  const cursor = decodeCursor(q.cursor);
+  const { rows } = await deps.db.query<FeedbackRow>(
+    `${FEEDBACK_SQL}
+      WHERE ($1::text = 'all' OR g.moderation_status = $1::text)
+        AND ($2::uuid IS NULL OR g.ride_id = $2::uuid)
+        AND ($3::timestamptz IS NULL OR g.created_at >= $3::timestamptz)
+        AND ($4::timestamptz IS NULL OR g.created_at < $4::timestamptz)
+        AND ($5::timestamptz IS NULL OR (g.created_at, g.id) < ($5::timestamptz, $6::uuid))
+      ORDER BY g.created_at DESC, g.id DESC
+      LIMIT $7`,
+    [
+      q.status,
+      q.rideId ?? null,
+      q.from ?? null,
+      q.to ?? null,
+      cursor?.[0] ?? null,
+      cursor?.[1] ?? null,
+      q.limit + 1,
+    ],
+  );
+  const result = page(rows, q.limit, (g) => [g.created_at, g.id]);
+  const body: Page<AdminFeedbackItem> = {
+    nextCursor: result.nextCursor,
+    items: result.items.map(feedbackItem),
+  };
+  return Response.json({ data: body });
+}
+
+const MODERATION = {
+  reviewed: { from: ["pending"], to: "reviewed", action: "feedback_review" },
+  remove: {
+    from: ["none", "pending", "reviewed"],
+    to: "removed",
+    action: "feedback_remove",
+  },
+  restore: { from: ["removed"], to: "reviewed", action: "feedback_restore" },
+} as const;
+
+export async function moderateFeedback(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "rating",
+    id,
+    action: "feedback_moderate",
+  });
+  const input = await readJson(request, feedbackModerationSchema);
+  const rule = MODERATION[input.action];
+  const { rows } = await deps.db.query<{ ride_id: string; stars: number }>(
+    `UPDATE mobility.ratings
+        SET moderation_status = $2, moderated_by = $3, moderated_at = $4,
+            moderation_note = $5, version = version + 1
+      WHERE id = $1 AND version = $6 AND moderation_status = ANY($7::text[])
+      RETURNING ride_id, stars`,
+    [
+      id,
+      rule.to,
+      operator.id,
+      deps.now(),
+      input.note,
+      input.expectedVersion,
+      rule.from,
+    ],
+  );
+  if (!rows[0]) {
+    const current = await deps.db.query<FeedbackRow>(
+      `${FEEDBACK_SQL} WHERE g.id = $1`,
+      [id],
+    );
+    if (!current.rows[0]) throw notFound("Rating");
+    const code =
+      current.rows[0].version !== input.expectedVersion
+        ? "VERSION_CONFLICT"
+        : "INVALID_MODERATION";
+    await audit(deps.db, {
+      operator,
+      action: rule.action,
+      targetType: "rating",
+      targetId: id,
+      reason: input.note,
+      result: "failed",
+      detail: { error: code, currentStatus: current.rows[0].moderation_status },
+    });
+    throw new ApiError(
+      409,
+      code,
+      code === "VERSION_CONFLICT"
+        ? "This feedback changed since you opened it. Reload and try again."
+        : "This action doesn't apply to feedback in its current state.",
+    );
+  }
+  await audit(deps.db, {
+    operator,
+    action: rule.action,
+    targetType: "rating",
+    targetId: id,
+    reason: input.note,
+    result: "succeeded",
+    detail: { rideId: rows[0].ride_id, stars: rows[0].stars, status: rule.to },
+  });
+  const updated = await deps.db.query<FeedbackRow>(
+    `${FEEDBACK_SQL} WHERE g.id = $1`,
+    [id],
+  );
+  return Response.json({ data: feedbackItem(updated.rows[0]) });
+}
+
+function tipRefundView(
+  f: TipRefundRow & { operator_name: string | null },
+): AdminRefund {
+  return {
+    id: f.id,
+    amountCents: f.amount_cents,
+    status: f.status,
+    reason: f.reason,
+    operatorName:
+      f.source === "stripe"
+        ? "Stripe (outside the app)"
+        : (f.operator_name ?? "unknown"),
+    verifiedOperator: f.operator_id !== null,
+    source: f.source,
+    stripeRefundId: f.stripe_refund_id,
+    lastError: f.last_error,
+    supportRequestId: null,
+    createdAt: iso(f.created_at)!,
+    updatedAt: iso(f.updated_at)!,
+  };
+}
+
+function disputeView(d: DisputeRow): AdminDispute {
+  return {
+    stripeDisputeId: d.stripe_dispute_id,
+    subject: d.subject,
+    status: d.status,
+    reason: d.reason,
+    amountCents: d.amount_cents,
+    currency: d.currency,
+    fundsWithdrawnCents: d.funds_withdrawn_cents,
+    fundsReinstatedCents: d.funds_reinstated_cents,
+    needsReview: d.needs_review,
+    reviewNote: d.review_note,
+    createdAt: iso(d.created_at)!,
+    updatedAt: iso(d.updated_at)!,
+    closedAt: iso(d.closed_at),
+  };
+}
+
+export async function createTipRefundAction(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const tipId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "refund", {
+    type: "tip",
+    id: tipId,
+    action: "tip_refund_create",
+  });
+  const input = await readJson(request, adminTipRefundSchema);
+  const { rows: tips } = await deps.db.query<{ ride_id: string }>(
+    "SELECT ride_id FROM mobility.tips WHERE id = $1",
+    [tipId],
+  );
+  if (!tips[0]) throw notFound("Tip");
+  const rideId = tips[0].ride_id;
+  if (stripeMode() !== "test") {
+    await audit(deps.db, {
+      operator,
+      action: "tip_refund_create",
+      targetType: "ride",
+      targetId: rideId,
+      reason: input.reason,
+      result: "denied",
+      detail: { tipId, error: "live_refunds_disabled" },
+    });
+    throw new ApiError(
+      503,
+      "LIVE_REFUNDS_DISABLED",
+      "Refunds from the console are limited to Stripe test mode in this version.",
+    );
+  }
+  try {
+    const result = await createTipRefund(deps, {
+      tipId,
+      amountCents: input.amountCents,
+      reason: input.reason,
+      expectedMaxRefundableCents: input.expectedMaxRefundableCents,
+      idempotencyKey: input.idempotencyKey,
+      operatorId: operator.id,
+    });
+    await audit(deps.db, {
+      operator,
+      action: "tip_refund_create",
+      targetType: "ride",
+      targetId: rideId,
+      reason: input.reason,
+      result:
+        result.refund.status === "succeeded"
+          ? "succeeded"
+          : result.refund.status === "failed" ||
+              result.refund.status === "canceled"
+            ? "failed"
+            : "pending",
+      detail: {
+        tipId,
+        tipRefundId: result.refund.id,
+        amountCents: result.refund.amount_cents,
+        stripeStatus: result.refund.status,
+        outcome: result.outcome,
+      },
+    });
+    return Response.json(
+      {
+        data: {
+          refundId: result.refund.id,
+          status: result.refund.status,
+          amountCents: result.refund.amount_cents,
+          duplicate: !result.created,
+          stripeReachable: result.outcome !== "unknown",
+        },
+      },
+      { status: result.created ? 201 : 200 },
+    );
+  } catch (error) {
+    await audit(deps.db, {
+      operator,
+      action: "tip_refund_create",
+      targetType: "ride",
+      targetId: rideId,
+      reason: input.reason,
+      result: "failed",
+      detail: {
+        tipId,
+        amountCents: input.amountCents,
+        error: error instanceof ApiError ? error.code : "internal_error",
+      },
+    });
+    if (
+      (error as { code?: string })?.code === "23505" &&
+      (error as { constraint?: string })?.constraint ===
+        "tip_refunds_one_in_flight"
+    ) {
+      throw new ApiError(
+        409,
+        "REFUND_IN_PROGRESS",
+        "Another refund for this tip is still in progress.",
+      );
+    }
+    throw error;
+  }
+}
+
+export async function syncTipRefundAction(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const refundId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "refund", {
+    type: "tip_refund",
+    id: refundId,
+    action: "tip_refund_sync",
+  });
+  const { rows } = await deps.db.query<TipRefundRow>(
+    "SELECT * FROM mobility.tip_refunds WHERE id = $1",
+    [refundId],
+  );
+  if (!rows[0]) throw notFound("Refund");
+  if (rows[0].stripe_refund_id) {
+    await applyTipRefundSnapshot(
+      deps.db,
+      await deps.payments.retrieveRefund(rows[0].stripe_refund_id),
+      deps.now(),
+    );
+  }
+  const { rows: after } = await deps.db.query<{ status: string }>(
+    "SELECT status FROM mobility.tip_refunds WHERE id = $1",
+    [refundId],
+  );
+  await audit(deps.db, {
+    operator,
+    action: "tip_refund_sync",
+    targetType: "ride",
+    targetId: rows[0].ride_id,
+    result: "succeeded",
+    detail: { tipRefundId: refundId, stripeStatus: after[0].status },
+  });
+  return Response.json({ data: { refundId, status: after[0].status } });
+}
+
+export async function syncRideFromStripe(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const rideId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "ride",
+    id: rideId,
+    action: "stripe_sync",
+  });
+  const { rows } = await deps.db.query<{
+    fare_intent: string | null;
+    tip_intent: string | null;
+  }>(
+    `SELECT r.stripe_payment_intent_id AS fare_intent,
+            (SELECT t.stripe_payment_intent_id FROM mobility.tips t
+              WHERE t.ride_id = r.id AND t.stripe_payment_intent_id IS NOT NULL
+              ORDER BY (t.status = 'canceled'), t.created_at DESC LIMIT 1) AS tip_intent
+       FROM mobility.rides r WHERE r.id = $1`,
+    [rideId],
+  );
+  if (!rows[0]) throw notFound("Ride");
+  const counts = { fareRefunds: 0, tipRefunds: 0, disputes: 0 };
+  const { fare_intent: fare, tip_intent: tip } = rows[0];
+  if (fare) {
+    counts.fareRefunds = await syncRefundsForIntent(deps, fare);
+    counts.disputes += await syncDisputesForIntent(deps, fare);
+  }
+  if (tip) {
+    counts.tipRefunds = await syncTipRefundsForIntent(deps, tip);
+    counts.disputes += await syncDisputesForIntent(deps, tip);
+  }
+  await audit(deps.db, {
+    operator,
+    action: "stripe_sync",
+    targetType: "ride",
+    targetId: rideId,
+    result: "succeeded",
+    detail: counts,
+  });
+  return Response.json({
+    data: { ...counts, reconciliation: await reconcileRide(deps.db, rideId) },
+  });
 }

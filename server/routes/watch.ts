@@ -15,6 +15,7 @@ interface Probe {
   version: number;
   status: RideRow["status"];
   location_seq: string | null;
+  chat_seq: number;
 }
 
 export async function watchRide(
@@ -33,6 +34,7 @@ export async function watchRide(
   let lastAdvance = -Infinity;
   let rideChanged = false;
   let liveChanged = false;
+  let chatChanged = false;
 
   for (;;) {
     const now = deps.now().getTime();
@@ -41,9 +43,10 @@ export async function watchRide(
       lastAdvance = now;
     }
     const { rows } = await deps.db.query<Probe>(
-      `SELECT r.version, r.status, dp.location_seq
+      `SELECT r.version, r.status, dp.location_seq, COALESCE(c.last_seq, 0) AS chat_seq
          FROM mobility.rides r
          LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
+         LEFT JOIN mobility.ride_chats c ON c.ride_id = r.id
         WHERE r.id = $1`,
       [rideId],
     );
@@ -52,12 +55,20 @@ export async function watchRide(
     liveChanged =
       ASSIGNED_STATUSES.includes(probe.status) &&
       Number(probe.location_seq ?? 0) > query.locationSeq;
-    if (rideChanged || liveChanged || deps.now().getTime() >= deadline) break;
+    chatChanged =
+      query.chatSeq !== undefined && Number(probe.chat_seq) > query.chatSeq;
+    if (
+      rideChanged ||
+      liveChanged ||
+      chatChanged ||
+      deps.now().getTime() >= deadline
+    )
+      break;
     await deps.sleep(WATCH.checkEveryMs);
   }
 
   const now = deps.now();
-  if (!rideChanged && !liveChanged) {
+  if (!rideChanged && !liveChanged && !chatChanged) {
     const body: WatchResponse = {
       changed: false,
       ride: null,
@@ -73,7 +84,10 @@ export async function watchRide(
   );
   const body: WatchResponse = {
     changed: true,
-    ride: rideChanged ? await rideView(deps.db, rideId, viewer, now) : null,
+    ride:
+      rideChanged || chatChanged
+        ? await rideView(deps.db, rideId, viewer, now)
+        : null,
     live: await liveTrip(deps, rows[0], query.routeVersion),
     serverTime: now.toISOString(),
   };

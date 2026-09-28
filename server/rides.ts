@@ -6,7 +6,10 @@ import {
 } from "../shared/contracts";
 
 import { cancellationPreview } from "./cancellation";
+import { chatSummary, purgeExpiredChats } from "./chat";
 import { type Database, type SqlClient, transaction } from "./db";
+import { syncOpenDisputes } from "./disputes";
+import { ensureRideEarning, reconcileEarnings } from "./earnings";
 import { ApiError, notFound } from "./errors";
 import {
   allowedActions,
@@ -29,7 +32,10 @@ import {
   type PaymentGateway,
   paymentStatusFor,
 } from "./payments";
+import { ratingState, summarySql, toSummary } from "./ratings";
 import { resubmitStaleRefunds, syncOpenRefunds } from "./refunds";
+import { syncOpenTipRefunds } from "./tipRefunds";
+import { syncOpenTips } from "./tips";
 
 export interface RideDeps {
   db: Database;
@@ -163,6 +169,7 @@ async function recordIntent(
     );
   } else if (next === "paid") {
     await ledger(tx, ride.id, "captured", captured, intent.id, "stripe");
+    await ensureRideEarning(tx, ride.id, now);
   } else if (next === "cancelled" && ride.authorized_at) {
     await ledger(tx, ride.id, "released", ride.fare_cents, intent.id, "stripe");
     await enqueueNotification(
@@ -370,7 +377,22 @@ export async function sweep(deps: RideDeps, limit = 25): Promise<number> {
     }
   }
   await syncOpenRefunds(deps).catch(() => {});
+  await syncOpenTips(deps).catch(() => {
+    log("tip_sync_failed", {});
+  });
+  await syncOpenTipRefunds(deps).catch(() => {
+    log("tip_refund_sync_failed", {});
+  });
+  await syncOpenDisputes(deps).catch(() => {
+    log("dispute_sync_failed", {});
+  });
+  await reconcileEarnings(deps).catch(() => {
+    log("earnings_reconcile_failed", {});
+  });
   await resubmitStaleRefunds(deps).catch(() => {});
+  await purgeExpiredChats(deps).catch(() => {
+    log("chat_purge_failed", {});
+  });
   await deliverPending(deps, 100).catch(() => {});
   await checkReceipts(deps).catch(() => {});
   return rows.length;
@@ -384,18 +406,47 @@ interface ViewRow extends RideRow {
   vehicle_plate: string | null;
   vehicle_seats: number | null;
   demo_driver_name: string | null;
+  chat_seq: number;
+  passenger_unread: number;
+  driver_unread: number;
+  passenger_rating_stars: number | null;
+  passenger_rating_comment: string | null;
+  passenger_rating_at: Date | null;
+  driver_rating_stars: number | null;
+  driver_rating_comment: string | null;
+  driver_rating_at: Date | null;
+  driver_summary: { count: number; avg: number | null } | null;
+  passenger_summary: { count: number; avg: number | null } | null;
 }
 
-const VIEW_SQL = `
+const viewSql = (nowRef: string) => `
   SELECT r.*, u.name AS passenger_name,
          dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model,
          dp.vehicle_plate, dp.vehicle_seats,
          CASE WHEN dd.id IS NULL THEN NULL
-              ELSE dd.first_name || ' ' || dd.last_name END AS demo_driver_name
+              ELSE dd.first_name || ' ' || dd.last_name END AS demo_driver_name,
+         COALESCE(c.last_seq, 0) AS chat_seq,
+         (SELECT count(*)::int FROM mobility.ride_messages m
+           WHERE m.ride_id = r.id AND m.sender_role = 'driver'
+             AND m.seq > COALESCE(c.passenger_read_seq, 0)) AS passenger_unread,
+         (SELECT count(*)::int FROM mobility.ride_messages m
+           WHERE m.ride_id = r.id AND m.sender_role = 'passenger'
+             AND m.driver_profile_id = r.driver_profile_id
+             AND m.seq > COALESCE(c.driver_read_seq, 0)) AS driver_unread,
+         rp.stars AS passenger_rating_stars, rp.comment AS passenger_rating_comment,
+         rp.created_at AS passenger_rating_at,
+         rd.stars AS driver_rating_stars, rd.comment AS driver_rating_comment,
+         rd.created_at AS driver_rating_at,
+         CASE WHEN dp.id IS NULL THEN NULL
+              ELSE ${summarySql("dp.user_id", "passenger", nowRef)} END AS driver_summary,
+         ${summarySql("r.user_id", "driver", nowRef)} AS passenger_summary
     FROM mobility.rides r
     JOIN mobility.users u ON u.id = r.user_id
     LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
-    LEFT JOIN mobility.demo_drivers dd ON dd.id = r.demo_driver_id`;
+    LEFT JOIN mobility.demo_drivers dd ON dd.id = r.demo_driver_id
+    LEFT JOIN mobility.ride_chats c ON c.ride_id = r.id
+    LEFT JOIN mobility.ratings rp ON rp.ride_id = r.id AND rp.rater_role = 'passenger'
+    LEFT JOIN mobility.ratings rd ON rd.ride_id = r.id AND rd.rater_role = 'driver'`;
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
@@ -413,6 +464,22 @@ function toView(
       seats: row.vehicle_seats ?? 0,
     };
   }
+  const mine =
+    viewer === "passenger"
+      ? row.passenger_rating_at
+        ? {
+            stars: row.passenger_rating_stars!,
+            comment: row.passenger_rating_comment,
+            created_at: row.passenger_rating_at,
+          }
+        : null
+      : row.driver_rating_at
+        ? {
+            stars: row.driver_rating_stars!,
+            comment: row.driver_rating_comment,
+            created_at: row.driver_rating_at,
+          }
+        : null;
   return {
     id: row.id,
     viewer,
@@ -451,6 +518,18 @@ function toView(
     cancellation: cancellationPreview(row, viewer),
     rematchCount: row.rematch_count,
     settlement: viewer === "passenger" ? settlementState(row) : "none",
+    chat: chatSummary(
+      row,
+      viewer === "passenger" ? row.passenger_unread : row.driver_unread,
+      now,
+    ),
+    rating: ratingState(row, mine, now),
+    counterpartRating:
+      viewer === "passenger"
+        ? driver
+          ? toSummary(row.driver_summary)
+          : null
+        : toSummary(row.passenger_summary),
     serverTime: now.toISOString(),
   };
 }
@@ -464,8 +543,8 @@ export async function rideViews(
   suffix = "",
 ): Promise<RideView[]> {
   const { rows } = await db.query<ViewRow>(
-    `${VIEW_SQL} WHERE ${where} ${suffix}`,
-    values,
+    `${viewSql(`$${values.length + 1}::timestamptz`)} WHERE ${where} ${suffix}`,
+    [...values, now],
   );
   return rows.map((r) => toView(r, viewer, now));
 }

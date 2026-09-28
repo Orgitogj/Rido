@@ -1,9 +1,12 @@
+import { syncDispute } from "../disputes";
 import { ApiError } from "../errors";
 import { type Deps, readRawBody } from "../http";
 import { applyRefundSnapshot, syncRefundsForIntent } from "../refunds";
 import { syncIntent } from "../rides";
+import { applyTipRefundSnapshot, syncTipRefundsForIntent } from "../tipRefunds";
+import { syncTip, tipForIntent } from "../tips";
 
-const HANDLED = new Set([
+export const HANDLED = new Set([
   "payment_intent.amount_capturable_updated",
   "payment_intent.succeeded",
   "payment_intent.processing",
@@ -12,12 +15,20 @@ const HANDLED = new Set([
   "payment_intent.canceled",
 ]);
 
-const REFUND_EVENTS = new Set([
+export const REFUND_EVENTS = new Set([
   "refund.created",
   "refund.updated",
   "refund.failed",
   "charge.refunded",
   "charge.refund.updated",
+]);
+
+export const DISPUTE_EVENTS = new Set([
+  "charge.dispute.created",
+  "charge.dispute.updated",
+  "charge.dispute.closed",
+  "charge.dispute.funds_withdrawn",
+  "charge.dispute.funds_reinstated",
 ]);
 
 export async function stripeWebhook(
@@ -60,18 +71,43 @@ export async function stripeWebhook(
         if (!(error instanceof ApiError && error.code === "PAYMENT_MISMATCH"))
           throw error;
       }
+    } else {
+      const tipId = await tipForIntent(deps.db, event.paymentIntentId);
+      if (tipId) {
+        try {
+          await syncTip(
+            deps,
+            tipId,
+            await deps.payments.retrievePaymentIntent(event.paymentIntentId),
+          );
+        } catch (error) {
+          if (!(error instanceof ApiError && error.code === "PAYMENT_MISMATCH"))
+            throw error;
+        }
+      }
     }
   }
 
   if (REFUND_EVENTS.has(event.type)) {
-    if (event.refundId) {
-      await applyRefundSnapshot(
-        deps.db,
-        await deps.payments.retrieveRefund(event.refundId),
-      );
-    } else if (event.paymentIntentId) {
-      await syncRefundsForIntent(deps, event.paymentIntentId);
+    const refund = event.refundId
+      ? await deps.payments.retrieveRefund(event.refundId)
+      : null;
+    const intentId = refund?.paymentIntentId ?? event.paymentIntentId;
+    const tipId = intentId ? await tipForIntent(deps.db, intentId) : null;
+    if (refund) {
+      if (tipId) await applyTipRefundSnapshot(deps.db, refund, deps.now());
+      else await applyRefundSnapshot(deps.db, refund, deps.now());
+    } else if (intentId) {
+      if (tipId) await syncTipRefundsForIntent(deps, intentId);
+      else await syncRefundsForIntent(deps, intentId);
     }
+  }
+
+  if (DISPUTE_EVENTS.has(event.type) && event.disputeId) {
+    await syncDispute(
+      deps,
+      await deps.payments.retrieveDispute(event.disputeId),
+    );
   }
 
   await deps.db.query(

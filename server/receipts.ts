@@ -1,5 +1,6 @@
 import { formatCents } from "../shared/contracts";
 
+import { ratingState } from "./ratings";
 import { settlementState } from "./rides";
 
 import type { RideRow } from "./lifecycle";
@@ -7,6 +8,7 @@ import type {
   Receipt,
   ReceiptPaymentState,
   RideStatus,
+  TipStatus,
 } from "../shared/contracts";
 
 export interface ReceiptRow extends RideRow {
@@ -16,6 +18,15 @@ export interface ReceiptRow extends RideRow {
   vehicle_plate: string | null;
   demo_driver_name: string | null;
   refund_pending_cents: number | string | null;
+  rating_stars: number | null;
+  rating_comment: string | null;
+  rating_at: Date | null;
+  tip_amount: number | null;
+  tip_status: TipStatus | null;
+  tip_refunded: number | null;
+  tip_paid_at: Date | null;
+  tip_refund_pending: number | null;
+  disputes: { subject: "fare" | "tip"; status: string; amount_cents: number }[];
 }
 
 export const RECEIPT_SQL = `
@@ -25,10 +36,23 @@ export const RECEIPT_SQL = `
               ELSE dd.first_name || ' ' || dd.last_name END AS demo_driver_name,
          (SELECT COALESCE(sum(f.amount_cents), 0) FROM mobility.refunds f
            WHERE f.ride_id = r.id
-             AND f.status IN ('creating', 'pending', 'requires_action')) AS refund_pending_cents
+             AND f.status IN ('creating', 'pending', 'requires_action')) AS refund_pending_cents,
+         rp.stars AS rating_stars, rp.comment AS rating_comment, rp.created_at AS rating_at,
+         tp.amount_cents AS tip_amount, tp.status AS tip_status,
+         tp.refunded_cents AS tip_refunded, tp.paid_at AS tip_paid_at,
+         (SELECT COALESCE(sum(tf.amount_cents), 0)::int FROM mobility.tip_refunds tf
+           WHERE tf.tip_id = tp.id
+             AND tf.status IN ('creating', 'pending', 'requires_action')) AS tip_refund_pending,
+         COALESCE((SELECT json_agg(json_build_object(
+                     'subject', d.subject, 'status', d.status,
+                     'amount_cents', d.amount_cents) ORDER BY d.created_at)
+                     FROM mobility.disputes d
+                    WHERE d.ride_id = r.id AND d.subject IN ('fare', 'tip')), '[]'::json) AS disputes
     FROM mobility.rides r
     LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
-    LEFT JOIN mobility.demo_drivers dd ON dd.id = r.demo_driver_id`;
+    LEFT JOIN mobility.demo_drivers dd ON dd.id = r.demo_driver_id
+    LEFT JOIN mobility.ratings rp ON rp.ride_id = r.id AND rp.rater_role = 'passenger'
+    LEFT JOIN mobility.tips tp ON tp.ride_id = r.id AND tp.status <> 'canceled'`;
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
@@ -123,7 +147,7 @@ export function paymentState(row: RideRow): {
   return { state: "no_payment", text: "No payment was taken." };
 }
 
-export function receiptFrom(row: ReceiptRow): Receipt {
+export function receiptFrom(row: ReceiptRow, now: Date): Receipt {
   const legacy = row.status === "legacy";
   const { state, text } = paymentState(row);
   const charged =
@@ -170,5 +194,31 @@ export function receiptFrom(row: ReceiptRow): Receipt {
     paymentText: text,
     settlement: settlementState(row),
     rematchCount: row.rematch_count,
+    tip:
+      row.tip_amount !== null && row.tip_status
+        ? {
+            amountCents: row.tip_amount,
+            status: row.tip_status,
+            refundedCents: row.tip_refunded ?? 0,
+            refundPendingCents: Number(row.tip_refund_pending ?? 0),
+            paidAt: iso(row.tip_paid_at),
+          }
+        : null,
+    disputes: (row.disputes ?? []).map((d) => ({
+      subject: d.subject,
+      status: d.status,
+      amountCents: d.amount_cents,
+    })),
+    rating: ratingState(
+      row,
+      row.rating_at
+        ? {
+            stars: row.rating_stars!,
+            comment: row.rating_comment,
+            created_at: row.rating_at,
+          }
+        : null,
+      now,
+    ),
   };
 }

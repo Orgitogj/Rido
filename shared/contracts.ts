@@ -83,7 +83,76 @@ export const watchQuerySchema = z.strictObject({
   version: z.coerce.number().int().min(0).default(0),
   locationSeq: z.coerce.number().int().min(0).default(0),
   routeVersion: z.coerce.number().int().min(0).default(0),
+  chatSeq: z.coerce.number().int().min(0).optional(),
   wait: z.coerce.number().int().min(0).max(25).default(20),
+});
+
+export const CHAT_RULES = {
+  maxLength: 500,
+  pageSize: 30,
+  maxPageSize: 50,
+} as const;
+
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F]/;
+
+export const chatBodySchema = z
+  .string()
+  .max(CHAT_RULES.maxLength * 2)
+  .transform((s) => s.replace(/\r\n?/g, "\n").trim())
+  .pipe(
+    z
+      .string()
+      .min(1)
+      .max(CHAT_RULES.maxLength)
+      .refine((s) => !CONTROL_CHARACTERS.test(s), {
+        message: "Messages can't contain control characters.",
+      }),
+  );
+
+export const chatSendSchema = z.strictObject({
+  clientMessageId: z.uuid(),
+  body: chatBodySchema,
+});
+
+export const chatQuerySchema = z
+  .strictObject({
+    after: z.coerce.number().int().min(0).optional(),
+    before: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(CHAT_RULES.maxPageSize)
+      .default(CHAT_RULES.pageSize),
+  })
+  .refine((q) => q.after === undefined || q.before === undefined, {
+    message: "Use either after or before, not both.",
+  });
+
+export const chatReadSchema = z.strictObject({
+  seq: z.number().int().min(0),
+});
+
+export const RATING_RULES = {
+  minStars: 1,
+  maxStars: 5,
+  commentMaxLength: 300,
+  windowDays: 7,
+  editMinutes: 60,
+  summaryMinimum: 3,
+} as const;
+
+export const ratingSubmitSchema = z.strictObject({
+  stars: z.number().int().min(RATING_RULES.minStars).max(RATING_RULES.maxStars),
+  comment: z
+    .string()
+    .trim()
+    .max(RATING_RULES.commentMaxLength)
+    .refine((s) => !CONTROL_CHARACTERS.test(s), {
+      message: "Feedback can't contain control characters.",
+    })
+    .nullable()
+    .optional(),
 });
 
 export const cancelRequestSchema = z.strictObject({
@@ -211,7 +280,75 @@ export interface RideView {
   cancellation: CancellationPreview | null;
   rematchCount: number;
   settlement: SettlementState;
+  chat: RideChatSummary;
+  rating: RideRatingState;
+  counterpartRating: RatingSummary | null;
   serverTime: string;
+}
+
+export type ChatState =
+  "open" | "waiting" | "closed" | "expired" | "unavailable";
+
+export interface RideChatSummary {
+  state: ChatState;
+  canSend: boolean;
+  latestSeq: number;
+  unread: number;
+}
+
+export interface ChatView extends RideChatSummary {
+  rideId: string;
+  role: "passenger" | "driver";
+  counterpartName: string | null;
+  readSeq: number;
+  availableUntil: string | null;
+  maxLength: number;
+}
+
+export interface ChatMessageView {
+  id: string;
+  seq: number;
+  mine: boolean;
+  clientMessageId: string | null;
+  body: string;
+  createdAt: string;
+  earlierDriver: boolean;
+}
+
+export interface ChatPage {
+  chat: ChatView;
+  messages: ChatMessageView[];
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
+}
+
+export interface ChatSendResult {
+  chat: ChatView;
+  message: ChatMessageView;
+  duplicate: boolean;
+}
+
+export type RatingIneligibleReason =
+  | "not_completed"
+  | "payment_pending"
+  | "simulated"
+  | "no_counterpart"
+  | "window_closed";
+
+export interface RatingSummary {
+  average: number | null;
+  count: number;
+}
+
+export interface RideRatingState {
+  eligible: boolean;
+  reason: RatingIneligibleReason | null;
+  stars: number | null;
+  comment: string | null;
+  submittedAt: string | null;
+  editableUntil: string | null;
+  canEdit: boolean;
+  rateBy: string | null;
 }
 
 export interface CancellationPreview {
@@ -261,6 +398,23 @@ export interface Receipt {
   paymentText: string;
   settlement: SettlementState;
   rematchCount: number;
+  rating: RideRatingState;
+  tip: ReceiptTip | null;
+  disputes: ReceiptDispute[];
+}
+
+export interface ReceiptTip {
+  amountCents: number;
+  status: TipStatus;
+  refundedCents: number;
+  refundPendingCents: number;
+  paidAt: string | null;
+}
+
+export interface ReceiptDispute {
+  subject: "fare" | "tip";
+  status: string;
+  amountCents: number;
 }
 
 export interface DriverTrip {
@@ -273,6 +427,7 @@ export interface DriverTrip {
   fareCents: number;
   currency: "usd";
   distanceMeters: number | null;
+  ratingPending: boolean;
 }
 
 export interface DriverProfileView {
@@ -284,6 +439,7 @@ export interface DriverProfileView {
   vehiclePlate: string;
   vehicleSeats: number;
   online: boolean;
+  rating: RatingSummary;
 }
 
 export interface RideOfferView {
@@ -296,6 +452,7 @@ export interface RideOfferView {
   tripDistanceMeters: number | null;
   expiresAt: string;
   expiresInSeconds: number;
+  passengerRating: RatingSummary;
 }
 
 export interface DriverDashboard {
@@ -363,6 +520,7 @@ export interface ApiErrorBody {
     code: string;
     message: string;
     fields?: { path: string; code: string }[];
+    retryAfterSeconds?: number;
   };
   requestId?: string;
 }
@@ -399,6 +557,9 @@ export const reviewCategories = [
   "settlement_retrying",
   "authorization_expired_before_capture",
   "authorization_expiring_during_trip",
+  "payment_dispute",
+  "refund_reversed",
+  "refund_mismatch",
 ] as const;
 export type ReviewCategory = (typeof reviewCategories)[number];
 
@@ -499,6 +660,7 @@ export interface AdminRefund {
   reason: string;
   operatorName: string;
   verifiedOperator: boolean;
+  source: "operator" | "stripe";
   stripeRefundId: string | null;
   lastError: string | null;
   supportRequestId: string | null;
@@ -590,6 +752,90 @@ export interface AdminRideDetail {
     reason: string | null;
     createdAt: string;
   }[];
+  ratings: AdminFeedbackItem[];
+  earnings: AdminRideEarnings;
+}
+
+export interface AdminRideEarnings {
+  record: {
+    driverName: string;
+    fareCents: number;
+    commissionRateBps: number;
+    commissionCents: number;
+    driverShareCents: number;
+    policyVersion: string;
+    earnedAt: string;
+  } | null;
+  entries: EarningEntryView[];
+  tip: {
+    id: string;
+    amountCents: number;
+    status: TipStatus;
+    refundedCents: number;
+    stripePaymentIntentId: string | null;
+    lastError: string | null;
+    createdAt: string;
+    paidAt: string | null;
+  } | null;
+  tipRefunds: AdminRefund[];
+  tipRefundable: RefundableSummary | null;
+  disputes: AdminDispute[];
+  reconciliation: { ok: boolean; issues: string[] };
+}
+
+export interface AdminDispute {
+  stripeDisputeId: string;
+  subject: "fare" | "tip" | "unknown";
+  status: string;
+  reason: string | null;
+  amountCents: number;
+  currency: string;
+  fundsWithdrawnCents: number;
+  fundsReinstatedCents: number;
+  needsReview: boolean;
+  reviewNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}
+
+export const adminTipRefundSchema = z.strictObject({
+  amountCents: z.number().int().positive(),
+  reason: z.string().trim().min(3).max(200),
+  expectedMaxRefundableCents: z.number().int().min(0),
+  idempotencyKey: z.uuid(),
+});
+
+export const feedbackStatuses = ["pending", "reviewed", "removed"] as const;
+export type FeedbackStatus = (typeof feedbackStatuses)[number];
+
+export const adminFeedbackQuerySchema = adminListQuerySchema.extend({
+  status: z.enum([...feedbackStatuses, "all"]).default("pending"),
+  rideId: z.uuid().optional(),
+});
+
+export const feedbackModerationSchema = z.strictObject({
+  action: z.enum(["reviewed", "remove", "restore"]),
+  note: z.string().trim().min(3).max(500),
+  expectedVersion: z.number().int().min(1),
+});
+
+export interface AdminFeedbackItem {
+  id: string;
+  rideId: string;
+  raterRole: "passenger" | "driver";
+  rater: { name: string | null; account: string };
+  ratee: { name: string | null; account: string };
+  stars: number;
+  comment: string | null;
+  status: "none" | FeedbackStatus;
+  version: number;
+  editCount: number;
+  moderationNote: string | null;
+  moderatedBy: string | null;
+  moderatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AdminSupportItem {
@@ -630,4 +876,145 @@ export interface PassengerSupportRequest {
   updatedAt: string;
   resolvedAt: string | null;
   resolutionMessage: string | null;
+}
+
+export const TIP_RULES = {
+  minCents: 100,
+  maxCents: 5000,
+  windowDays: 7,
+  suggestedPercents: [15, 20, 25],
+} as const;
+
+export const tipStatuses = [
+  "creating",
+  "pending",
+  "requires_action",
+  "processing",
+  "failed",
+  "succeeded",
+  "canceled",
+] as const;
+export type TipStatus = (typeof tipStatuses)[number];
+
+export const tipCreateSchema = z.strictObject({
+  amountCents: z.number().int().min(TIP_RULES.minCents).max(TIP_RULES.maxCents),
+  idempotencyKey: z.uuid(),
+  consent: z.literal(true),
+});
+
+export type TipIneligibleReason =
+  | "not_completed"
+  | "payment_pending"
+  | "simulated"
+  | "no_driver"
+  | "window_closed"
+  | "already_tipped";
+
+export interface TipView {
+  id: string;
+  amountCents: number;
+  currency: "usd";
+  status: TipStatus;
+  refundedCents: number;
+  lastError: string | null;
+  createdAt: string;
+  paidAt: string | null;
+}
+
+export interface TipState {
+  eligible: boolean;
+  reason: TipIneligibleReason | null;
+  minCents: number;
+  maxCents: number;
+  suggestionsCents: number[];
+  driverName: string | null;
+  tipBy: string | null;
+  tip: TipView | null;
+}
+
+export interface TipCheckout {
+  tip: TipView;
+  paymentIntentClientSecret: string;
+  customerId: string;
+  customerEphemeralKeySecret: string;
+}
+
+export const earningsQuerySchema = z.strictObject({
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export type EarningEntryKind =
+  | "ride_earning"
+  | "tip"
+  | "fare_refund_adjustment"
+  | "tip_refund_adjustment"
+  | "dispute_withdrawal"
+  | "dispute_reinstatement";
+
+export interface EarningEntryView {
+  kind: EarningEntryKind;
+  grossCents: number;
+  commissionCents: number;
+  driverAmountCents: number;
+  policyVersion: string;
+  occurredAt: string;
+}
+
+export interface CommissionPolicyView {
+  version: string;
+  fareCommissionBps: number;
+  tipCommissionBps: number;
+  label: string;
+}
+
+export interface EarningsSummary {
+  from: string | null;
+  to: string | null;
+  currency: "usd";
+  confirmed: {
+    rides: number;
+    fareCents: number;
+    commissionCents: number;
+    driverShareCents: number;
+    tipsCents: number;
+    adjustmentsCents: number;
+    disputesCents: number;
+    netCents: number;
+  };
+  disputes: { open: number };
+  pending: {
+    rides: number;
+    fareCents: number;
+    tips: number;
+    tipsCents: number;
+  };
+  policy: CommissionPolicyView;
+  payouts: { available: false; message: string };
+}
+
+export interface DriverEarningRide {
+  rideId: string;
+  completedAt: string | null;
+  pickupAddress: string;
+  destinationAddress: string;
+  state: "confirmed" | "pending" | "not_charged";
+  currency: "usd";
+  fareCents: number;
+  commissionRateBps: number | null;
+  commissionCents: number | null;
+  driverShareCents: number | null;
+  policyVersion: string | null;
+  tip: {
+    amountCents: number;
+    status: "paid" | "processing";
+    refundedCents: number;
+  } | null;
+  adjustmentsCents: number;
+  disputesCents: number;
+  disputeOpen: boolean;
+  netCents: number;
+  entries: EarningEntryView[];
 }

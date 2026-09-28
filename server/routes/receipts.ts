@@ -6,6 +6,7 @@ import {
 } from "../../shared/contracts";
 import { notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
+import { ratingEligibility } from "../ratings";
 import { RECEIPT_SQL, receiptFrom, type ReceiptRow } from "../receipts";
 import { ensureUser } from "../users";
 
@@ -28,7 +29,8 @@ export async function listReceipts(
       ORDER BY r.created_at DESC, r.id DESC LIMIT 50`,
     [user.id],
   );
-  return Response.json({ data: rows.map(receiptFrom) });
+  const now = deps.now();
+  return Response.json({ data: rows.map((r) => receiptFrom(r, now)) });
 }
 
 export async function getReceipt(
@@ -43,7 +45,7 @@ export async function getReceipt(
     [rideId, user.id],
   );
   if (!rows[0]) throw notFound("Receipt");
-  return Response.json({ data: receiptFrom(rows[0]) });
+  return Response.json({ data: receiptFrom(rows[0], deps.now()) });
 }
 
 export async function listDriverTrips(
@@ -66,15 +68,24 @@ export async function listDriverTrips(
     completed_at: Date | null;
     fare_cents: number;
     distance_meters: number | null;
+    status: "completed";
+    payment_status: string;
+    demo_driver_id: number | null;
+    driver_profile_id: string | null;
+    rated: boolean;
   }>(
-    `SELECT id, origin_address, origin_latitude, origin_longitude,
-            destination_address, destination_latitude, destination_longitude,
-            accepted_at, started_at, completed_at, fare_cents, distance_meters
-       FROM mobility.rides
-      WHERE driver_profile_id = $1 AND status = 'completed'
-      ORDER BY completed_at DESC LIMIT 50`,
+    `SELECT r.id, r.origin_address, r.origin_latitude, r.origin_longitude,
+            r.destination_address, r.destination_latitude, r.destination_longitude,
+            r.accepted_at, r.started_at, r.completed_at, r.fare_cents, r.distance_meters,
+            r.status, r.payment_status, r.demo_driver_id, r.driver_profile_id,
+            EXISTS (SELECT 1 FROM mobility.ratings g
+                     WHERE g.ride_id = r.id AND g.rater_role = 'driver') AS rated
+       FROM mobility.rides r
+      WHERE r.driver_profile_id = $1 AND r.status = 'completed'
+      ORDER BY r.completed_at DESC LIMIT 50`,
     [profile.id],
   );
+  const now = deps.now();
   const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
   const trips: DriverTrip[] = rows.map((r) => ({
     rideId: r.id,
@@ -94,6 +105,7 @@ export async function listDriverTrips(
     fareCents: r.fare_cents,
     currency: "usd",
     distanceMeters: r.distance_meters,
+    ratingPending: !r.rated && ratingEligibility(r, now).reason === null,
   }));
   return Response.json({ data: trips });
 }

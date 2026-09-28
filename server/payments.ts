@@ -27,11 +27,22 @@ export interface RefundSnapshot {
   failureReason: string | null;
 }
 
+export interface DisputeSnapshot {
+  id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  reason: string | null;
+  paymentIntentId: string | null;
+  balanceTransactions: { id: string; amount: number }[];
+}
+
 export interface WebhookEvent {
   id: string;
   type: string;
   paymentIntentId: string | null;
   refundId: string | null;
+  disputeId: string | null;
 }
 
 export interface PaymentGateway {
@@ -45,10 +56,13 @@ export interface PaymentGateway {
       currency: string;
       customer: string;
       metadata: Record<string, string>;
+      captureMethod?: "manual" | "automatic";
+      description?: string;
     },
     idempotencyKey: string,
   ): Promise<IntentSnapshot>;
   retrievePaymentIntent(id: string): Promise<IntentSnapshot>;
+  listRefunds(paymentIntentId: string): Promise<RefundSnapshot[]>;
   capturePaymentIntent(
     id: string,
     idempotencyKey: string,
@@ -68,6 +82,8 @@ export interface PaymentGateway {
     idempotencyKey: string,
   ): Promise<RefundSnapshot>;
   retrieveRefund(id: string): Promise<RefundSnapshot>;
+  retrieveDispute(id: string): Promise<DisputeSnapshot>;
+  listDisputes(paymentIntentId: string): Promise<DisputeSnapshot[]>;
 }
 
 function snapshot(intent: Stripe.PaymentIntent): IntentSnapshot {
@@ -102,6 +118,24 @@ function refundSnapshot(refund: Stripe.Refund): RefundSnapshot {
   };
 }
 
+function disputeSnapshot(dispute: Stripe.Dispute): DisputeSnapshot {
+  return {
+    id: dispute.id,
+    status: dispute.status,
+    amount: dispute.amount,
+    currency: dispute.currency,
+    reason: dispute.reason ?? null,
+    paymentIntentId:
+      typeof dispute.payment_intent === "string"
+        ? dispute.payment_intent
+        : (dispute.payment_intent?.id ?? null),
+    balanceTransactions: (dispute.balance_transactions ?? []).map((t) => ({
+      id: t.id,
+      amount: t.amount,
+    })),
+  };
+}
+
 export function stripeGateway(): PaymentGateway {
   let client: Stripe | undefined;
   const stripe = () =>
@@ -125,8 +159,10 @@ export function stripeGateway(): PaymentGateway {
           customer: input.customer,
           metadata: input.metadata,
           payment_method_types: ["card"],
-          capture_method: "manual",
-          description: "Ride request (authorized now, charged on completion)",
+          capture_method: input.captureMethod ?? "manual",
+          description:
+            input.description ??
+            "Ride request (authorized now, charged on completion)",
         },
         { idempotencyKey },
       );
@@ -181,6 +217,7 @@ export function stripeGateway(): PaymentGateway {
             ? object.id
             : linkedIntent,
         refundId: object.object === "refund" && object.id ? object.id : null,
+        disputeId: object.object === "dispute" && object.id ? object.id : null,
       };
     },
     async createRefund(input, idempotencyKey) {
@@ -197,6 +234,23 @@ export function stripeGateway(): PaymentGateway {
     },
     async retrieveRefund(id) {
       return refundSnapshot(await stripe().refunds.retrieve(id));
+    },
+    async retrieveDispute(id) {
+      return disputeSnapshot(await stripe().disputes.retrieve(id));
+    },
+    async listDisputes(paymentIntentId) {
+      const list = await stripe().disputes.list({
+        payment_intent: paymentIntentId,
+        limit: 100,
+      });
+      return list.data.map(disputeSnapshot);
+    },
+    async listRefunds(paymentIntentId) {
+      const list = await stripe().refunds.list({
+        payment_intent: paymentIntentId,
+        limit: 100,
+      });
+      return list.data.map(refundSnapshot);
     },
   };
 }

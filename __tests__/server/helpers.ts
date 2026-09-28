@@ -14,6 +14,7 @@ import type {
   PushTicket,
 } from "../../server/notifications";
 import type {
+  DisputeSnapshot,
   IntentSnapshot,
   PaymentGateway,
   RefundSnapshot,
@@ -112,6 +113,8 @@ export class FakeStripe implements PaymentGateway {
       currency: string;
       customer: string;
       metadata: Record<string, string>;
+      captureMethod?: "manual" | "automatic";
+      description?: string;
     },
     key: string,
   ) {
@@ -119,6 +122,11 @@ export class FakeStripe implements PaymentGateway {
     const existing = this.intentKeys.get(key);
     if (existing) return { ...this.intents.get(existing)! };
     const id = `pi_${++this.seq}`;
+    this.intentInputs.set(id, {
+      captureMethod: input.captureMethod,
+      description: input.description,
+      customer: input.customer,
+    });
     this.intents.set(id, {
       id,
       status: "requires_payment_method",
@@ -245,6 +253,87 @@ export class FakeStripe implements PaymentGateway {
 
   async retrieveRefund(id: string): Promise<RefundSnapshot> {
     return { ...this.refunds.get(id)! };
+  }
+
+  disputes = new Map<string, DisputeSnapshot>();
+  private disputeSeq = 0;
+  private txnSeq = 0;
+
+  openDispute(
+    paymentIntentId: string,
+    opts: { status?: string; reason?: string; amount?: number } = {},
+  ) {
+    const intent = this.intents.get(paymentIntentId)!;
+    const id = `dp_${++this.disputeSeq}`;
+    this.disputes.set(id, {
+      id,
+      status: opts.status ?? "needs_response",
+      amount: opts.amount ?? intent.amountReceived,
+      currency: intent.currency,
+      reason: opts.reason ?? "fraudulent",
+      paymentIntentId,
+      balanceTransactions: [],
+    });
+    return id;
+  }
+
+  withdrawDispute(id: string, amount?: number) {
+    const d = this.disputes.get(id)!;
+    d.balanceTransactions.push({
+      id: `txn_${++this.txnSeq}`,
+      amount: -(amount ?? d.amount),
+    });
+  }
+
+  reinstateDispute(id: string, amount?: number) {
+    const d = this.disputes.get(id)!;
+    d.balanceTransactions.push({
+      id: `txn_${++this.txnSeq}`,
+      amount: amount ?? d.amount,
+    });
+  }
+
+  setDispute(id: string, patch: Partial<DisputeSnapshot>) {
+    this.disputes.set(id, { ...this.disputes.get(id)!, ...patch });
+  }
+
+  async retrieveDispute(id: string): Promise<DisputeSnapshot> {
+    const d = this.disputes.get(id);
+    if (!d) throw new Error(`No such dispute: ${id}`);
+    return { ...d, balanceTransactions: [...d.balanceTransactions] };
+  }
+
+  async listDisputes(paymentIntentId: string): Promise<DisputeSnapshot[]> {
+    return [...this.disputes.values()]
+      .filter((d) => d.paymentIntentId === paymentIntentId)
+      .map((d) => ({ ...d, balanceTransactions: [...d.balanceTransactions] }));
+  }
+
+  async listRefunds(paymentIntentId: string): Promise<RefundSnapshot[]> {
+    return [...this.refunds.values()]
+      .filter((r) => r.paymentIntentId === paymentIntentId)
+      .map((r) => ({ ...r }));
+  }
+
+  intentInputs = new Map<
+    string,
+    { captureMethod?: string; description?: string; customer: string }
+  >();
+
+  pay(id: string) {
+    const intent = this.intents.get(id)!;
+    this.setIntent(id, {
+      status: "succeeded",
+      hasPaymentError: false,
+      amountReceived: intent.amount,
+    });
+  }
+
+  decline(id: string) {
+    this.setIntent(id, {
+      status: "requires_payment_method",
+      hasPaymentError: true,
+    });
   }
 
   setRefund(id: string, patch: Partial<RefundSnapshot>) {

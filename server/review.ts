@@ -1,7 +1,10 @@
 import type { SqlClient } from "./db";
 
 export type ReviewReason =
-  "payment_dispute" | "refund_reversed" | "refund_mismatch";
+  | "payment_dispute"
+  | "refund_reversed"
+  | "refund_mismatch"
+  | "driver_ineligible_during_trip";
 
 export async function flagRideReview(
   tx: SqlClient,

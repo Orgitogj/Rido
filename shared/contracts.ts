@@ -430,6 +430,68 @@ export interface DriverTrip {
   ratingPending: boolean;
 }
 
+export const driverApplicationStatuses = [
+  "draft",
+  "submitted",
+  "changes_requested",
+  "approved",
+  "rejected",
+  "suspended",
+] as const;
+export type DriverApplicationStatus =
+  (typeof driverApplicationStatuses)[number];
+
+export const documentKinds = [
+  "identity",
+  "driving_license",
+  "vehicle_registration",
+  "insurance",
+] as const;
+export type DocumentKind = (typeof documentKinds)[number];
+
+export const documentContentTypes = [
+  "image/jpeg",
+  "image/png",
+  "application/pdf",
+] as const;
+
+export const VERIFICATION_RULES = {
+  maxBytes: 10 * 1024 * 1024,
+  minBytes: 100,
+  expiryRequired: [
+    "driving_license",
+    "vehicle_registration",
+    "insurance",
+  ] as DocumentKind[],
+  uploadUrlSeconds: 300,
+  uploadKeyGraceSeconds: 600,
+  finalKeyReservationSeconds: 3600,
+  viewUrlSeconds: 60,
+  abandonedUploadHours: 24,
+  replacedRetentionDays: 30,
+  rejectedApplicationRetentionDays: 90,
+} as const;
+
+export type DocumentStatus =
+  | "pending_upload"
+  | "uploaded"
+  | "accepted"
+  | "rejected"
+  | "replaced"
+  | "invalid"
+  | "deleted";
+
+export const documentUploadSchema = z.strictObject({
+  kind: z.enum(documentKinds),
+  contentType: z.enum(documentContentTypes),
+  sizeBytes: z
+    .number()
+    .int()
+    .min(VERIFICATION_RULES.minBytes)
+    .max(VERIFICATION_RULES.maxBytes),
+  expiresOn: z.iso.date().nullable().optional(),
+});
+
 export interface DriverProfileView {
   id: string;
   status: "pending" | "approved" | "suspended";

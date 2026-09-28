@@ -47,7 +47,7 @@ interface ChatRideRow extends ChatTimes {
   driver_read_seq: number;
 }
 
-interface MessageRow {
+export interface MessageRow {
   id: string;
   ride_id: string;
   seq: number;
@@ -463,4 +463,21 @@ export async function purgeExpiredChats(
     );
   }
   return rows.length;
+}
+
+export async function findVisibleMessage(
+  db: SqlClient,
+  access: ChatAccess,
+  messageId: string,
+  now: Date,
+): Promise<MessageRow | null> {
+  const state = chatStateFor(access.row, now);
+  if (state === "expired" || state === "unavailable") return null;
+  const filter = visibleFilter(access);
+  const { rows } = await db.query<MessageRow>(
+    `SELECT m.* FROM mobility.ride_messages m
+      WHERE ${filter.sql} AND m.id = $${filter.values.length + 1}`,
+    [...filter.values, messageId],
+  );
+  return rows[0] ?? null;
 }

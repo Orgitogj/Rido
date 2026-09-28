@@ -1018,3 +1018,69 @@ export interface DriverEarningRide {
   netCents: number;
   entries: EarningEntryView[];
 }
+
+export const safetyCategories = [
+  "unsafe_driving",
+  "harassment",
+  "vehicle_mismatch",
+  "accident",
+  "other",
+] as const;
+export type SafetyCategory = (typeof safetyCategories)[number];
+
+export const safetyStatuses = [
+  "open",
+  "in_review",
+  "resolved",
+  "dismissed",
+] as const;
+export type SafetyReportStatus = (typeof safetyStatuses)[number];
+
+export const SAFETY_RULES = {
+  descriptionMinLength: 10,
+  descriptionMaxLength: 2000,
+  reportWindowDays: 7,
+  evidenceRetentionDays: 180,
+  shareTtlMinutes: 240,
+  shareAfterTripMinutes: 30,
+  maxActiveShares: 3,
+} as const;
+
+const SAFETY_CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F]/;
+
+const safetyDescription = z
+  .string()
+  .max(SAFETY_RULES.descriptionMaxLength * 2)
+  .transform((s) => s.replace(/\r\n?/g, "\n").trim())
+  .pipe(
+    z
+      .string()
+      .min(SAFETY_RULES.descriptionMinLength)
+      .max(SAFETY_RULES.descriptionMaxLength)
+      .refine((s) => !SAFETY_CONTROL.test(s), {
+        message: "Descriptions can't contain control characters.",
+      }),
+  );
+
+export const safetyReportSchema = z.strictObject({
+  category: z.enum(safetyCategories),
+  description: safetyDescription,
+  clientReportId: z.uuid(),
+});
+
+export const messageReportSchema = z.strictObject({
+  category: z.enum(safetyCategories),
+  description: safetyDescription.optional(),
+  clientReportId: z.uuid(),
+});
+
+export interface MySafetyReport {
+  id: string;
+  rideId: string;
+  category: SafetyCategory;
+  status: SafetyReportStatus;
+  reportedMessages: number;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}

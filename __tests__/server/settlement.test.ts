@@ -292,6 +292,7 @@ describe("receipts", () => {
         "distanceMeters",
         "fareCents",
         "pickup",
+        "ratingPending",
         "rideId",
         "startedAt",
       ].sort(),

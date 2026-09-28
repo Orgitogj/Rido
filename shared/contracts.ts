@@ -1318,3 +1318,88 @@ export interface AdminSafetyDetail extends AdminSafetyItem {
     createdAt: string;
   }[];
 }
+
+export const adminDriverQuerySchema = adminListQuerySchema.extend({
+  status: z
+    .enum([...driverApplicationStatuses, "all", "needs_review"])
+    .default("needs_review"),
+});
+
+export const driverDecisionSchema = z
+  .strictObject({
+    action: z.enum([
+      "approve",
+      "request_changes",
+      "reject",
+      "suspend",
+      "reinstate",
+    ]),
+    reason: z.string().trim().min(3).max(1000),
+    applicantMessage: z.string().trim().min(3).max(1000).optional(),
+    expectedVersion: z.number().int().min(1),
+    documents: z
+      .array(
+        z.strictObject({
+          documentId: z.uuid(),
+          decision: z.enum(["accept", "reject"]),
+          note: z.string().trim().min(3).max(500).optional(),
+        }),
+      )
+      .max(12)
+      .default([]),
+  })
+  .refine(
+    (d) =>
+      d.action === "approve" ||
+      d.action === "reinstate" ||
+      !!d.applicantMessage,
+    { message: "Tell the applicant what to do.", path: ["applicantMessage"] },
+  )
+  .refine(
+    (d) => d.documents.every((x) => x.decision === "accept" || !!x.note),
+    { message: "Explain why a document was rejected.", path: ["documents"] },
+  );
+
+export interface AdminDriverItem {
+  id: string;
+  displayName: string;
+  status: DriverApplicationStatus;
+  vehicle: string;
+  plate: string;
+  submittedAt: string | null;
+  approvalExpiresAt: string | null;
+  documentsWaived: boolean;
+  version: number;
+  eligible: boolean;
+  updatedAt: string;
+}
+
+export interface AdminDriverDetail extends AdminDriverItem {
+  account: string;
+  vehicleMake: string;
+  vehicleModel: string;
+  vehicleColor: string | null;
+  vehicleYear: number | null;
+  vehicleSeats: number;
+  online: boolean;
+  applicantMessage: string | null;
+  waiverNote: string | null;
+  ineligibleReasons: string[];
+  requirements: RequirementView[];
+  ownApplication: boolean;
+  activeRide: { id: string; status: RideStatus } | null;
+  documents: (DriverDocumentView & {
+    reviewedAt: string | null;
+    reviewedBy: string | null;
+  })[];
+  history: {
+    action: string;
+    actor: string;
+    operator: string | null;
+    fromStatus: string | null;
+    toStatus: string | null;
+    reason: string | null;
+    applicantMessage: string | null;
+    createdAt: string;
+  }[];
+}

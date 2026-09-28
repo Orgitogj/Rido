@@ -6,12 +6,35 @@ const RIDE_ROUTE =
 const RECEIPT_ROUTE =
   /^\/receipt\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const CHAT_ROUTE =
+  /^\/chat\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
 export function safeInternalRoute(path: unknown): string | null {
   if (typeof path !== "string") return null;
   if (path === "/driver" || path === "/admin") return path;
   if (RIDE_ROUTE.test(path)) return path.toLowerCase();
   if (RECEIPT_ROUTE.test(path)) return path.toLowerCase();
+  if (CHAT_ROUTE.test(path)) return path.toLowerCase();
   return null;
+}
+
+export function chatRideId(route: string): string | null {
+  return CHAT_ROUTE.exec(route)?.[1]?.toLowerCase() ?? null;
+}
+
+export async function authorizeRoute(
+  route: string,
+  canOpenChat: (rideId: string) => Promise<boolean>,
+): Promise<string | null> {
+  const safe = safeInternalRoute(route);
+  if (!safe) return null;
+  const rideId = chatRideId(safe);
+  if (!rideId) return safe;
+  try {
+    return (await canOpenChat(rideId)) ? safe : null;
+  } catch {
+    return null;
+  }
 }
 
 export type TargetDecision =

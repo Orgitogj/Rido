@@ -1084,3 +1084,56 @@ export interface MySafetyReport {
   updatedAt: string;
   closedAt: string | null;
 }
+
+export interface TripShareView {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  active: boolean;
+  views: number;
+}
+
+export interface TripShareCreated {
+  share: TripShareView;
+  token: string;
+  path: string;
+}
+
+export interface SafetyView {
+  rideId: string;
+  role: "passenger" | "driver";
+  currentParticipant: boolean;
+  status: RideStatus;
+  driver: { name: string; vehicle: string; plate: string } | null;
+  passengerName: string | null;
+  canReport: boolean;
+  reportBy: string | null;
+  reports: MySafetyReport[];
+  canShare: boolean;
+  shares: TripShareView[];
+}
+
+export type SharedTripStatus =
+  | "searching"
+  | "driver_on_the_way"
+  | "driver_arrived"
+  | "in_progress"
+  | "completed"
+  | "ended";
+
+export interface SharedTripView {
+  status: SharedTripStatus;
+  driver: { firstName: string; vehicle: string; plate: string } | null;
+  destination: string | null;
+  driverLocation: {
+    latitude: number;
+    longitude: number;
+    recordedAt: string;
+    freshness: "live" | "recent";
+  } | null;
+  expiresAt: string;
+  serverTime: string;
+}
+
+export const shareTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);

@@ -6,6 +6,7 @@ import { ApiError } from "./errors";
 import { expoPushGateway, type PushGateway } from "./notifications";
 import { type PaymentGateway, stripeGateway } from "./payments";
 import { routingFromEnv, type RoutingProvider } from "./routing";
+import { type DocumentStorage, storageFromEnv } from "./storage";
 
 import type { z } from "zod";
 
@@ -17,6 +18,7 @@ export interface Deps {
   payments: PaymentGateway;
   routing: RoutingProvider | null;
   push: PushGateway | null;
+  storage: DocumentStorage | null;
   now: () => Date;
   sleep: (ms: number) => Promise<void>;
 }
@@ -31,6 +33,7 @@ export function defaultDeps(): Deps {
     payments: stripeGateway(),
     routing: routingFromEnv(),
     push: process.env.PUSH_NOTIFICATIONS === "off" ? null : expoPushGateway(),
+    storage: storageFromEnv(),
     now: () => new Date(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };

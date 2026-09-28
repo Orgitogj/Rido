@@ -20,6 +20,14 @@ import type {
   RefundSnapshot,
 } from "../../server/payments";
 import type { Point, RoutingProvider } from "../../server/routing";
+import type {
+  DocumentStorage,
+  PresignedRequest,
+  StoredObject,
+  UploadMethod,
+  UploadTarget,
+} from "../../server/storage";
+import type { DocumentUploadTarget } from "../../shared/contracts";
 
 export function testDb() {
   const url = process.env.TEST_DATABASE_URL;
@@ -411,11 +419,133 @@ export class FakePush implements PushGateway {
   }
 }
 
+export class FakeStorage implements DocumentStorage {
+  objects = new Map<
+    string,
+    { bytes: Uint8Array; contentType: string; etag: string }
+  >();
+  removed: string[] = [];
+  down = false;
+  uploadMethod: UploadMethod = "POST";
+  hooks: {
+    afterHead?: (key: string) => Promise<void> | void;
+    beforeCopy?: (from: string, to: string) => Promise<void> | void;
+  } = {};
+  private seq = 0;
+
+  presignUpload(
+    key: string,
+    contentType: string,
+    sizeBytes: number,
+    expiresSeconds: number,
+    now: Date,
+  ): UploadTarget {
+    const expiresAt = new Date(now.getTime() + expiresSeconds * 1000);
+    if (this.uploadMethod === "POST") {
+      return {
+        method: "POST",
+        url: "https://storage.test/bucket/",
+        fields: {
+          key,
+          "Content-Type": contentType,
+          policy: `size=${sizeBytes}`,
+        },
+        expiresAt,
+      };
+    }
+    return {
+      method: "PUT",
+      url: `https://storage.test/put/${key}?expires=${expiresSeconds}`,
+      headers: {
+        "content-type": contentType,
+        "content-length": String(sizeBytes),
+      },
+      expiresAt,
+    };
+  }
+
+  presignDownload(
+    key: string,
+    expiresSeconds: number,
+    now: Date,
+  ): PresignedRequest {
+    return {
+      url: `https://storage.test/get/${key}?expires=${expiresSeconds}`,
+      method: "GET",
+      headers: {},
+      expiresAt: new Date(now.getTime() + expiresSeconds * 1000),
+    };
+  }
+
+  put(key: string, bytes: Uint8Array, contentType: string) {
+    this.objects.set(key, { bytes, contentType, etag: `"etag-${++this.seq}"` });
+    return key;
+  }
+
+  upload(
+    target: DocumentUploadTarget | string,
+    bytes: Uint8Array,
+    contentType: string,
+  ) {
+    const key =
+      typeof target === "string"
+        ? new URL(target).pathname.replace(/^\/put\//, "")
+        : target.method === "POST"
+          ? target.fields.key
+          : new URL(target.url).pathname.replace(/^\/put\//, "");
+    return this.put(key, bytes, contentType);
+  }
+
+  fetchView(url: string) {
+    return (
+      this.objects.get(new URL(url).pathname.replace(/^\/get\//, ""))?.bytes ??
+      null
+    );
+  }
+
+  async head(key: string): Promise<StoredObject | null> {
+    if (this.down) throw new Error("storage unavailable");
+    const o = this.objects.get(key);
+    const result = o
+      ? { size: o.bytes.length, contentType: o.contentType, etag: o.etag }
+      : null;
+    await this.hooks.afterHead?.(key);
+    return result;
+  }
+
+  async readStart(
+    key: string,
+    bytes: number,
+    etag: string,
+  ): Promise<Uint8Array | null> {
+    if (this.down) throw new Error("storage unavailable");
+    const o = this.objects.get(key);
+    if (!o || o.etag !== etag) return null;
+    return o.bytes.slice(0, bytes);
+  }
+
+  async copy(from: string, to: string, etag: string): Promise<boolean> {
+    if (this.down) throw new Error("storage unavailable");
+    await this.hooks.beforeCopy?.(from, to);
+    const o = this.objects.get(from);
+    if (!o || o.etag !== etag) return false;
+    this.objects.set(to, { ...o, bytes: o.bytes.slice() });
+    return true;
+  }
+
+  async remove(key: string): Promise<void> {
+    if (this.down) throw new Error("storage unavailable");
+    this.objects.delete(key);
+    this.removed.push(key);
+  }
+}
+
 export interface TestContext {
   db: Pool;
   stripe: FakeStripe;
   routing: FakeRouting;
   push: FakePush;
+  storage: FakeStorage;
   clock: { now: Date };
   onSleep: (() => Promise<void> | void) | null;
   deps: Deps;
@@ -429,6 +559,7 @@ export function createContext(db: Pool): TestContext {
   const routing = new FakeRouting();
   stripe.clock = null;
   const push = new FakePush();
+  const storage = new FakeStorage();
   const clock = { now: new Date() };
   stripe.clock = clock;
   const ctx = {
@@ -436,6 +567,7 @@ export function createContext(db: Pool): TestContext {
     stripe,
     routing,
     push,
+    storage,
     clock,
     onSleep: null,
   } as unknown as TestContext;
@@ -445,6 +577,7 @@ export function createContext(db: Pool): TestContext {
     payments: stripe,
     routing,
     push,
+    storage,
     now: () => clock.now,
     sleep: async (ms: number) => {
       clock.now = new Date(clock.now.getTime() + ms);

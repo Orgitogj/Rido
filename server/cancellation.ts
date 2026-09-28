@@ -107,6 +107,40 @@ export async function driverCancel(
         : "This ride can no longer be cancelled.",
     );
   }
+  return releaseDriver(tx, ride, now, {
+    actor: "driver",
+    userId,
+    reason: reason ?? "driver_cancelled",
+    limitReason: "driver_cancelled_rematch_limit",
+  });
+}
+
+export async function removeDriverForRematch(
+  tx: SqlClient,
+  ride: RideRow,
+  now: Date,
+  reason: string,
+): Promise<RideRow> {
+  if (!PRE_PICKUP_STATUSES.includes(ride.status)) return ride;
+  return releaseDriver(tx, ride, now, {
+    actor: "system",
+    userId: null,
+    reason,
+    limitReason: `${reason}_rematch_limit`.slice(0, 40),
+  });
+}
+
+async function releaseDriver(
+  tx: SqlClient,
+  ride: RideRow,
+  now: Date,
+  opts: {
+    actor: "driver" | "system";
+    userId: string | null;
+    reason: string;
+    limitReason: string;
+  },
+): Promise<RideRow> {
   await tx.query(
     `UPDATE mobility.ride_offers SET status = 'withdrawn', responded_at = $3
       WHERE ride_id = $1 AND driver_profile_id = $2 AND status = 'accepted'`,
@@ -118,17 +152,17 @@ export async function driverCancel(
 
   if (ride.rematch_count >= REMATCH.maxRematches) {
     return transitionRide(tx, ride, "cancelled", {
-      actor: "driver",
-      actorUserId: userId,
+      actor: opts.actor,
+      actorUserId: opts.userId,
       now,
-      reason: "driver_cancelled_rematch_limit",
+      reason: opts.limitReason,
     });
   }
   const searching = await transitionRide(tx, ride, "requested", {
-    actor: "driver",
-    actorUserId: userId,
+    actor: opts.actor,
+    actorUserId: opts.userId,
     now,
-    reason: reason ?? "driver_cancelled",
+    reason: opts.reason,
     set: {
       driver_profile_id: null,
       rematch_count: ride.rematch_count + 1,

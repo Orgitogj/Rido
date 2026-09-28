@@ -81,11 +81,17 @@ export function route<P = Record<string, string>>(
               ? error.message
               : "Something went wrong. Please try again.",
             ...(known && error.fields ? { fields: error.fields } : {}),
+            ...(known && error.retryAfterSeconds !== undefined
+              ? { retryAfterSeconds: error.retryAfterSeconds }
+              : {}),
           },
           requestId,
         },
         { status },
       );
+      if (known && error.retryAfterSeconds !== undefined) {
+        response.headers.set("Retry-After", String(error.retryAfterSeconds));
+      }
     }
     response.headers.set("X-Request-ID", requestId);
     response.headers.set("Cache-Control", "no-store");

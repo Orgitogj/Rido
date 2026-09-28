@@ -4,6 +4,7 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public fields?: { path: string; code: string }[],
+    public retryAfterSeconds?: number,
   ) {
     super(message);
   }

@@ -6,6 +6,7 @@ import { Alert, Image, ScrollView, Text, View } from "react-native";
 import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons, images } from "@/constants";
+import { chatRideId, usePendingRoute } from "@/lib/notificationRouting";
 
 const SignIn = () => {
   const { signIn, errors, fetchStatus } = useSignIn();
@@ -33,15 +34,20 @@ const SignIn = () => {
       }
 
       if (signIn.status === "complete") {
+        const pending = usePendingRoute.getState().take();
+        const deferred = pending !== null && chatRideId(pending) !== null;
+        if (deferred) usePendingRoute.getState().remember(pending);
         await signIn.finalize({
-          navigate: () => router.replace("/(root)/(tabs)/home"),
+          navigate: () =>
+            router.replace(
+              (pending && !deferred ? pending : "/(root)/(tabs)/home") as never,
+            ),
         });
         return;
       }
 
       Alert.alert("Error", "Log in failed. Please try again.");
     } catch (err: any) {
-      console.log(JSON.stringify(err, null, 2));
       const message =
         err?.errors?.[0]?.longMessage || "Unable to sign in right now.";
       Alert.alert("Error", message);

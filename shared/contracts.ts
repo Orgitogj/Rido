@@ -560,6 +560,7 @@ export const reviewCategories = [
   "payment_dispute",
   "refund_reversed",
   "refund_mismatch",
+  "driver_ineligible_during_trip",
 ] as const;
 export type ReviewCategory = (typeof reviewCategories)[number];
 

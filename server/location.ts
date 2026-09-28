@@ -112,8 +112,9 @@ export async function recordDriverLocation(
       [driverProfileId, ASSIGNED_STATUSES],
     );
     const sharing =
-      profile?.status === "approved" &&
-      (profile.online || active.length > 0 || Boolean(opts.reset));
+      active.length > 0 ||
+      (profile?.status === "approved" &&
+        (profile.online || Boolean(opts.reset)));
     if (!sharing) return { accepted: false, reason: "not_sharing", sharing };
 
     const reason = validateLocation(input, opts.reset ? null : profile, now);

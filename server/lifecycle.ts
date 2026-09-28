@@ -30,18 +30,18 @@ export const TRANSITIONS: Partial<
   },
   accepted: {
     arriving: ["driver"],
-    requested: ["driver"],
-    cancelled: ["passenger", "driver"],
+    requested: ["driver", "system"],
+    cancelled: ["passenger", "driver", "system"],
   },
   arriving: {
     arrived: ["driver"],
-    requested: ["driver"],
-    cancelled: ["passenger", "driver"],
+    requested: ["driver", "system"],
+    cancelled: ["passenger", "driver", "system"],
   },
   arrived: {
     in_progress: ["driver"],
-    requested: ["driver"],
-    cancelled: ["passenger", "driver"],
+    requested: ["driver", "system"],
+    cancelled: ["passenger", "driver", "system"],
   },
   in_progress: { completed: ["driver"], interrupted: ["driver"] },
 };

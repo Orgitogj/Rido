@@ -1137,3 +1137,85 @@ export interface SharedTripView {
 }
 
 export const shareTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+export const adminSafetyQuerySchema = adminListQuerySchema.extend({
+  status: z.enum([...safetyStatuses, "all"]).default("open"),
+  category: z.enum(safetyCategories).optional(),
+  rideId: z.uuid().optional(),
+});
+
+export const safetyTriageSchema = z
+  .strictObject({
+    action: z.enum([
+      "assign",
+      "in_review",
+      "resolve",
+      "dismiss",
+      "reopen",
+      "note",
+    ]),
+    note: z.string().trim().min(3).max(1000).optional(),
+    expectedVersion: z.number().int().min(1),
+  })
+  .refine(
+    (t) => t.action === "assign" || t.action === "in_review" || !!t.note,
+    {
+      message: "A note is required for this action.",
+      path: ["note"],
+    },
+  );
+
+export interface AdminSafetyItem {
+  id: string;
+  rideId: string;
+  category: SafetyCategory;
+  status: SafetyReportStatus;
+  reporterRole: "passenger" | "driver";
+  assignedTo: string | null;
+  assignedToMe: boolean;
+  version: number;
+  reportedMessages: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminSafetyDetail extends AdminSafetyItem {
+  description: string;
+  reporter: { name: string | null; account: string };
+  resolutionNote: string | null;
+  evidenceRetainedUntil: string | null;
+  closedAt: string | null;
+  ride: {
+    status: RideStatus;
+    createdAt: string;
+    completedAt: string | null;
+    endedAt: string | null;
+    passenger: { name: string | null; account: string };
+    driver: { name: string; vehicle: string; plate: string } | null;
+    rematchCount: number;
+  };
+  rideEvents: {
+    fromStatus: string;
+    toStatus: string;
+    actor: string;
+    reason: string | null;
+    createdAt: string;
+  }[];
+  messages: {
+    messageId: string;
+    seq: number;
+    senderRole: "passenger" | "driver";
+    body: string | null;
+    sentAt: string;
+    redacted: boolean;
+  }[];
+  history: {
+    action: string;
+    actor: string;
+    operator: string | null;
+    fromStatus: string | null;
+    toStatus: string | null;
+    note: string | null;
+    createdAt: string;
+  }[];
+}

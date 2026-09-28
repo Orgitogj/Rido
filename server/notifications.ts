@@ -222,11 +222,17 @@ export async function enqueueForTransition(
       return;
     }
     case "requested":
-      if (actor === "driver") {
+      if (
+        actor === "driver" ||
+        (actor === "system" &&
+          ["accepted", "arriving", "arrived"].includes(before.status))
+      ) {
         return toPassenger(
           "ride_rematching",
           "Finding you another driver",
-          "Your driver cancelled. We're looking for another driver now; your price hasn't changed.",
+          actor === "driver"
+            ? "Your driver cancelled. We're looking for another driver now; your price hasn't changed."
+            : "Your driver can't complete this ride. We're looking for another driver now; your price hasn't changed.",
         );
       }
       return;

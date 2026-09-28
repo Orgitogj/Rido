@@ -1,21 +1,11 @@
-import { Ride } from "@/types/type";
-
-export const sortRides = (rides: Ride[]): Ride[] => {
-  const result = rides.sort((a, b) => {
-    const dateA = new Date(`${a.created_at}T${a.ride_time}`);
-    const dateB = new Date(`${b.created_at}T${b.ride_time}`);
-    return dateB.getTime() - dateA.getTime();
-  });
-
-  return result.reverse();
-};
+export { formatCents } from "@/shared/contracts";
 
 export function formatTime(minutes?: number | null): string {
   if (minutes === undefined || minutes === null || Number.isNaN(minutes)) {
     return "--";
   }
 
-  const formattedMinutes = Math.round(minutes);
+  const formattedMinutes = Math.max(1, Math.round(minutes));
 
   if (formattedMinutes < 60) {
     return `${formattedMinutes} min`;
@@ -28,6 +18,7 @@ export function formatTime(minutes?: number | null): string {
 
 export function formatDate(dateString: string): string {
   const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "--";
   const day = date.getDate();
   const monthNames = [
     "January",
@@ -45,6 +36,16 @@ export function formatDate(dateString: string): string {
   ];
   const month = monthNames[date.getMonth()];
   const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
 
-  return `${day < 10 ? "0" + day : day} ${month} ${year}`;
+  return `${day < 10 ? "0" + day : day} ${month} ${year}, ${hours}:${minutes}`;
+}
+
+export function formatClock(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "--";
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }

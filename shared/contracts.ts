@@ -492,6 +492,42 @@ export const documentUploadSchema = z.strictObject({
   expiresOn: z.iso.date().nullable().optional(),
 });
 
+export interface DriverDocumentView {
+  id: string;
+  kind: DocumentKind;
+  status: DocumentStatus;
+  contentType: string;
+  sizeBytes: number;
+  expiresOn: string | null;
+  uploadedAt: string | null;
+  reviewNote: string | null;
+}
+
+export type DocumentUploadTarget =
+  | {
+      method: "POST";
+      url: string;
+      fields: Record<string, string>;
+      expiresAt: string;
+    }
+  | {
+      method: "PUT";
+      url: string;
+      headers: Record<string, string>;
+      expiresAt: string;
+    };
+
+export interface DocumentUploadTicket {
+  document: DriverDocumentView;
+  upload: DocumentUploadTarget;
+}
+
+export interface RequirementView {
+  key: string;
+  label: string;
+  met: boolean;
+}
+
 export interface DriverProfileView {
   id: string;
   status: "pending" | "approved" | "suspended";

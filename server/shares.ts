@@ -164,6 +164,7 @@ export async function viewSharedTrip(
       display_name: string | null;
       vehicle_make: string | null;
       vehicle_model: string | null;
+      vehicle_color: string | null;
       vehicle_plate: string | null;
       latitude: number | null;
       longitude: number | null;
@@ -173,7 +174,7 @@ export async function viewSharedTrip(
     }
   >(
     `SELECT s.*, r.status, r.destination_address, r.completed_at, r.cancelled_at,
-            r.interrupted_at, dp.display_name, dp.vehicle_make, dp.vehicle_model,
+            r.interrupted_at, dp.display_name, dp.vehicle_make, dp.vehicle_model, dp.vehicle_color,
             dp.vehicle_plate, dp.latitude, dp.longitude, dp.location_accuracy_m,
             dp.location_heading, dp.location_updated_at
        FROM mobility.trip_shares s
@@ -210,7 +211,9 @@ export async function viewSharedTrip(
     driver: assigned
       ? {
           firstName: s.display_name!.trim().split(/\s+/)[0],
-          vehicle: `${s.vehicle_make} ${s.vehicle_model}`,
+          vehicle: [s.vehicle_color, s.vehicle_make, s.vehicle_model]
+            .filter(Boolean)
+            .join(" "),
           plate: s.vehicle_plate ?? "",
         }
       : null,

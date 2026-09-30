@@ -29,5 +29,9 @@ module.exports = {
       files: ["server/**", "scripts/**", "jest/**", "__tests__/server/**"],
       rules: { "expo/no-dynamic-env-var": "off" },
     },
+    {
+      files: ["app/admin/**"],
+      rules: { "@typescript-eslint/no-require-imports": "off" },
+    },
   ],
 };

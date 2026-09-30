@@ -1,75 +1,171 @@
-import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@clerk/expo";
+import Constants from "expo-constants";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
-const resolveApiUrl = (url: string) => {
-  if (!url) return url;
-  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) return url;
+import type { ApiErrorBody } from "@/shared/contracts";
 
-  const baseUrl = process.env.EXPO_PUBLIC_SERVER_URL?.replace(/\/$/, "");
-
-  if (baseUrl) {
-    return `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`;
+export function apiBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_SERVER_URL?.trim().replace(
+    /\/$/,
+    "",
+  );
+  if (configured) return configured;
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (__DEV__ && hostUri) return `http://${hostUri}`;
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.location.origin;
   }
+  throw new ApiRequestError(
+    0,
+    "CONFIG",
+    "EXPO_PUBLIC_SERVER_URL is not configured.",
+  );
+}
 
-  return url.startsWith("/")
-    ? `http://localhost:8081${url}`
-    : `http://localhost:8081/${url}`;
-};
+export class ApiRequestError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
-export const fetchAPI = async (url: string, options?: RequestInit) => {
-  const resolvedUrl = resolveApiUrl(url);
+const REQUEST_TIMEOUT_MS = 15_000;
 
+export async function apiRequest<T>(
+  path: string,
+  options: {
+    method?: string;
+    body?: unknown;
+    token?: string | null;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+  } = {},
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? REQUEST_TIMEOUT_MS,
+  );
+  options.signal?.addEventListener("abort", () => controller.abort());
+
+  let response: Response;
   try {
-    const response = await fetch(resolvedUrl, options);
-    const text = await response.text();
-    const contentType = response.headers.get("content-type") || "";
-    const trimmedText = text.trim();
-    const isJsonResponse =
-      contentType.includes("application/json") ||
-      trimmedText.startsWith("{") ||
-      trimmedText.startsWith("[");
-
-    if (!response.ok) {
-      const errorBody = isJsonResponse ? JSON.parse(text) : text;
-      throw new Error(
-        `HTTP error! status: ${response.status} - ${
-          typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody)
-        }`,
-      );
-    }
-
-    if (isJsonResponse) {
-      return JSON.parse(text);
-    }
-
-    return { text };
+    response = await fetch(`${apiBaseUrl()}${path}`, {
+      method: options.method ?? (options.body === undefined ? "GET" : "POST"),
+      headers: {
+        Accept: "application/json",
+        ...(options.body !== undefined
+          ? { "Content-Type": "application/json" }
+          : {}),
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      },
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal,
+    });
   } catch (error) {
-    console.error("Fetch error:", error);
-    throw error;
+    if (error instanceof ApiRequestError) throw error;
+    throw new ApiRequestError(
+      0,
+      "NETWORK",
+      "Couldn't reach the server. Check your connection and try again.",
+    );
+  } finally {
+    clearTimeout(timeout);
   }
-};
 
-export const useFetch = <T>(url: string, options?: RequestInit) => {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  let json: unknown = null;
+  try {
+    json = await response.json();
+  } catch {}
+  if (!response.ok) {
+    const body = json as Partial<ApiErrorBody> | null;
+    throw new ApiRequestError(
+      response.status,
+      body?.error?.code ?? "HTTP_ERROR",
+      body?.error?.message ?? `Request failed (${response.status}).`,
+    );
+  }
+  return (json as { data: T }).data;
+}
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+export function useApi() {
+  const { getToken } = useAuth();
+  return useCallback(
+    async <T>(
+      path: string,
+      options: {
+        method?: string;
+        body?: unknown;
+        signal?: AbortSignal;
+        timeoutMs?: number;
+      } = {},
+    ) => {
+      const token = await getToken();
+      if (!token)
+        throw new ApiRequestError(
+          401,
+          "UNAUTHENTICATED",
+          "Please sign in again.",
+        );
+      return apiRequest<T>(path, { ...options, token });
+    },
+    [getToken],
+  );
+}
 
+export type QueryState<T> =
+  | { status: "loading"; data: T | null; error: null }
+  | { status: "success"; data: T; error: null }
+  | { status: "error"; data: T | null; error: string };
+
+export function useApiQuery<T>(
+  path: string | null,
+  options: { refetchOnFocus?: boolean } = {},
+) {
+  const refetchOnFocus = options.refetchOnFocus ?? false;
+  const request = useApi();
+  const [state, setState] = useState<QueryState<T>>({
+    status: "loading",
+    data: null,
+    error: null,
+  });
+  const latest = useRef(0);
+
+  const refetch = useCallback(async () => {
+    if (!path) return;
+    const id = ++latest.current;
+    setState((prev) => ({ status: "loading", data: prev.data, error: null }));
     try {
-      const result = await fetchAPI(url, options);
-      setData((result && (result as any).data) ?? result);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
+      const data = await request<T>(path);
+      if (id === latest.current)
+        setState({ status: "success", data, error: null });
+    } catch (error) {
+      if (id === latest.current) {
+        setState((prev) => ({
+          status: "error",
+          data: prev.data,
+          error:
+            error instanceof Error ? error.message : "Something went wrong.",
+        }));
+      }
     }
-  }, [url, options]);
+  }, [path, request]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!refetchOnFocus) refetch();
+  }, [refetch, refetchOnFocus]);
 
-  return { data, loading, error, refetch: fetchData };
-};
+  useFocusEffect(
+    useCallback(() => {
+      if (refetchOnFocus) refetch();
+    }, [refetch, refetchOnFocus]),
+  );
+
+  return { ...state, refetch };
+}

@@ -13,6 +13,8 @@ export interface OperatorRow {
   can_view: boolean;
   can_support: boolean;
   can_refund: boolean;
+  can_verify: boolean;
+  can_configure: boolean;
 }
 
 export const permissionsOf = (o: OperatorRow): OperatorPermission[] =>
@@ -20,6 +22,8 @@ export const permissionsOf = (o: OperatorRow): OperatorPermission[] =>
     o.can_view ? "view" : null,
     o.can_support ? "support" : null,
     o.can_refund ? "refund" : null,
+    o.can_verify ? "verify" : null,
+    o.can_configure ? "configure" : null,
   ].filter((p): p is OperatorPermission => p !== null);
 
 export const actorOf = (o: OperatorRow) => `operator:${o.clerk_id}`;
@@ -97,7 +101,8 @@ export async function requireOperator(
   const user = await ensureUser(deps.db, identity);
   const { rows } = await deps.db.query<OperatorRow>(
     `SELECT o.id, o.user_id, u.clerk_id, o.display_name,
-            o.can_view, o.can_support, o.can_refund
+            o.can_view, o.can_support, o.can_refund, o.can_verify,
+            o.can_configure
        FROM mobility.operators o JOIN mobility.users u ON u.id = o.user_id
       WHERE o.user_id = $1 AND o.active`,
     [user.id],

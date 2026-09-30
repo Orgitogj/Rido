@@ -2,11 +2,12 @@ import {
   availabilityRequestSchema,
   type DriverDashboard,
   driverApplicationSchema,
-  type DriverProfileView,
+  documentUploadSchema,
   heartbeatRequestSchema,
   offerIdSchema,
   type RideOfferView,
 } from "../../shared/contracts";
+import { eligibleDriverSql } from "../eligibility";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
 import { ASSIGNED_STATUSES, transitionRide } from "../lifecycle";
@@ -15,31 +16,31 @@ import { advanceRide, offerToNextDriver } from "../matching";
 import { summarySql, toSummary } from "../ratings";
 import { advanceRideById, rideViews, sweep, withLockedRide } from "../rides";
 import { type AppUser, ensureUser } from "../users";
+import {
+  applicantView,
+  completeUpload,
+  driverEligibility,
+  handleIneligibleDriver,
+  profileDocuments,
+  type ProfileRow as VerificationProfileRow,
+  reopenApplication,
+  requestUpload,
+  saveApplication,
+  submitApplication,
+} from "../verification";
 
-interface ProfileRow {
-  id: string;
-  user_id: string;
-  status: "pending" | "approved" | "suspended";
-  display_name: string;
-  vehicle_make: string;
-  vehicle_model: string;
-  vehicle_plate: string;
-  vehicle_seats: number;
-  online: boolean;
+type ProfileRow = VerificationProfileRow & {
   rating_summary?: { count: number; avg: number | null } | null;
-}
+};
 
-const profileView = (p: ProfileRow): DriverProfileView => ({
-  id: p.id,
-  status: p.status,
-  displayName: p.display_name,
-  vehicleMake: p.vehicle_make,
-  vehicleModel: p.vehicle_model,
-  vehiclePlate: p.vehicle_plate,
-  vehicleSeats: p.vehicle_seats,
-  online: p.online,
-  rating: toSummary(p.rating_summary ?? null),
-});
+async function profileView(deps: Deps, p: ProfileRow) {
+  return applicantView(
+    p,
+    await profileDocuments(deps.db, p.id),
+    toSummary(p.rating_summary ?? null),
+    deps.now(),
+  );
+}
 
 export async function currentUser(request: Request, deps: Deps) {
   const identity = await deps.authenticate(request);
@@ -55,18 +56,24 @@ async function findProfile(deps: Deps, user: AppUser) {
   return rows[0] ?? null;
 }
 
-export async function requireApprovedDriver(deps: Deps, user: AppUser) {
+export async function requireDriverProfile(deps: Deps, user: AppUser) {
   const profile = await findProfile(deps, user);
   if (!profile) {
     throw new ApiError(403, "NOT_A_DRIVER", "This account is not a driver.");
   }
-  if (profile.status !== "approved") {
+  return profile;
+}
+
+export async function requireApprovedDriver(deps: Deps, user: AppUser) {
+  const profile = await requireDriverProfile(deps, user);
+  const { eligible, reasons } = driverEligibility(profile, deps.now());
+  if (!eligible) {
     throw new ApiError(
       403,
-      "DRIVER_NOT_APPROVED",
-      profile.status === "pending"
-        ? "Your driver application is waiting for approval."
-        : "Your driver account is suspended.",
+      profile.status === "approved"
+        ? "DRIVER_APPROVAL_EXPIRED"
+        : "DRIVER_NOT_APPROVED",
+      reasons[0] ?? "You can't drive right now.",
     );
   }
   return profile;
@@ -147,7 +154,7 @@ async function dashboard(
     "LIMIT 1",
   );
   return {
-    profile: profileView(profile),
+    profile: await profileView(deps, profile),
     offer,
     activeRide: activeRide ?? null,
     serverTime: now.toISOString(),
@@ -161,7 +168,9 @@ export async function getDriverProfile(
 ) {
   const user = await currentUser(request, deps);
   const profile = await findProfile(deps, user);
-  return Response.json({ data: profile ? profileView(profile) : null });
+  return Response.json({
+    data: profile ? await profileView(deps, profile) : null,
+  });
 }
 
 export async function applyToDrive(
@@ -171,38 +180,61 @@ export async function applyToDrive(
 ) {
   const user = await currentUser(request, deps);
   const input = await readJson(request, driverApplicationSchema);
-  const values = [
-    user.id,
-    input.displayName,
-    input.vehicleMake,
-    input.vehicleModel,
-    input.vehiclePlate.toUpperCase(),
-    input.vehicleSeats,
-  ];
-  const { rows } = await deps.db.query<ProfileRow>(
-    `INSERT INTO mobility.driver_profiles
-       (user_id, display_name, vehicle_make, vehicle_model, vehicle_plate, vehicle_seats)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (user_id) DO UPDATE SET
-       display_name = EXCLUDED.display_name, vehicle_make = EXCLUDED.vehicle_make,
-       vehicle_model = EXCLUDED.vehicle_model, vehicle_plate = EXCLUDED.vehicle_plate,
-       vehicle_seats = EXCLUDED.vehicle_seats, updated_at = now()
-     WHERE mobility.driver_profiles.status = 'pending'
-     RETURNING *, (xmax = 0) AS inserted`,
-    values,
-  );
-  if (!rows[0]) {
-    throw new ApiError(
-      409,
-      "PROFILE_LOCKED",
-      "An approved or suspended driver profile can't be edited in the app.",
-    );
-  }
-  const inserted = (rows[0] as ProfileRow & { inserted: boolean }).inserted;
+  const { created } = await saveApplication(deps, user.id, input);
+  const profile = (await findProfile(deps, user))!;
   return Response.json(
-    { data: profileView(rows[0]) },
-    { status: inserted ? 201 : 200 },
+    { data: await profileView(deps, profile) },
+    { status: created ? 201 : 200 },
   );
+}
+
+export async function submitDriverApplication(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await currentUser(request, deps);
+  await submitApplication(deps, user.id);
+  return Response.json({
+    data: await profileView(deps, (await findProfile(deps, user))!),
+  });
+}
+
+export async function reopenDriverApplication(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await currentUser(request, deps);
+  await reopenApplication(deps, user.id);
+  return Response.json({
+    data: await profileView(deps, (await findProfile(deps, user))!),
+  });
+}
+
+export async function requestDocumentUpload(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await currentUser(request, deps);
+  const input = await readJson(request, documentUploadSchema);
+  return Response.json(
+    { data: await requestUpload(deps, user.id, input) },
+    { status: 201 },
+  );
+}
+
+export async function completeDocumentUpload(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const user = await currentUser(request, deps);
+  const documentId = parseInput(offerIdSchema, params.id);
+  return Response.json({
+    data: await completeUpload(deps, user.id, documentId),
+  });
 }
 
 export async function setAvailability(
@@ -211,11 +243,13 @@ export async function setAvailability(
   deps: Deps,
 ) {
   const user = await currentUser(request, deps);
-  const profile = await requireApprovedDriver(deps, user);
   const { online, location } = await readJson(
     request,
     availabilityRequestSchema,
   );
+  const profile = online
+    ? await requireApprovedDriver(deps, user)
+    : await requireDriverProfile(deps, user);
   const now = deps.now();
 
   if (online) {
@@ -293,7 +327,10 @@ export async function heartbeat(
   const user = await currentUser(request, deps);
   const { location } = await readJson(request, heartbeatRequestSchema);
   const profile = await findProfile(deps, user);
-  if (profile?.status === "approved") {
+  if (profile && !driverEligibility(profile, deps.now()).eligible) {
+    if (profile.online)
+      await handleIneligibleDriver(deps, profile.id, "approval_expired");
+  } else if (profile) {
     const now = deps.now();
     await deps.db.query(
       "UPDATE mobility.driver_profiles SET last_seen_at = $2 WHERE id = $1",
@@ -362,12 +399,13 @@ async function respondToOffer(
       if (accept) {
         const { rows: me } = await tx.query<{
           online: boolean;
-          status: string;
+          eligible: boolean;
         }>(
-          "SELECT online, status FROM mobility.driver_profiles WHERE id = $1 FOR UPDATE",
-          [profile.id],
+          `SELECT dp.online, ${eligibleDriverSql("dp", "$2::timestamptz")} AS eligible
+             FROM mobility.driver_profiles dp WHERE dp.id = $1 FOR UPDATE`,
+          [profile.id, now],
         );
-        if (!me[0].online || me[0].status !== "approved") {
+        if (!me[0].online || !me[0].eligible) {
           return { ok: false as const, code: "OFFER_UNAVAILABLE" };
         }
       }

@@ -149,7 +149,7 @@ describe("authentication", () => {
 });
 
 describe("driver role", () => {
-  it("cannot be granted from the app: applications are always pending", async () => {
+  it("cannot be granted from the app: applications always start as drafts", async () => {
     const res = await call(ctx, applyToDrive, {
       user: DRIVER,
       body: {
@@ -165,7 +165,7 @@ describe("driver role", () => {
 
     const ok = await apply(ctx, DRIVER);
     expect(ok.status).toBe(201);
-    expect(ok.json.data.status).toBe("pending");
+    expect(ok.json.data.status).toBe("draft");
   });
 
   it("blocks passengers and pending drivers from driver actions", async () => {
@@ -184,7 +184,10 @@ describe("driver role", () => {
     expect(pending.status).toBe(403);
     expect(pending.json.error.code).toBe("DRIVER_NOT_APPROVED");
 
-    await admin.setDriverStatus(db, DRIVER, "approved");
+    await admin.setDriverStatus(db, DRIVER, "approved", {
+      waiveDocuments: true,
+      reason: "test fixture",
+    });
     const approved = await call(ctx, setAvailability, {
       user: DRIVER,
       body: { online: true, location: PICKUP_LOCATION },
@@ -195,7 +198,10 @@ describe("driver role", () => {
 
   it("locks an approved profile against edits from the app", async () => {
     await apply(ctx, DRIVER);
-    await admin.setDriverStatus(db, DRIVER, "approved");
+    await admin.setDriverStatus(db, DRIVER, "approved", {
+      waiveDocuments: true,
+      reason: "test fixture",
+    });
     const res = await apply(ctx, DRIVER);
     expect(res.status).toBe(409);
     expect(res.json.error.code).toBe("PROFILE_LOCKED");
@@ -203,7 +209,9 @@ describe("driver role", () => {
 
   it("suspending a driver takes them offline and blocks driver actions", async () => {
     await onlineDriver(ctx, DRIVER);
-    await admin.setDriverStatus(db, DRIVER, "suspended");
+    await admin.setDriverStatus(db, DRIVER, "suspended", {
+      reason: "test fixture",
+    });
     const res = await call(ctx, setAvailability, {
       user: DRIVER,
       body: { online: true, location: PICKUP_LOCATION },
@@ -217,7 +225,10 @@ describe("driver role", () => {
 
   it("requires a location to go online", async () => {
     await apply(ctx, DRIVER);
-    await admin.setDriverStatus(db, DRIVER, "approved");
+    await admin.setDriverStatus(db, DRIVER, "approved", {
+      waiveDocuments: true,
+      reason: "test fixture",
+    });
     const res = await call(ctx, setAvailability, {
       user: DRIVER,
       body: { online: true },

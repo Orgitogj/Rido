@@ -69,7 +69,9 @@ describe("eligibility", () => {
       "suspended",
       async () => {
         await onlineDriver(ctx, NEAR);
-        await admin.setDriverStatus(db, NEAR, "suspended");
+        await admin.setDriverStatus(db, NEAR, "suspended", {
+          reason: "test fixture",
+        });
       },
     ],
     [

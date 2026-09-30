@@ -89,9 +89,9 @@ describe("ETA", () => {
   });
 
   it("falls back to a labelled straight-line estimate when routing fails", async () => {
+    const rideId = await assignedRide(ctx, P, D, 800);
     ctx.routing.fail = true;
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    const rideId = await assignedRide(ctx, P, D, 800);
     const { live } = (await watch(ctx, P, rideId)).json.data;
     errorSpy.mockRestore();
     const expected = straightLineEstimate(nearPickup(800), nearPickup(0));
@@ -103,8 +103,8 @@ describe("ETA", () => {
   });
 
   it("falls back to an estimate when no routing key is configured", async () => {
-    ctx.deps.routing = null;
     const rideId = await assignedRide(ctx, P, D, 800);
+    ctx.deps.routing = null;
     const { live } = (await watch(ctx, P, rideId)).json.data;
     expect(live.eta.source).toBe("estimate");
   });

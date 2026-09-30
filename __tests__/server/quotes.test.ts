@@ -1,4 +1,5 @@
-import { estimateTrip, fareCents, PRICING } from "../../server/pricing";
+import { computeFare, roundHalfUp } from "../../server/fares";
+import { QUOTE } from "../../server/pricing";
 import { createQuote } from "../../server/routes/quotes";
 import { formatCents } from "../../shared/contracts";
 
@@ -8,6 +9,7 @@ import {
   DESTINATION,
   PICKUP,
   resetDb,
+  TEST_POLICY,
   testDb,
   type TestContext,
 } from "./helpers";
@@ -24,41 +26,45 @@ afterAll(() => db.end());
 const USER = "user_quoter";
 
 describe("POST /api/quotes", () => {
-  it("returns one server-priced, integer-cent quote for the trip", async () => {
+  it("prices the trip from the road route with the area's policy", async () => {
     const res = await call(ctx, createQuote, {
       user: USER,
       body: { pickup: PICKUP, destination: DESTINATION },
     });
     expect(res.status).toBe(201);
     const { quote, driversNearby } = res.json.data;
-    const check = estimateTrip(PICKUP, DESTINATION);
-    if (!check.ok) throw new Error("fixture trip should be valid");
-
-    expect(quote.fareCents).toBe(fareCents(check.trip, 10_000));
+    expect(quote.fareCents).toBe(832);
+    expect(quote.distanceMeters).toBe(3100);
+    expect(quote.durationSeconds).toBe(420);
     expect(Number.isSafeInteger(quote.fareCents)).toBe(true);
     expect(quote.currency).toBe("usd");
     expect(new Date(quote.expiresAt).getTime()).toBe(
-      ctx.clock.now.getTime() + PRICING.quoteTtlSeconds * 1000,
+      ctx.clock.now.getTime() + QUOTE.ttlSeconds * 1000,
     );
     expect(driversNearby).toBe(0);
     expect(quote).not.toHaveProperty("driver");
+    expect(ctx.routing.calls).toHaveLength(1);
 
     const { rows } = await db.query(
-      "SELECT fare_cents, demo_driver_id FROM mobility.quotes",
+      `SELECT fare_cents, demo_driver_id, base_cents, distance_cents, time_cents,
+              minimum_applied, route_source, pricing_version
+         FROM mobility.quotes`,
     );
     expect(rows).toEqual([
-      { fare_cents: quote.fareCents, demo_driver_id: null },
+      {
+        fare_cents: 832,
+        demo_driver_id: null,
+        base_cents: 250,
+        distance_cents: 372,
+        time_cents: 210,
+        minimum_applied: false,
+        route_source: "test_provider",
+        pricing_version: "test-sf/v1",
+      },
     ]);
   });
 
-  it("is deterministic: the same trip always gets the same price", async () => {
-    const body = { pickup: PICKUP, destination: DESTINATION };
-    const a = await call(ctx, createQuote, { user: USER, body });
-    const b = await call(ctx, createQuote, { user: USER, body });
-    expect(b.json.data.quote.fareCents).toBe(a.json.data.quote.fareCents);
-  });
-
-  it("accepts valid zero coordinates (equator / prime meridian)", async () => {
+  it("accepts valid zero coordinates and then applies the service-area rules", async () => {
     const res = await call(ctx, createQuote, {
       user: USER,
       body: {
@@ -66,7 +72,9 @@ describe("POST /api/quotes", () => {
         destination: { address: "Nearby", latitude: 0, longitude: 0.02 },
       },
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(422);
+    expect(res.json.error.code).toBe("PICKUP_OUTSIDE_SERVICE_AREA");
+    expect(ctx.routing.calls).toHaveLength(0);
   });
 
   it.each([
@@ -101,7 +109,7 @@ describe("POST /api/quotes", () => {
     expect(rows[0].n).toBe(0);
   });
 
-  it("rejects identical pickup and destination with 422", async () => {
+  it("rejects identical pickup and destination without calling the routing provider", async () => {
     const res = await call(ctx, createQuote, {
       user: USER,
       body: {
@@ -111,19 +119,14 @@ describe("POST /api/quotes", () => {
     });
     expect(res.status).toBe(422);
     expect(res.json.error.code).toBe("TRIP_TOO_SHORT");
+    expect(ctx.routing.calls).toHaveLength(0);
   });
 
-  it("rejects trips beyond the service limit with 422", async () => {
+  it("rejects road routes beyond the service limit", async () => {
+    ctx.routing.distanceMeters = QUOTE.maxTripMeters + 1;
     const res = await call(ctx, createQuote, {
       user: USER,
-      body: {
-        pickup: PICKUP,
-        destination: {
-          address: "Los Angeles",
-          latitude: 34.05,
-          longitude: -118.24,
-        },
-      },
+      body: { pickup: PICKUP, destination: DESTINATION },
     });
     expect(res.status).toBe(422);
     expect(res.json.error.code).toBe("TRIP_TOO_LONG");
@@ -159,16 +162,37 @@ describe("POST /api/quotes", () => {
 });
 
 describe("pricing and money", () => {
-  it("computes integer cents and applies the minimum fare", () => {
+  it("rounds each component half up to whole cents and applies the minimum", () => {
+    expect(roundHalfUp(5, 10)).toBe(1);
+    expect(roundHalfUp(4, 10)).toBe(0);
+    expect(roundHalfUp(15, 10)).toBe(2);
     expect(
-      fareCents({ distanceMeters: 1000, durationSeconds: 60 }, 10000),
-    ).toBe(PRICING.minimumFareCents);
+      computeFare(TEST_POLICY, { distanceMeters: 1000, durationSeconds: 60 }),
+    ).toEqual({
+      baseCents: 250,
+      distanceCents: 120,
+      timeCents: 30,
+      minimumApplied: true,
+      totalCents: 500,
+    });
     expect(
-      fareCents({ distanceMeters: 10_000, durationSeconds: 1200 }, 10000),
+      computeFare(TEST_POLICY, {
+        distanceMeters: 10_000,
+        durationSeconds: 1200,
+      }).totalCents,
     ).toBe(2050);
     expect(
-      fareCents({ distanceMeters: 10_000, durationSeconds: 1200 }, 11500),
-    ).toBe(2358);
+      computeFare(
+        { ...TEST_POLICY, per_km_cents: 125, per_minute_cents: 33 },
+        { distanceMeters: 3004, durationSeconds: 421 },
+      ),
+    ).toEqual({
+      baseCents: 250,
+      distanceCents: 376,
+      timeCents: 232,
+      minimumApplied: false,
+      totalCents: 858,
+    });
   });
 
   it("formats cents without losing the decimal part", () => {

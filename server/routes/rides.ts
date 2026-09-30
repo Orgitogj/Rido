@@ -235,13 +235,18 @@ export async function createBooking(
        quote_id, user_id,
        origin_address, origin_latitude, origin_longitude,
        destination_address, destination_latitude, destination_longitude,
-       distance_meters, duration_seconds, fare_cents, currency, created_at)
-     SELECT id, user_id,
-            pickup_address, pickup_latitude, pickup_longitude,
-            destination_address, destination_latitude, destination_longitude,
-            distance_meters, duration_seconds, fare_cents, currency, $2
-       FROM mobility.quotes
-      WHERE id = $1 AND expires_at > $2
+       distance_meters, duration_seconds, fare_cents, currency, created_at,
+       pricing_version, service_area_id, fare_policy_id, route_source)
+     SELECT q.id, q.user_id,
+            q.pickup_address, q.pickup_latitude, q.pickup_longitude,
+            q.destination_address, q.destination_latitude, q.destination_longitude,
+            q.distance_meters, q.duration_seconds, q.fare_cents, q.currency, $2,
+            q.pricing_version, q.service_area_id, q.fare_policy_id, q.route_source
+       FROM mobility.quotes q
+      WHERE q.id = $1 AND q.expires_at > $2
+        AND (q.service_area_id IS NULL OR EXISTS (
+              SELECT 1 FROM mobility.service_areas a
+               WHERE a.id = q.service_area_id AND a.status = 'active'))
      ON CONFLICT (quote_id) DO NOTHING
      RETURNING *`,
     [quoteId, deps.now()],
@@ -255,6 +260,19 @@ export async function createBooking(
     );
     ride = existing.rows[0];
     if (!ride) {
+      const { rows: closed } = await deps.db.query<{ inactive: boolean }>(
+        `SELECT a.status <> 'active' AS inactive
+           FROM mobility.quotes q JOIN mobility.service_areas a ON a.id = q.service_area_id
+          WHERE q.id = $1 AND q.expires_at > $2`,
+        [quoteId, deps.now()],
+      );
+      if (closed[0]?.inactive) {
+        throw new ApiError(
+          409,
+          "SERVICE_AREA_UNAVAILABLE",
+          "Rides are no longer available in this area. Please try again later.",
+        );
+      }
       throw new ApiError(
         410,
         "QUOTE_EXPIRED",
@@ -275,7 +293,7 @@ export async function createBooking(
     intent = await deps.payments.createPaymentIntent(
       {
         amount: ride.fare_cents,
-        currency: ride.currency.trim(),
+        currency: "usd",
         customer: customerId,
         metadata: { ride_id: ride.id, app_user_id: user.id },
       },

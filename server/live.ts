@@ -6,6 +6,7 @@ import {
   type RoutingProvider,
   straightLineEstimate,
 } from "./routing";
+import { reserveRouting } from "./routingBudget";
 
 import type { Database } from "./db";
 import type { RideRow } from "./lifecycle";
@@ -112,10 +113,13 @@ async function refreshRoute(
 
   let result = estimate;
   let source: "routed" | "estimate" = "estimate";
-  if (deps.routing) {
+  if (deps.routing && (await reserveRouting(deps.db, "routes", 1, now))) {
     try {
-      result = await deps.routing.route(origin, target);
-      source = "routed";
+      const routed = await deps.routing.route(origin, target);
+      if (routed) {
+        result = routed;
+        source = "routed";
+      }
     } catch {
       log("routing_failed", { rideId, leg });
     }

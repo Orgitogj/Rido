@@ -38,6 +38,13 @@ export const driverApplicationSchema = z.strictObject({
     .max(20)
     .regex(/^[A-Za-z0-9 -]+$/),
   vehicleSeats: z.number().int().min(1).max(8),
+  vehicleColor: z
+    .string()
+    .trim()
+    .min(3)
+    .max(30)
+    .regex(/^[A-Za-z][A-Za-z -]*$/),
+  vehicleYear: z.number().int().min(1980).max(2100).nullable().optional(),
 });
 
 export const deviceFixSchema = z.strictObject({
@@ -247,6 +254,7 @@ export interface BookingResponse {
 export interface AssignedDriver {
   name: string;
   vehicle: string;
+  color: string | null;
   plate: string;
   seats: number;
 }
@@ -530,14 +538,26 @@ export interface RequirementView {
 
 export interface DriverProfileView {
   id: string;
-  status: "pending" | "approved" | "suspended";
+  status: DriverApplicationStatus;
   displayName: string;
   vehicleMake: string;
   vehicleModel: string;
   vehiclePlate: string;
   vehicleSeats: number;
+  vehicleColor: string | null;
+  vehicleYear: number | null;
   online: boolean;
   rating: RatingSummary;
+  applicantMessage: string | null;
+  approvalExpiresAt: string | null;
+  documentsWaived: boolean;
+  documents: DriverDocumentView[];
+  requirements: RequirementView[];
+  eligible: boolean;
+  ineligibleReasons: string[];
+  canEdit: boolean;
+  canSubmit: boolean;
+  canReopen: boolean;
 }
 
 export interface RideOfferView {
@@ -632,7 +652,8 @@ export function formatCents(cents: number, currency = "usd"): string {
   return `${sign}${currency === "usd" ? "$" : ""}${whole}.${fraction}`;
 }
 
-export type OperatorPermission = "view" | "support" | "refund";
+export type OperatorPermission =
+  "view" | "support" | "refund" | "verify" | "configure";
 
 const isoDate = z.iso.datetime({ offset: true });
 

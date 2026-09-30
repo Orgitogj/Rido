@@ -19,7 +19,12 @@ import {
   transitionRide,
   UNCHARGED_END_STATUSES,
 } from "./lifecycle";
-import { advanceRide, MATCHING, offerToNextDriver } from "./matching";
+import {
+  advanceRide,
+  MATCHING,
+  offerToNextDriver,
+  refreshMatchRanking,
+} from "./matching";
 import {
   checkReceipts,
   deliverPending,
@@ -34,13 +39,21 @@ import {
 } from "./payments";
 import { ratingState, summarySql, toSummary } from "./ratings";
 import { resubmitStaleRefunds, syncOpenRefunds } from "./refunds";
+import { pruneRoutingUsage } from "./routingBudget";
+import { redactExpiredEvidence } from "./safety";
 import { syncOpenTipRefunds } from "./tipRefunds";
 import { syncOpenTips } from "./tips";
+import { enforceDriverEligibility, purgeDriverDocuments } from "./verification";
+
+import type { RoutingProvider } from "./routing";
+import type { DocumentStorage } from "./storage";
 
 export interface RideDeps {
   db: Database;
   payments: PaymentGateway;
   push?: PushGateway | null;
+  storage?: DocumentStorage | null;
+  routing?: RoutingProvider | null;
   now: () => Date;
 }
 
@@ -196,6 +209,11 @@ export async function syncIntent(
   rideId: string,
   intent: IntentSnapshot,
 ): Promise<RideRow> {
+  if (intent.status === "requires_capture") {
+    await refreshMatchRanking(deps, rideId).catch(() =>
+      log("ranking_refresh_failed", { rideId }),
+    );
+  }
   const ride = await withLockedRide(deps, rideId, async (tx, ride) => {
     if (
       ride.stripe_payment_intent_id !== intent.id ||
@@ -341,6 +359,9 @@ export async function advanceRideById(
   deps: RideDeps,
   rideId: string,
 ): Promise<RideRow> {
+  await refreshMatchRanking(deps, rideId).catch(() =>
+    log("ranking_refresh_failed", { rideId }),
+  );
   const ride = await withLockedRide(deps, rideId, (tx, ride) =>
     advanceRide(tx, ride, deps.now()),
   );
@@ -386,6 +407,18 @@ export async function sweep(deps: RideDeps, limit = 25): Promise<number> {
   await syncOpenDisputes(deps).catch(() => {
     log("dispute_sync_failed", {});
   });
+  await redactExpiredEvidence(deps).catch(() => {
+    log("safety_evidence_redaction_failed", {});
+  });
+  await pruneRoutingUsage(deps.db, now).catch(() => {
+    log("routing_usage_prune_failed", {});
+  });
+  await enforceDriverEligibility(deps).catch(() => {
+    log("driver_eligibility_enforcement_failed", {});
+  });
+  await purgeDriverDocuments(deps).catch(() => {
+    log("driver_document_purge_failed", {});
+  });
   await reconcileEarnings(deps).catch(() => {
     log("earnings_reconcile_failed", {});
   });
@@ -405,6 +438,7 @@ interface ViewRow extends RideRow {
   vehicle_model: string | null;
   vehicle_plate: string | null;
   vehicle_seats: number | null;
+  vehicle_color: string | null;
   demo_driver_name: string | null;
   chat_seq: number;
   passenger_unread: number;
@@ -422,7 +456,7 @@ interface ViewRow extends RideRow {
 const viewSql = (nowRef: string) => `
   SELECT r.*, u.name AS passenger_name,
          dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model,
-         dp.vehicle_plate, dp.vehicle_seats,
+         dp.vehicle_plate, dp.vehicle_seats, dp.vehicle_color,
          CASE WHEN dd.id IS NULL THEN NULL
               ELSE dd.first_name || ' ' || dd.last_name END AS demo_driver_name,
          COALESCE(c.last_seq, 0) AS chat_seq,
@@ -460,6 +494,7 @@ function toView(
     driver = {
       name: row.driver_name,
       vehicle: `${row.vehicle_make} ${row.vehicle_model}`,
+      color: row.vehicle_color,
       plate: row.vehicle_plate ?? "",
       seats: row.vehicle_seats ?? 0,
     };

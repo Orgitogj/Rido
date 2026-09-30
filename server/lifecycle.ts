@@ -157,6 +157,7 @@ export interface RideRow {
   settlement_error: string | null;
   next_settlement_at: Date | null;
   needs_review: boolean;
+  ranking_computed_at: Date | null;
   review_reason: string | null;
   updated_at: Date;
   review_resolved_at: Date | null;

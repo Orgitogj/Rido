@@ -16,13 +16,16 @@ const {
 
 const USAGE = `Usage: npm run admin -- <command>
   drivers                                          list driver applications
-  approve <ref> | suspend <ref>                    change a driver's status
+  approve <ref> --waive-documents --reason "<text>"
+                                                   development/recovery override: approve
+                                                   without reviewed documents (audited)
+  suspend <ref> --reason "<text>"                  suspend a driver with no active ride
   operators                                        list operator accounts
-  grant-operator <clerkUserId> --name "<name>" [--permissions view,support,refund]
+  grant-operator <clerkUserId> --name "<name>" [--permissions view,support,refund,verify,configure]
   revoke-operator <clerkUserId> [--reason "<text>"]
 
-Support, ride review, and refunds are handled in the operations console (/admin),
-where every action is tied to the operator's verified sign-in.`;
+Driver verification, support, ride review, and refunds are handled in the operations
+console (/admin), where every action is tied to the operator's verified sign-in.`;
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -49,13 +52,17 @@ try {
   if (command === "drivers") {
     console.table(await listDrivers(client));
   } else if ((command === "approve" || command === "suspend") && ref) {
+    const reason = flag("reason");
     const row = await setDriverStatus(
       client,
       ref,
       command === "approve" ? "approved" : "suspended",
+      { waiveDocuments: args.includes("--waive-documents"), reason },
     );
-    await auditDriverStatus(client, actor, row.id, row.status);
-    console.log(`${row.display_name} (${row.id}) is now ${row.status}.`);
+    await auditDriverStatus(client, actor, row.id, row.status, reason);
+    console.log(
+      `${row.display_name} (${row.id}) is now ${row.status}${command === "approve" ? " with documents waived. Operators will see the waiver in the console." : "."}`,
+    );
   } else if (command === "operators") {
     console.table(await listOperators(client));
   } else if (command === "grant-operator" && ref) {
@@ -66,7 +73,7 @@ try {
       grantedBy: actor,
     });
     console.log(
-      `${row.display_name} is an operator with: ${["view", "support", "refund"].filter((p) => row[`can_${p}`]).join(", ")}.`,
+      `${row.display_name} is an operator with: ${["view", "support", "refund", "verify", "configure"].filter((p) => row[`can_${p}`]).join(", ")}.`,
     );
   } else if (command === "revoke-operator" && ref) {
     const row = await revokeOperator(client, {

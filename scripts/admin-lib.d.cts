@@ -9,6 +9,7 @@ export function setDriverStatus(
   client: unknown,
   ref: string,
   status: "approved" | "suspended",
+  opts?: { waiveDocuments?: boolean; reason?: string },
 ): Promise<{ id: string; display_name: string; status: string }>;
 export function grantOperator(
   client: unknown,
@@ -24,6 +25,8 @@ export function grantOperator(
   can_view: boolean;
   can_support: boolean;
   can_refund: boolean;
+  can_verify: boolean;
+  can_configure: boolean;
 }>;
 export function revokeOperator(
   client: unknown,
@@ -37,5 +40,6 @@ export function auditDriverStatus(
   actor: string,
   driverId: string,
   status: string,
+  reason?: string,
 ): Promise<void>;
 export const PERMISSIONS: string[];

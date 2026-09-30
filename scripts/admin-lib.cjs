@@ -27,9 +27,16 @@ async function listDrivers(client) {
   return rows;
 }
 
-async function setDriverStatus(client, ref, status) {
+async function setDriverStatus(client, ref, status, opts = {}) {
   if (!["approved", "suspended"].includes(status))
     throw new Error("Invalid status");
+  const reason = String(opts.reason || "").trim();
+  if (reason.length < 3)
+    throw new Error('A reason is required (--reason "...").');
+  if (status === "approved" && !opts.waiveDocuments)
+    throw new Error(
+      "The CLI can only approve with --waive-documents, as a development or recovery override. Review applications in the operations console.",
+    );
   const driver = await findDriver(client, ref);
   if (status === "suspended") {
     const busy = await client.query(
@@ -37,21 +44,42 @@ async function setDriverStatus(client, ref, status) {
       [driver.id, ASSIGNED],
     );
     if (busy.rows.length)
-      throw new Error("Driver has an active ride; suspend after it ends.");
+      throw new Error(
+        "Driver has an active ride. Suspend from the operations console, which re-matches or flags the ride.",
+      );
   }
   const { rows } = await client.query(
-    `UPDATE mobility.driver_profiles
-        SET status = $2::varchar, online = CASE WHEN $2::varchar = 'approved' THEN online ELSE false END,
-            updated_at = now()
-      WHERE id = $1 RETURNING id, display_name, status`,
-    [driver.id, status],
+    status === "approved"
+      ? `UPDATE mobility.driver_profiles
+            SET status = 'approved', documents_waived = true,
+                waiver_note = left('CLI override: ' || $2, 200),
+                approved_at = now(), approved_by = NULL, approval_expires_at = NULL,
+                applicant_message = NULL, review_version = review_version + 1, updated_at = now()
+          WHERE id = $1 RETURNING id, display_name, status`
+      : `UPDATE mobility.driver_profiles
+            SET status = 'suspended', online = false,
+                review_version = review_version + 1, updated_at = now()
+          WHERE id = $1 RETURNING id, display_name, status`,
+    status === "approved" ? [driver.id, reason] : [driver.id],
+  );
+  await client.query(
+    `INSERT INTO mobility.driver_review_events
+       (driver_profile_id, actor, action, from_status, to_status, reason, created_at)
+     VALUES ($1, 'cli', $2, $3, $4, $5, now())`,
+    [
+      driver.id,
+      status === "approved" ? "approved_with_waiver" : "suspended",
+      driver.status,
+      status,
+      reason.slice(0, 1000),
+    ],
   );
   return rows[0];
 }
 
 module.exports = { findDriver, listDrivers, setDriverStatus };
 
-const PERMISSIONS = ["view", "support", "refund"];
+const PERMISSIONS = ["view", "support", "refund", "verify", "configure"];
 
 async function cliAudit(
   client,
@@ -83,12 +111,16 @@ function parsePermissions(input) {
     .filter(Boolean);
   for (const p of list) {
     if (!PERMISSIONS.includes(p))
-      throw new Error(`Unknown permission "${p}". Use view, support, refund.`);
+      throw new Error(
+        `Unknown permission "${p}". Use view, support, refund, verify, configure.`,
+      );
   }
   return {
     can_view: true,
     can_support: list.includes("support"),
     can_refund: list.includes("refund"),
+    can_verify: list.includes("verify"),
+    can_configure: list.includes("configure"),
   };
 }
 
@@ -112,19 +144,22 @@ async function grantOperator(
       "No account with that Clerk id. Ask them to sign in to the app once first.",
     );
   const { rows } = await client.query(
-    `INSERT INTO mobility.operators (user_id, display_name, can_view, can_support, can_refund, granted_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO mobility.operators (user_id, display_name, can_view, can_support, can_refund, can_verify, can_configure, granted_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id) DO UPDATE SET
        display_name = EXCLUDED.display_name, can_view = EXCLUDED.can_view,
        can_support = EXCLUDED.can_support, can_refund = EXCLUDED.can_refund,
+       can_verify = EXCLUDED.can_verify, can_configure = EXCLUDED.can_configure,
        granted_by = EXCLUDED.granted_by, active = true, revoked_at = NULL, updated_at = now()
-     RETURNING id, display_name, can_view, can_support, can_refund`,
+     RETURNING id, display_name, can_view, can_support, can_refund, can_verify, can_configure`,
     [
       users[0].id,
       String(displayName).trim().slice(0, 100),
       perms.can_view,
       perms.can_support,
       perms.can_refund,
+      perms.can_verify,
+      perms.can_configure,
       String(grantedBy).slice(0, 100),
     ],
   );
@@ -172,22 +207,22 @@ async function revokeOperator(client, { clerkId, grantedBy, reason }) {
 async function listOperators(client) {
   const { rows } = await client.query(
     `SELECT o.id, u.clerk_id, o.display_name, o.can_view, o.can_support, o.can_refund,
-            o.active, o.granted_by, o.created_at, o.revoked_at
+            o.can_verify, o.can_configure, o.active, o.granted_by, o.created_at, o.revoked_at
        FROM mobility.operators o JOIN mobility.users u ON u.id = o.user_id
       ORDER BY o.created_at`,
   );
   return rows;
 }
 
-async function auditDriverStatus(client, actor, driverId, status) {
+async function auditDriverStatus(client, actor, driverId, status, reason) {
   await cliAudit(
     client,
     actor,
     `driver_${status}`,
     "driver_profile",
     driverId,
-    null,
-    {},
+    reason || null,
+    status === "approved" ? { documentsWaived: true } : {},
   );
 }
 

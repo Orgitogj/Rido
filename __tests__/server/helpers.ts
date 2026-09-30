@@ -6,6 +6,12 @@ import Stripe from "stripe";
 import { clerkAuthenticator } from "../../server/auth";
 import { type Deps, type Handler, route } from "../../server/http";
 import { stripeGateway } from "../../server/payments";
+import {
+  type Point,
+  type RoutingProvider,
+  RoutingUnavailableError,
+} from "../../server/routing";
+import { haversineMeters } from "../../shared/geo";
 
 import type {
   PushGateway,
@@ -19,7 +25,6 @@ import type {
   PaymentGateway,
   RefundSnapshot,
 } from "../../server/payments";
-import type { Point, RoutingProvider } from "../../server/routing";
 import type {
   DocumentStorage,
   PresignedRequest,
@@ -37,12 +42,49 @@ export function testDb() {
   return new Pool({ connectionString: url, max });
 }
 
+export const TEST_AREA_BOUNDARY: [number, number][] = [
+  [37.6, -122.6],
+  [37.6, -122.3],
+  [37.95, -122.3],
+  [37.95, -122.6],
+];
+
+export const TEST_POLICY = {
+  base_cents: 250,
+  per_km_cents: 120,
+  per_minute_cents: 30,
+  minimum_fare_cents: 500,
+};
+
 export async function resetDb(db: Pool) {
   await db.query(
     `TRUNCATE mobility.stripe_events, mobility.push_tickets, mobility.notifications,
        mobility.push_tokens, mobility.ride_routes, mobility.ride_events,
-       mobility.ride_offers, mobility.rides, mobility.quotes,
-       mobility.driver_profiles, mobility.users CASCADE`,
+       mobility.ride_offers, mobility.match_rankings, mobility.rides, mobility.quotes,
+       mobility.fare_policies, mobility.service_area_events, mobility.service_areas,
+       mobility.routing_usage, mobility.driver_profiles, mobility.users CASCADE`,
+  );
+  await db.query(
+    `WITH area AS (
+       INSERT INTO mobility.service_areas
+         (code, name, status, boundary, min_latitude, max_latitude, min_longitude,
+          max_longitude, dropoff_rule, is_development, created_at, updated_at)
+       VALUES ('test-sf', 'Test area (automated tests only)', 'active', $1,
+               37.6, 37.95, -122.6, -122.3, 'inside_area', true, now(), now())
+       RETURNING id)
+     INSERT INTO mobility.fare_policies
+       (service_area_id, version, label, is_development, base_cents, per_km_cents,
+        per_minute_cents, minimum_fare_cents, effective_from, reason, created_at)
+     SELECT id, 1, 'Test policy', true, $2, $3, $4, $5, '2000-01-01T00:00:00Z',
+            'automated test fixture', now()
+       FROM area`,
+    [
+      JSON.stringify(TEST_AREA_BOUNDARY),
+      TEST_POLICY.base_cents,
+      TEST_POLICY.per_km_cents,
+      TEST_POLICY.per_minute_cents,
+      TEST_POLICY.minimum_fare_cents,
+    ],
   );
 }
 
@@ -366,18 +408,48 @@ export class FakeStripe implements PaymentGateway {
   }
 }
 
+export const pointKey = (p: Point) =>
+  `${p.latitude.toFixed(5)},${p.longitude.toFixed(5)}`;
+
 export class FakeRouting implements RoutingProvider {
+  source = "test_provider" as const;
   calls: { from: Point; to: Point }[] = [];
+  matrixCalls: { origins: Point[]; destination: Point }[] = [];
   fail = false;
+  noRoute = false;
+  matrixFail = false;
   durationSeconds = 420;
+  distanceMeters = 3100;
+  matrixDurations = new Map<string, number | null>();
   async route(from: Point, to: Point) {
     this.calls.push({ from, to });
-    if (this.fail) throw new Error("routing unavailable");
+    if (this.fail) throw new RoutingUnavailableError("routing unavailable");
+    if (this.noRoute) return null;
     return {
       durationSeconds: this.durationSeconds,
-      distanceMeters: 3100,
+      distanceMeters: this.distanceMeters,
       polyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
     };
+  }
+  async routeMatrix(origins: Point[], destination: Point) {
+    this.matrixCalls.push({ origins, destination });
+    if (this.matrixFail)
+      throw new RoutingUnavailableError("matrix unavailable");
+    return origins.map((o, originIndex) => {
+      const key = pointKey(o);
+      const fixed = this.matrixDurations.has(key)
+        ? this.matrixDurations.get(key)!
+        : Math.round((haversineMeters(o, destination) * 1.3) / (25_000 / 3600));
+      return {
+        originIndex,
+        reachable: fixed !== null,
+        durationSeconds: fixed,
+        distanceMeters:
+          fixed === null
+            ? null
+            : Math.round(haversineMeters(o, destination) * 1.3),
+      };
+    });
   }
 }
 

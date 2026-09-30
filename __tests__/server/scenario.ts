@@ -45,6 +45,7 @@ export async function apply(ctx: TestContext, clerkId: string) {
         .slice(-8)
         .toUpperCase(),
       vehicleSeats: 4,
+      vehicleColor: "Silver",
     },
   });
 }
@@ -55,7 +56,10 @@ export async function onlineDriver(
   metersFromPickup = 500,
 ) {
   expect((await apply(ctx, clerkId)).status).toBe(201);
-  await admin.setDriverStatus(ctx.db, clerkId, "approved");
+  await admin.setDriverStatus(ctx.db, clerkId, "approved", {
+    waiveDocuments: true,
+    reason: "test fixture",
+  });
   const res = await goOnline(ctx, clerkId, metersFromPickup);
   expect(res.status).toBe(200);
 }
@@ -89,6 +93,7 @@ export async function requestRide(
     body: { pickup: PICKUP, destination: DESTINATION },
   });
   expect(quote.status).toBe(201);
+  ctx.routing.calls.length = 0;
   const booking = await call(ctx, createBooking, {
     user: passenger,
     body: { quoteId: quote.json.data.quote.id },

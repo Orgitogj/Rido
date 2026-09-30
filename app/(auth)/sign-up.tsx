@@ -1,4 +1,4 @@
-import { useSignUp } from "@clerk/expo";
+import { useAuth, useSignUp } from "@clerk/expo";
 import { Link, router } from "expo-router";
 import { useState } from "react";
 import { Alert, Image, ScrollView, Text, View } from "react-native";
@@ -7,10 +7,11 @@ import { ReactNativeModal } from "react-native-modal";
 import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons, images } from "@/constants";
-import { fetchAPI } from "@/lib/fetch";
+import { apiRequest } from "@/lib/fetch";
 
 const SignUp = () => {
   const { signUp, fetchStatus } = useSignUp();
+  const { getToken } = useAuth();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const [form, setForm] = useState({
@@ -46,7 +47,6 @@ const SignUp = () => {
         state: "pending",
       });
     } catch (err: any) {
-      console.log(JSON.stringify(err, null, 2));
       Alert.alert("Error", err?.errors?.[0]?.longMessage || "Sign up failed.");
     }
   };
@@ -69,20 +69,22 @@ const SignUp = () => {
       }
 
       if (signUp.status === "complete") {
-        await fetchAPI("/api/user", {
-          method: "POST",
-          body: JSON.stringify({
-            name: form.name,
-            email: form.email,
-            clerkId: signUp.createdUserId,
-          }),
-        });
-
         await signUp.finalize({
           navigate: () => {
             setVerification({ ...verification, state: "success" });
           },
         });
+
+        const name = form.name.trim();
+        if (name) {
+          getToken()
+            .then((token) =>
+              token
+                ? apiRequest("/api/user", { body: { name }, token })
+                : undefined,
+            )
+            .catch(() => {});
+        }
       } else {
         setVerification({
           ...verification,
@@ -156,7 +158,9 @@ const SignUp = () => {
         </View>
 
         <ReactNativeModal
-          isVisible={verification.state === "pending"}
+          isVisible={
+            verification.state === "pending" || verification.state === "failed"
+          }
           onModalHide={() => {
             if (verification.state === "success") {
               setShowSuccessModal(true);

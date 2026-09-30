@@ -7,6 +7,13 @@ import "react-native-reanimated";
 import { LogBox } from "react-native";
 
 import { tokenCache } from "@/lib/auth";
+import { useNotificationRouting } from "@/lib/notifications";
+import "@/lib/tracking";
+
+const NotificationRouter = () => {
+  useNotificationRouting();
+  return null;
+};
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,10 +51,13 @@ export default function RootLayout() {
   return (
     <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
       <ClerkLoaded>
+        <NotificationRouter />
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(root)" options={{ headerShown: false }} />
+          <Stack.Screen name="admin" options={{ headerShown: false }} />
+          <Stack.Screen name="share/[token]" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
       </ClerkLoaded>

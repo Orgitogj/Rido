@@ -1,17 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 
 import { icons } from "@/constants";
-import { useFetch } from "@/lib/fetch";
-import {
-  calculateDriverTimes,
-  calculateRegion,
-  generateMarkersFromData,
-} from "@/lib/map";
-import { useDriverStore, useLocationStore } from "@/store";
-import { Driver, MarkerData } from "@/types/type";
+import { calculateRegion, isCoord } from "@/lib/map";
+import { useLocationStore } from "@/store";
 
 const directionsAPI = process.env.EXPO_PUBLIC_GOOGLE_API_KEY;
 
@@ -21,108 +15,70 @@ const Map = () => {
     userLatitude,
     destinationLatitude,
     destinationLongitude,
+    locationStatus,
   } = useLocationStore();
-  const { selectedDriver, setDrivers } = useDriverStore();
+  const mapRef = useRef<MapView>(null);
+  const [routeFailed, setRouteFailed] = useState(false);
 
-  const { data: drivers, loading, error } = useFetch<Driver[]>("/api/driver");
-  const [markers, setMarkers] = useState<MarkerData[]>([]);
+  const hasUser = isCoord(userLatitude) && isCoord(userLongitude);
+  const hasDestination =
+    isCoord(destinationLatitude) && isCoord(destinationLongitude);
 
-  useEffect(() => {
-    console.log("Map: fetched drivers:", drivers);
-    console.log("Map: user coords:", userLatitude, userLongitude);
-
-    if (Array.isArray(drivers)) {
-      if (!userLatitude || !userLongitude) return;
-
-      const newMarkers = generateMarkersFromData({
-        data: drivers,
-        userLatitude,
-        userLongitude,
-      });
-
-      console.log("Map: generated markers:", newMarkers);
-
-      setMarkers(newMarkers);
-    }
-  }, [drivers, userLatitude, userLongitude]);
-
-  useEffect(() => {
-    if (markers.length > 0 && userLatitude && userLongitude) {
-      calculateDriverTimes({
-        markers,
+  const region = useMemo(
+    () =>
+      calculateRegion({
         userLatitude,
         userLongitude,
         destinationLatitude,
         destinationLongitude,
-      }).then((drivers) => {
-        console.log("Map: calculated driver times:", drivers);
+      }),
+    [userLatitude, userLongitude, destinationLatitude, destinationLongitude],
+  );
 
-        if (drivers?.length) {
-          console.log("Map: setting drivers from calculated times");
-          setDrivers(drivers as MarkerData[]);
-        } else {
-          console.log("Map: setting drivers from markers fallback");
-          setDrivers(markers as MarkerData[]);
-        }
-      });
-    }
-  }, [
-    markers,
-    destinationLatitude,
-    destinationLongitude,
-    userLatitude,
-    userLongitude,
-    setDrivers,
-  ]);
+  useEffect(() => {
+    mapRef.current?.animateToRegion(region, 300);
+  }, [region]);
 
-  const region = calculateRegion({
-    userLatitude,
-    userLongitude,
-    destinationLatitude,
-    destinationLongitude,
-  });
+  useEffect(() => {
+    setRouteFailed(false);
+  }, [userLatitude, userLongitude, destinationLatitude, destinationLongitude]);
 
-  if (loading || (!userLatitude && !userLongitude))
+  if (!hasUser) {
+    const locating = locationStatus === "idle" || locationStatus === "locating";
     return (
-      <View className="flex justify-between items-center w-full">
-        <ActivityIndicator size="small" color="#000" />
+      <View className="flex-1 w-full items-center justify-center rounded-2xl bg-general-500 p-5">
+        {locating ? (
+          <>
+            <ActivityIndicator size="small" color="#000" />
+            <Text className="text-sm text-general-200 mt-2">
+              Finding your location…
+            </Text>
+          </>
+        ) : (
+          <Text className="text-sm text-general-200 text-center">
+            Your location is unavailable. Choose a pickup address to see the
+            map.
+          </Text>
+        )}
       </View>
     );
-
-  if (error)
-    return (
-      <View className="flex justify-between items-center w-full">
-        <Text>Error: {error}</Text>
-      </View>
-    );
+  }
 
   return (
-    <MapView
-      provider={PROVIDER_DEFAULT}
-      className="w-full h-full rounded-2xl"
-      tintColor="black"
-      mapType="mutedStandard"
-      showsPointsOfInterest={false}
-      initialRegion={region}
-      showsUserLocation={true}
-      userInterfaceStyle="light"
-    >
-      {markers.map((marker, index) => (
-        <Marker
-          key={marker.id}
-          coordinate={{
-            latitude: marker.latitude,
-            longitude: marker.longitude,
-          }}
-          title={marker.title}
-          image={
-            selectedDriver === +marker.id ? icons.selectedMarker : icons.marker
-          }
-        />
-      ))}
-
-      {destinationLatitude && destinationLongitude && (
-        <>
+    <View className="flex-1 w-full">
+      <MapView
+        ref={mapRef}
+        provider={PROVIDER_DEFAULT}
+        className="w-full h-full rounded-2xl"
+        style={{ flex: 1 }}
+        tintColor="black"
+        mapType="mutedStandard"
+        showsPointsOfInterest={false}
+        initialRegion={region}
+        showsUserLocation={true}
+        userInterfaceStyle="light"
+      >
+        {hasDestination && (
           <Marker
             key="destination"
             coordinate={{
@@ -132,22 +88,32 @@ const Map = () => {
             title="Destination"
             image={icons.pin}
           />
+        )}
+
+        {hasDestination && directionsAPI && !routeFailed && (
           <MapViewDirections
-            origin={{
-              latitude: userLatitude!,
-              longitude: userLongitude!,
-            }}
+            origin={{ latitude: userLatitude, longitude: userLongitude }}
             destination={{
               latitude: destinationLatitude,
               longitude: destinationLongitude,
             }}
-            apikey={directionsAPI!}
+            apikey={directionsAPI}
             strokeColor="#0286FF"
             strokeWidth={2}
+            onError={() => setRouteFailed(true)}
           />
-        </>
+        )}
+      </MapView>
+
+      {hasDestination && (routeFailed || !directionsAPI) && (
+        <View className="absolute bottom-2 left-2 right-2 bg-white/90 rounded-lg px-3 py-2">
+          <Text className="text-xs text-general-200 text-center">
+            Route preview unavailable. Prices are still calculated by the
+            server.
+          </Text>
+        </View>
       )}
-    </MapView>
+    </View>
   );
 };
 

@@ -13,10 +13,16 @@ import { icons } from "@/constants";
 const RideLayout = ({
   title,
   snapPoints,
+  scrollable = true,
+  map,
+  onBack,
   children,
 }: {
   title: string;
   snapPoints?: string[];
+  scrollable?: boolean;
+  map?: React.ReactNode;
+  onBack?: () => void;
   children: React.ReactNode;
 }) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -26,7 +32,11 @@ const RideLayout = ({
       <View className="flex-1 bg-white">
         <View className="flex flex-col h-screen bg-blue-500">
           <View className="flex flex-row absolute z-10 top-16 items-center justify-start px-5">
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity
+              onPress={onBack ?? (() => router.back())}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
               <View className="w-10 h-10 bg-white rounded-full items-center justify-center">
                 <Image
                   source={icons.backArrow}
@@ -40,7 +50,7 @@ const RideLayout = ({
             </Text>
           </View>
 
-          <Map />
+          {map ?? <Map />}
         </View>
 
         <BottomSheet
@@ -48,7 +58,7 @@ const RideLayout = ({
           snapPoints={snapPoints || ["40%", "85%"]}
           index={0}
         >
-          {title === "Choose a Rider" ? (
+          {!scrollable ? (
             <BottomSheetView
               style={{
                 flex: 1,

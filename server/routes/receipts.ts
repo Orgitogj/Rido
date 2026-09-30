@@ -10,7 +10,7 @@ import { ratingEligibility } from "../ratings";
 import { RECEIPT_SQL, receiptFrom, type ReceiptRow } from "../receipts";
 import { ensureUser } from "../users";
 
-import { requireApprovedDriver } from "./driver";
+import { requireDriverProfile } from "./driver";
 
 const VISIBLE = "(r.requested_at IS NOT NULL OR r.status = 'legacy')";
 
@@ -54,7 +54,7 @@ export async function listDriverTrips(
   deps: Deps,
 ) {
   const user = await currentUser(request, deps);
-  const profile = await requireApprovedDriver(deps, user);
+  const profile = await requireDriverProfile(deps, user);
   const { rows } = await deps.db.query<{
     id: string;
     origin_address: string;

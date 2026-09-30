@@ -1,8 +1,13 @@
 import { locationUpdateSchema } from "../../shared/contracts";
 import { type Deps, readJson } from "../http";
+import { ASSIGNED_STATUSES } from "../lifecycle";
 import { recordDriverLocation } from "../location";
 
-import { currentUser, requireApprovedDriver } from "./driver";
+import {
+  currentUser,
+  requireApprovedDriver,
+  requireDriverProfile,
+} from "./driver";
 
 export async function updateDriverLocation(
   request: Request,
@@ -10,7 +15,13 @@ export async function updateDriverLocation(
   deps: Deps,
 ) {
   const user = await currentUser(request, deps);
-  const profile = await requireApprovedDriver(deps, user);
+  const profile = await requireDriverProfile(deps, user);
+  const { rows: active } = await deps.db.query(
+    `SELECT 1 FROM mobility.rides
+      WHERE driver_profile_id = $1 AND status = ANY($2::text[])`,
+    [profile.id, ASSIGNED_STATUSES],
+  );
+  if (active.length === 0) await requireApprovedDriver(deps, user);
   const input = await readJson(request, locationUpdateSchema);
   const result = await recordDriverLocation(
     deps.db,

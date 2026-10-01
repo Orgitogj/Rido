@@ -1,3 +1,4 @@
+import * as Crypto from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -14,6 +15,7 @@ import {
 import { useOperator } from "@/lib/adminApi";
 import { ApiRequestError, useApi, useApiQuery } from "@/lib/fetch";
 
+import type { SupportMessageView } from "@/shared/account";
 import type { AdminSupportDetail } from "@/shared/contracts";
 
 const SupportDetailPage = () => {
@@ -21,6 +23,11 @@ const SupportDetailPage = () => {
   const operator = useOperator();
   const request = useApi();
   const support = useApiQuery<AdminSupportDetail>(`/api/admin/support/${id}`);
+  const thread = useApiQuery<SupportMessageView[]>(
+    `/api/admin/support/${id}/messages`,
+  );
+  const [reply, setReply] = useState("");
+  const [replyId, setReplyId] = useState(() => Crypto.randomUUID());
   const [note, setNote] = useState("");
   const [resolution, setResolution] = useState("");
   const [reopenReason, setReopenReason] = useState("");
@@ -47,6 +54,29 @@ const SupportDetailPage = () => {
       });
     } finally {
       setBusy(false);
+      support.refetch();
+    }
+  };
+
+  const sendReply = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await request(`/api/admin/support/${id}/messages`, {
+        body: { body: reply.trim(), clientMessageId: replyId },
+      });
+      setReply("");
+      setReplyId(Crypto.randomUUID());
+      setMessage({ tone: "success", text: "Reply sent to the passenger." });
+    } catch (e) {
+      setMessage({
+        tone: "error",
+        text:
+          e instanceof ApiRequestError ? e.message : "Something went wrong.",
+      });
+    } finally {
+      setBusy(false);
+      thread.refetch();
       support.refetch();
     }
   };
@@ -105,12 +135,54 @@ const SupportDetailPage = () => {
         {s.resolutionMessage && (
           <>
             <Text className="text-sm mt-4 font-JakartaSemiBold">
-              Reply shown to the passenger
+              Closing message shown to the passenger
             </Text>
             <Text className="text-sm mt-1">{s.resolutionMessage}</Text>
           </>
         )}
         {message && <Notice tone={message.tone} text={message.text} />}
+      </Section>
+
+      <Section title="Conversation (visible to the passenger)">
+        {thread.status === "error" && (
+          <Notice tone="error" text={thread.error} />
+        )}
+        {(thread.data ?? []).length === 0 && thread.status !== "error" && (
+          <Text className="text-sm text-general-200">
+            No messages have been exchanged yet.
+          </Text>
+        )}
+        {(thread.data ?? []).map((m) => (
+          <View key={m.id} className="py-2 border-b border-neutral-100">
+            <Text className="text-xs text-general-200">
+              {m.author === "operator" ? "Support" : "Passenger"} ·{" "}
+              {when(m.createdAt)}
+            </Text>
+            <Text className="text-sm mt-1" selectable>
+              {m.body}
+            </Text>
+          </View>
+        ))}
+        {canAct && s.status !== "resolved" && s.assignedToMe && (
+          <View className="mt-3">
+            <Field
+              label="Reply to the passenger (they will see this and be notified)"
+              value={reply}
+              onChangeText={setReply}
+              multiline
+            />
+            <ActionButton
+              title="Send reply"
+              disabled={busy || reply.trim().length === 0}
+              onPress={sendReply}
+            />
+          </View>
+        )}
+        {canAct && s.status !== "resolved" && !s.assignedToMe && (
+          <Text className="text-xs text-general-200 mt-2">
+            Assign this request to yourself to reply.
+          </Text>
+        )}
       </Section>
 
       {canAct ? (
@@ -133,7 +205,7 @@ const SupportDetailPage = () => {
           {s.status !== "resolved" && s.assignedToMe && (
             <>
               <Field
-                label="Reply to the passenger (they will see this)"
+                label="Closing message to the passenger (they will see this)"
                 value={resolution}
                 onChangeText={setResolution}
                 multiline

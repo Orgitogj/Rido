@@ -2,6 +2,8 @@ import { Tabs } from "expo-router";
 import { Image, ImageSourcePropType, View } from "react-native";
 
 import { icons } from "@/constants";
+import { useI18n } from "@/lib/i18n";
+
 const TabIcon = ({
   source,
   focused,
@@ -29,6 +31,7 @@ const TabIcon = ({
   </View>
 );
 export default function Layout() {
+  const { t } = useI18n();
   return (
     <Tabs
       initialRouteName="home"
@@ -63,7 +66,8 @@ export default function Layout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "Home",
+          title: t("booking.tabs.home"),
+          tabBarAccessibilityLabel: t("booking.tabs.home"),
           headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon source={icons.home} focused={focused} />
@@ -73,7 +77,8 @@ export default function Layout() {
       <Tabs.Screen
         name="rides"
         options={{
-          title: "Rides",
+          title: t("booking.tabs.rides"),
+          tabBarAccessibilityLabel: t("booking.tabs.rides"),
           headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon source={icons.list} focused={focused} />
@@ -83,7 +88,8 @@ export default function Layout() {
       <Tabs.Screen
         name="chat"
         options={{
-          title: "Chat",
+          title: t("booking.tabs.chat"),
+          tabBarAccessibilityLabel: t("booking.tabs.chat"),
           headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon source={icons.chat} focused={focused} />
@@ -93,7 +99,8 @@ export default function Layout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: t("booking.tabs.profile"),
+          tabBarAccessibilityLabel: t("booking.tabs.profile"),
           headerShown: false,
           tabBarIcon: ({ focused }) => (
             <TabIcon source={icons.profile} focused={focused} />

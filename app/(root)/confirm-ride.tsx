@@ -7,20 +7,45 @@ import ListState from "@/components/ListState";
 import RideLayout from "@/components/RideLayout";
 import StripeCheckout from "@/components/StripeCheckout";
 import { ApiRequestError, useApi } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
+import { matchingPlace, usePlacesStore } from "@/lib/places";
 import {
-  formatDistance,
-  priceHeldUntil,
+  coverageProblem,
   type QuoteProblem,
   quoteProblem,
+  secondsUntil,
 } from "@/lib/quoteErrors";
-import { formatCents, formatTime } from "@/lib/utils";
 import { useLocationStore, useRideStore } from "@/store";
 
 import type { QuoteResponse } from "@/shared/contracts";
 
-type Status = "loading" | "ready" | "error";
+type Status = "loading" | "ready" | "expired" | "error";
+
+const Line = ({
+  label,
+  value,
+  strong,
+  last,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  last?: boolean;
+}) => (
+  <View
+    className={`flex flex-row items-center justify-between w-full py-3 ${last ? "" : "border-b border-white"}`}
+  >
+    <Text className="text-lg font-Jakarta flex-1">{label}</Text>
+    <Text
+      className={`text-lg ml-3 ${strong ? "font-JakartaBold text-green-700" : "font-Jakarta"}`}
+    >
+      {value}
+    </Text>
+  </View>
+);
 
 const ConfirmRide = () => {
+  const { t, tn, language, money, km, duration } = useI18n();
   const request = useApi();
   const {
     userAddress,
@@ -31,9 +56,13 @@ const ConfirmRide = () => {
     destinationLongitude,
   } = useLocationStore();
   const { quote, driversNearby, setQuote, clear } = useRideStore();
+  const savedPlaces = usePlacesStore((s) => s.places);
   const [status, setStatus] = useState<Status>("loading");
   const [problem, setProblem] = useState<QuoteProblem | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const latest = useRef(0);
+  const previousFare = useRef<number | null>(null);
 
   const loadQuote = useCallback(async () => {
     if (
@@ -44,17 +73,18 @@ const ConfirmRide = () => {
       !userAddress ||
       !destinationAddress
     ) {
-      setProblem(
-        quoteProblem(
-          null,
-          "Pickup or destination is missing. Go back and choose both.",
-        ),
-      );
+      setProblem({
+        ...quoteProblem(null, t("booking.confirm.missing"), language),
+        message: t("booking.confirm.missing"),
+        retry: false,
+        changeLocations: true,
+      });
       setStatus("error");
       return;
     }
     const id = ++latest.current;
     setStatus("loading");
+    setNotice(null);
     try {
       const result = await request<QuoteResponse>("/api/quotes", {
         body: {
@@ -71,14 +101,28 @@ const ConfirmRide = () => {
         },
       });
       if (id !== latest.current) return;
+      const before = previousFare.current;
+      if (before !== null) {
+        setNotice(
+          before === result.quote.fareCents
+            ? t("booking.confirm.priceSame")
+            : t("booking.confirm.priceChanged", {
+                previous: money(before),
+                current: money(result.quote.fareCents),
+              }),
+        );
+      }
+      previousFare.current = result.quote.fareCents;
       setQuote(result.quote, result.driversNearby);
+      setNow(Date.now());
       setStatus("ready");
     } catch (e) {
       if (id !== latest.current) return;
       setProblem(
         quoteProblem(
           e instanceof ApiRequestError ? e.code : null,
-          e instanceof Error ? e.message : "Couldn't get a price.",
+          e instanceof Error ? e.message : t("errors.generic"),
+          language,
         ),
       );
       setStatus("error");
@@ -86,6 +130,9 @@ const ConfirmRide = () => {
   }, [
     request,
     setQuote,
+    t,
+    money,
+    language,
     userAddress,
     userLatitude,
     userLongitude,
@@ -95,38 +142,65 @@ const ConfirmRide = () => {
   ]);
 
   useEffect(() => {
+    previousFare.current = null;
     loadQuote();
   }, [loadQuote]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [status]);
+
+  const secondsLeft = quote ? secondsUntil(quote.expiresAt, now) : 0;
+
+  useEffect(() => {
+    if (status === "ready" && quote && secondsLeft === 0) setStatus("expired");
+  }, [status, quote, secondsLeft]);
 
   const onRequested = (rideId: string) => {
     clear();
     router.replace({ pathname: "/(root)/ride/[id]", params: { id: rideId } });
   };
 
+  const savedPlaceOutside =
+    problem !== null &&
+    coverageProblem(problem.code) &&
+    matchingPlace(
+      savedPlaces,
+      problem.code === "PICKUP_OUTSIDE_SERVICE_AREA"
+        ? { latitude: userLatitude, longitude: userLongitude }
+        : { latitude: destinationLatitude, longitude: destinationLongitude },
+    ) !== null;
+
+  const minutesLeft = Math.floor(secondsLeft / 60);
+
   return (
-    <RideLayout title="Confirm your ride" snapPoints={["60%", "85%"]}>
+    <RideLayout title={t("booking.confirm.title")} snapPoints={["60%", "85%"]}>
       {status === "loading" && (
-        <ListState kind="loading" message="Getting a price for your trip…" />
+        <ListState kind="loading" message={t("booking.confirm.loading")} />
       )}
       {status === "error" && problem && (
-        <View
-          className="bg-white rounded-2xl p-5"
-          accessibilityLiveRegion="polite"
-        >
+        <View className="bg-white rounded-2xl p-5" accessibilityRole="alert">
           <Text className="text-lg font-JakartaBold">{problem.title}</Text>
           <Text className="text-base text-general-200 mt-2">
             {problem.message}
           </Text>
+          {savedPlaceOutside && (
+            <Text className="text-sm text-general-200 mt-2">
+              {t("places.outsideCoverage")}
+            </Text>
+          )}
           {problem.retry && (
             <CustomButton
-              title="Try again"
+              title={t("common.retry")}
               className="mt-4"
               onPress={loadQuote}
             />
           )}
           {problem.changeLocations && (
             <CustomButton
-              title="Change pickup or destination"
+              title={t("booking.confirm.changeLocations")}
               bgVariant={problem.retry ? "outline" : "primary"}
               textVariant={problem.retry ? "primary" : "default"}
               className="mt-3"
@@ -135,54 +209,67 @@ const ConfirmRide = () => {
           )}
         </View>
       )}
+      {status === "expired" && (
+        <View className="bg-white rounded-2xl p-5" accessibilityRole="alert">
+          <Text className="text-base">{t("booking.confirm.expired")}</Text>
+          <CustomButton
+            title={t("booking.confirm.getNewPrice")}
+            className="mt-4"
+            onPress={loadQuote}
+          />
+        </View>
+      )}
       {status === "ready" && quote && (
         <View>
+          {notice && (
+            <View
+              className="bg-orange-100 rounded-xl p-3 mb-3"
+              accessibilityRole="alert"
+            >
+              <Text className="text-sm text-orange-800">{notice}</Text>
+            </View>
+          )}
           <View className="flex flex-col w-full py-3 px-5 rounded-3xl bg-general-600">
-            <View className="flex flex-row items-center justify-between w-full border-b border-white py-3">
-              <Text className="text-lg font-Jakarta">Price</Text>
-              <Text className="text-lg font-JakartaBold text-[#0CC25F]">
-                {formatCents(quote.fareCents)}
-              </Text>
-            </View>
-            <View className="flex flex-row items-center justify-between w-full border-b border-white py-3">
-              <Text className="text-lg font-Jakarta">Route distance</Text>
-              <Text className="text-lg font-Jakarta">
-                {formatDistance(quote.distanceMeters)}
-              </Text>
-            </View>
-            <View className="flex flex-row items-center justify-between w-full border-b border-white py-3">
-              <Text className="text-lg font-Jakarta">Est. trip time</Text>
-              <Text className="text-lg font-Jakarta">
-                {formatTime(quote.durationSeconds / 60)}
-              </Text>
-            </View>
-            <View className="flex flex-row items-center justify-between w-full py-3">
-              <Text className="text-lg font-Jakarta">
-                Drivers online nearby
-              </Text>
-              <Text className="text-lg font-Jakarta">{driversNearby ?? 0}</Text>
-            </View>
+            <Line
+              label={t("booking.confirm.price")}
+              value={money(quote.fareCents)}
+              strong
+            />
+            <Line
+              label={t("booking.confirm.distance")}
+              value={km(quote.distanceMeters)}
+            />
+            <Line
+              label={t("booking.confirm.tripTime")}
+              value={duration(quote.durationSeconds / 60)}
+            />
+            <Line
+              label={t("booking.confirm.driversNearby")}
+              value={String(driversNearby ?? 0)}
+              last
+            />
           </View>
 
           <Text className="text-sm text-general-200 mt-4">
             {driversNearby
-              ? "We'll offer your ride to the nearest available driver."
-              : "No drivers are online near you right now. You can still request: we'll search for 2 minutes and release the hold if nobody accepts."}
+              ? t("booking.confirm.willOffer")
+              : t("booking.confirm.noDrivers")}
           </Text>
           <Text className="text-sm text-general-200 mt-2">
-            This is the price you'll pay. Your card is authorized for exactly
-            this amount when you request and charged only when the trip is
-            completed. The price is held for about{" "}
-            {priceHeldUntil(quote.expiresAt)} more minutes.
+            {t("booking.confirm.priceNote")}{" "}
+            {minutesLeft >= 1
+              ? tn("booking.confirm.heldFor", minutesLeft)
+              : t("booking.confirm.heldSeconds")}
           </Text>
 
           <StripeCheckout
             quoteId={quote.id}
             fareCents={quote.fareCents}
             onRequested={onRequested}
+            onExpired={() => setStatus("expired")}
           />
           <CustomButton
-            title="Refresh price"
+            title={t("booking.confirm.refresh")}
             bgVariant="outline"
             textVariant="primary"
             className="mb-10"

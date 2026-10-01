@@ -35,7 +35,23 @@
       ],
       "expo-web-browser",
       "expo-asset",
-      "@clerk/expo"
+      "@clerk/expo",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "While you drive, your location is used to match you with nearby riders and to show riders your approximate position and arrival time.",
+          "locationAlwaysAndWhenInUsePermission": "If you turn on background sharing, your location keeps updating while you are online or on a ride, even when the app is in the background.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0286FF"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

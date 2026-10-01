@@ -13,8 +13,8 @@ import OfferCard from "@/components/OfferCard";
 import StatusBadge from "@/components/StatusBadge";
 import TrackingStatus from "@/components/TrackingStatus";
 import { useDriverDashboard } from "@/lib/driver";
-import { APPLICATION_STATUS } from "@/lib/driverVerification";
-import { ApiRequestError, useApi } from "@/lib/fetch";
+import { useApi } from "@/lib/fetch";
+import { type TKey, useI18n } from "@/lib/i18n";
 import { usePushStatus } from "@/lib/notifications";
 import { formatRating } from "@/lib/ratingText";
 import {
@@ -22,14 +22,25 @@ import {
   foregroundPermission,
   useDriverTracking,
 } from "@/lib/tracking";
+import {
+  type DriverApplication,
+  type DriverDashboard,
+  documentKinds,
+} from "@/shared/contracts";
 
-import type { DriverApplication, DriverDashboard } from "@/shared/contracts";
+class LocalProblem extends Error {
+  constructor(public key: TKey) {
+    super(key);
+  }
+}
 
 const DriverScreen = () => {
+  const { t, language, error: errorText, queryError } = useI18n();
   const { user } = useUser();
   const { getToken } = useAuth();
   const request = useApi();
-  const { data, error, receivedAt, refresh, replace } = useDriverDashboard();
+  const { data, error, errorCode, receivedAt, refresh, replace } =
+    useDriverDashboard();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [explaining, setExplaining] = useState(false);
@@ -47,9 +58,7 @@ const DriverScreen = () => {
       const next = await fn();
       if (next) replace(next);
     } catch (e) {
-      setMessage(
-        e instanceof ApiRequestError ? e.message : "Something went wrong.",
-      );
+      setMessage(e instanceof LocalProblem ? t(e.key) : errorText(e));
       refresh();
     } finally {
       setBusy(false);
@@ -84,30 +93,18 @@ const DriverScreen = () => {
       }
       const permission = await foregroundPermission(false);
       if (permission === "services_off") {
-        throw new ApiRequestError(
-          0,
-          "LOCATION",
-          "Turn on location services to go online.",
-        );
+        throw new LocalProblem("driver.locationServicesOff");
       }
       if (permission === "unknown") {
         setExplaining(true);
         return;
       }
       if (permission === "denied") {
-        throw new ApiRequestError(
-          0,
-          "LOCATION",
-          "Location permission is off. Enable it in Settings to go online.",
-        );
+        throw new LocalProblem("driver.locationDenied");
       }
       const fix = await currentFix();
       if (!fix) {
-        throw new ApiRequestError(
-          0,
-          "LOCATION",
-          "Couldn't get your position. Check that GPS is on and try again.",
-        );
+        throw new LocalProblem("driver.noFix");
       }
       return request<DriverDashboard>("/api/driver/availability", {
         body: {
@@ -140,6 +137,13 @@ const DriverScreen = () => {
   const profile = data?.profile;
   const activeRide = data?.activeRide;
   const offer = data?.offer;
+  const expired = profile?.status === "approved" && !profile.eligible;
+  const requirementLabel = (key: string, fallback: string) =>
+    key === "vehicle"
+      ? t("driver.requirementVehicle")
+      : documentKinds.find((kind) => kind === key)
+        ? t(`driver.documents.kind.${key as (typeof documentKinds)[number]}`)
+        : fallback;
 
   return (
     <SafeAreaView className="flex-1 bg-general-500">
@@ -149,25 +153,37 @@ const DriverScreen = () => {
         keyboardShouldPersistTaps="handled"
       >
         <View className="flex flex-row items-center justify-between my-5">
-          <Text className="text-2xl font-JakartaExtraBold">Drive</Text>
+          <Text
+            className="text-2xl font-JakartaExtraBold flex-1"
+            accessibilityRole="header"
+          >
+            {t("driver.title")}
+          </Text>
           <CustomButton
-            title="Rider mode"
+            title={t("driver.riderMode")}
             bgVariant="outline"
             textVariant="primary"
-            className="w-36"
+            className="w-40"
             onPress={() => router.replace("/(root)/(tabs)/home")}
           />
         </View>
 
         {!data && !error && (
-          <ListState kind="loading" message="Loading your driver account…" />
+          <ListState kind="loading" message={t("driver.loading")} />
         )}
         {!data && error && (
-          <ListState kind="error" message={error} onRetry={refresh} />
+          <ListState
+            kind="error"
+            message={queryError({ error, errorCode })}
+            onRetry={refresh}
+          />
         )}
         {data && error && (
-          <Text className="text-xs text-orange-700 mb-3">
-            Reconnecting… {error}
+          <Text
+            className="text-xs text-orange-800 mb-3"
+            accessibilityLiveRegion="polite"
+          >
+            {t("driver.reconnecting")}
           </Text>
         )}
 
@@ -180,20 +196,28 @@ const DriverScreen = () => {
 
         {profile && (editing || !profile.eligible) && (
           <View className="bg-white rounded-2xl p-5">
-            <Text className="text-lg font-JakartaBold">
-              {profile.status === "approved" && !profile.eligible
-                ? "Approval expired"
-                : APPLICATION_STATUS[profile.status].title}
+            {!profile.eligible && (
+              <Text className="text-xs font-JakartaSemiBold text-general-200 mb-1">
+                {t("driver.whyOffline")}
+              </Text>
+            )}
+            <Text
+              className="text-lg font-JakartaBold"
+              accessibilityRole="header"
+            >
+              {expired
+                ? t("driver.status.expired_title")
+                : t(`driver.status.${profile.status}_title`)}
             </Text>
             <Text className="text-base text-general-200 mt-2">
-              {profile.status === "approved" && !profile.eligible
-                ? "One of your documents has expired. Start an update and upload a current document."
-                : APPLICATION_STATUS[profile.status].body}
+              {expired
+                ? t("driver.status.expired_body")
+                : t(`driver.status.${profile.status}_body`)}
             </Text>
             {profile.applicantMessage && (
               <View className="bg-general-500 rounded-xl p-3 mt-3">
                 <Text className="text-sm font-JakartaSemiBold">
-                  Message from the review team
+                  {t("driver.reviewMessage")}
                 </Text>
                 <Text className="text-sm mt-1">{profile.applicantMessage}</Text>
               </View>
@@ -204,13 +228,6 @@ const DriverScreen = () => {
               {profile.vehicleYear ? ` (${profile.vehicleYear})` : ""} ·{" "}
               {profile.vehiclePlate}
             </Text>
-            {profile.ineligibleReasons.length > 0 &&
-              profile.status !== "draft" &&
-              profile.status !== "changes_requested" && (
-                <Text className="text-sm text-general-200 mt-2">
-                  {profile.ineligibleReasons.join(" ")}
-                </Text>
-              )}
             {(profile.canEdit || profile.status === "submitted") && (
               <View className="mt-3">
                 {profile.requirements.map((r) => (
@@ -218,14 +235,14 @@ const DriverScreen = () => {
                     key={r.key}
                     className={`text-sm ${r.met ? "text-green-700" : "text-general-200"}`}
                   >
-                    {r.met ? "✓" : "○"} {r.label}
+                    {r.met ? "✓" : "○"} {requirementLabel(r.key, r.label)}
                   </Text>
                 ))}
               </View>
             )}
             {profile.canEdit && !editing && (
               <CustomButton
-                title="Edit details"
+                title={t("driver.editDetails")}
                 bgVariant="outline"
                 textVariant="primary"
                 className="mt-4"
@@ -234,7 +251,7 @@ const DriverScreen = () => {
             )}
             {profile.canEdit && (
               <CustomButton
-                title={busy ? "…" : "Submit for review"}
+                title={busy ? "…" : t("driver.submit")}
                 disabled={busy || !profile.canSubmit}
                 className="mt-3"
                 onPress={submitApplication}
@@ -242,12 +259,12 @@ const DriverScreen = () => {
             )}
             {profile.canEdit && !profile.canSubmit && (
               <Text className="text-xs text-general-200 mt-2">
-                Complete every item above to submit.
+                {t("driver.completeAll")}
               </Text>
             )}
             {profile.canReopen && (
               <CustomButton
-                title={busy ? "…" : "Start an update"}
+                title={busy ? "…" : t("driver.startUpdate")}
                 bgVariant="outline"
                 textVariant="primary"
                 disabled={busy}
@@ -257,12 +274,11 @@ const DriverScreen = () => {
             )}
             {profile.status === "approved" && profile.canReopen && (
               <Text className="text-xs text-general-200 mt-2">
-                Starting an update takes you off the road until an operator
-                approves it again.
+                {t("driver.updateNote")}
               </Text>
             )}
             <Text className="text-xs text-general-200 mt-4">
-              Your account ID:
+              {t("driver.accountId")}
             </Text>
             <Text selectable className="text-xs font-JakartaSemiBold">
               {user?.id}
@@ -296,7 +312,7 @@ const DriverScreen = () => {
           !profile.online &&
           !activeRide && (
             <CustomButton
-              title="Update vehicle or documents"
+              title={t("driver.updateVehicle")}
               bgVariant="outline"
               textVariant="primary"
               className="mb-5"
@@ -307,19 +323,25 @@ const DriverScreen = () => {
         {profile && ((profile.eligible && !editing) || activeRide) && (
           <>
             <View className="bg-white rounded-2xl p-5">
-              <Text className="text-lg font-JakartaBold">
-                {profile.online ? "You're online" : "You're offline"}
+              <Text
+                className="text-lg font-JakartaBold"
+                accessibilityRole="header"
+                accessibilityLiveRegion="polite"
+              >
+                {profile.online ? t("driver.online") : t("driver.offline")}
               </Text>
               <Text className="text-sm text-general-200 mt-1">
                 {profile.online
-                  ? "You'll receive ride requests near you. Your location is shared while you're online."
-                  : "Go online to start receiving ride requests near you."}
+                  ? t("driver.onlineBody")
+                  : t("driver.offlineBody")}
               </Text>
               <Text className="text-sm text-general-200 mt-1">
-                Your rating: {formatRating(profile.rating)}
+                {t("driver.yourRating", {
+                  rating: formatRating(profile.rating, language),
+                })}
               </Text>
               <CustomButton
-                title="View earnings"
+                title={t("driver.viewEarnings")}
                 bgVariant="outline"
                 textVariant="primary"
                 className="mt-3"
@@ -328,7 +350,11 @@ const DriverScreen = () => {
               {(profile.eligible || profile.online) && (
                 <CustomButton
                   title={
-                    busy ? "…" : profile.online ? "Go offline" : "Go online"
+                    busy
+                      ? "…"
+                      : profile.online
+                        ? t("driver.goOffline")
+                        : t("driver.goOnline")
                   }
                   bgVariant={profile.online ? "outline" : "success"}
                   textVariant={profile.online ? "primary" : "default"}
@@ -339,8 +365,7 @@ const DriverScreen = () => {
               )}
               {!profile.eligible && activeRide && (
                 <Text className="text-sm text-general-200 mt-3">
-                  You can finish your current trip. You won't receive new
-                  requests.
+                  {t("driver.finishOnly")}
                 </Text>
               )}
             </View>
@@ -348,29 +373,23 @@ const DriverScreen = () => {
             {explaining && (
               <View className="bg-white rounded-2xl p-5 mt-5">
                 <Text className="text-lg font-JakartaBold">
-                  Share your location to drive
+                  {t("driver.locationTitle")}
                 </Text>
                 <Text className="text-sm text-general-200 mt-2">
-                  While you are online or on a ride, we use your location to
-                  offer you nearby requests and to show your approximate
-                  position and arrival time to your passenger. Sharing stops
-                  when you go offline.
+                  {t("driver.locationBody")}
                 </Text>
                 <CustomButton
-                  title="Allow location"
+                  title={t("driver.allowLocation")}
                   className="mt-4"
                   onPress={async () => {
                     setExplaining(false);
                     const result = await foregroundPermission(true);
                     if (result === "granted") setOnline(true);
-                    else
-                      setMessage(
-                        "Location permission is needed to go online. You can enable it in Settings.",
-                      );
+                    else setMessage(t("driver.locationNeeded"));
                   }}
                 />
                 <CustomButton
-                  title="Not now"
+                  title={t("driver.notNow")}
                   bgVariant="outline"
                   textVariant="primary"
                   className="mt-3"
@@ -390,17 +409,19 @@ const DriverScreen = () => {
             {pushStatus !== "registered" && pushStatus !== "idle" && (
               <Text className="text-xs text-general-200 mt-3">
                 {pushStatus === "needs_dev_build"
-                  ? "Ride request notifications need a development build on Android. Keep this screen open."
+                  ? t("driver.pushDevBuild")
                   : pushStatus === "denied"
-                    ? "Notifications are off, so you'll only see requests while this screen is open."
-                    : "Notifications aren't set up on this device. Keep this screen open."}
+                    ? t("driver.pushDenied")
+                    : t("driver.pushUnavailable")}
               </Text>
             )}
 
             {activeRide && (
               <View className="bg-white rounded-2xl p-5 mt-5">
                 <View className="flex flex-row items-center justify-between">
-                  <Text className="text-lg font-JakartaBold">Current ride</Text>
+                  <Text className="text-lg font-JakartaBold">
+                    {t("driver.currentRide")}
+                  </Text>
                   <StatusBadge status={activeRide.status} />
                 </View>
                 <Text
@@ -410,7 +431,7 @@ const DriverScreen = () => {
                   {activeRide.pickup.address} → {activeRide.destination.address}
                 </Text>
                 <CustomButton
-                  title="Open ride"
+                  title={t("driver.openRide")}
                   className="mt-4"
                   onPress={() =>
                     router.push({
@@ -433,7 +454,7 @@ const DriverScreen = () => {
             )}
 
             {profile.online && !offer && !activeRide && (
-              <ListState kind="loading" message="Waiting for ride requests…" />
+              <ListState kind="loading" message={t("driver.waiting")} />
             )}
 
             <DriverTrips />
@@ -442,7 +463,7 @@ const DriverScreen = () => {
 
         {message && (
           <Text
-            className="text-sm text-red-500 mt-4"
+            className="text-sm text-red-600 mt-4"
             accessibilityLiveRegion="polite"
           >
             {message}

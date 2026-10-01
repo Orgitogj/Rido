@@ -13,14 +13,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import CustomButton from "@/components/CustomButton";
 import ListState from "@/components/ListState";
-import { ApiRequestError, apiBaseUrl, useApi, useApiQuery } from "@/lib/fetch";
-import {
-  EMERGENCY_NOTICE,
-  SAFETY_CATEGORY_LABEL,
-  SAFETY_STATUS_LABEL,
-  shareUrl,
-} from "@/lib/safetyText";
-import { formatDate } from "@/lib/utils";
+import ScreenHeader from "@/components/ScreenHeader";
+import StatusBadge from "@/components/StatusBadge";
+import { apiBaseUrl, useApi, useApiQuery } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
+import { shareUrl } from "@/lib/safetyText";
 import {
   SAFETY_RULES,
   safetyCategories,
@@ -41,9 +38,6 @@ const Row = ({ label, value }: { label: string; value: string }) => (
   </View>
 );
 
-const errorText = (e: unknown) =>
-  e instanceof ApiRequestError ? e.message : "Something went wrong. Try again.";
-
 const ReportForm = ({
   rideId,
   initialCategory,
@@ -55,6 +49,7 @@ const ReportForm = ({
   onSent: () => void;
   onCancel: () => void;
 }) => {
+  const { t, error: errorText } = useI18n();
   const request = useApi();
   const [category, setCategory] = useState<SafetyCategory>(initialCategory);
   const [description, setDescription] = useState("");
@@ -80,7 +75,9 @@ const ReportForm = ({
 
   return (
     <View className="bg-white rounded-2xl p-5 mt-4">
-      <Text className="text-base font-JakartaBold">Report a safety issue</Text>
+      <Text className="text-base font-JakartaBold" accessibilityRole="header">
+        {t("safety.report")}
+      </Text>
       <View
         className="flex flex-row flex-wrap mt-3"
         accessibilityRole="radiogroup"
@@ -91,10 +88,10 @@ const ReportForm = ({
             onPress={() => setCategory(c)}
             accessibilityRole="radio"
             accessibilityState={{ checked: category === c }}
-            className={`px-3 py-2 rounded-full mr-2 mb-2 border ${category === c ? "bg-[#0286FF] border-[#0286FF]" : "border-neutral-300"}`}
+            className={`px-3 min-h-[44px] justify-center rounded-full mr-2 mb-2 border ${category === c ? "bg-[#0286FF] border-[#0286FF]" : "border-neutral-400"}`}
           >
             <Text className={category === c ? "text-white text-sm" : "text-sm"}>
-              {SAFETY_CATEGORY_LABEL[c]}
+              {t(`safety.category.${c}`)}
             </Text>
           </Pressable>
         ))}
@@ -102,16 +99,18 @@ const ReportForm = ({
       <TextInput
         value={description}
         onChangeText={setDescription}
-        placeholder="What happened? Include the time and any details that help."
+        placeholder={t("safety.placeholder")}
         multiline
         maxLength={SAFETY_RULES.descriptionMaxLength}
-        accessibilityLabel="Describe what happened"
-        className="border border-neutral-200 rounded-xl p-3 mt-2 min-h-[110px]"
+        accessibilityLabel={t("safety.describe")}
+        className="border border-neutral-300 rounded-xl p-3 mt-2 min-h-[110px]"
       />
       <Text className="text-xs text-general-200 mt-1">
-        {length}/{SAFETY_RULES.descriptionMaxLength} · at least{" "}
-        {SAFETY_RULES.descriptionMinLength} characters. Our safety team reviews
-        every report; the other person isn&apos;t told who reported.
+        {t("safety.counter", {
+          length,
+          max: SAFETY_RULES.descriptionMaxLength,
+          min: SAFETY_RULES.descriptionMinLength,
+        })}
       </Text>
       {error && (
         <Text
@@ -122,13 +121,19 @@ const ReportForm = ({
         </Text>
       )}
       <CustomButton
-        title={sending ? "Sending…" : error ? "Try again" : "Send report"}
+        title={
+          sending
+            ? t("common.sending")
+            : error
+              ? t("common.retry")
+              : t("safety.send")
+        }
         disabled={sending || length < SAFETY_RULES.descriptionMinLength}
         className="mt-3"
         onPress={submit}
       />
       <CustomButton
-        title="Cancel"
+        title={t("common.cancel")}
         bgVariant="outline"
         textVariant="primary"
         className="mt-2"
@@ -146,6 +151,7 @@ const ShareSection = ({
   view: SafetyView;
   onChanged: () => void;
 }) => {
+  const { t, tn, error: errorText, dateTime } = useI18n();
   const request = useApi();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +170,7 @@ const ShareSection = ({
       setLatest(url);
       onChanged();
       await Share.share({
-        message: `Follow my trip until I arrive: ${url}`,
+        message: t("safety.share.message", { url }),
       }).catch(() => undefined);
     } catch (e) {
       setError(errorText(e));
@@ -190,14 +196,14 @@ const ShareSection = ({
   if (!view.canShare && active.length === 0) return null;
   return (
     <View className="bg-white rounded-2xl p-5 mt-4">
-      <Text className="text-base font-JakartaBold">Share trip status</Text>
+      <Text className="text-base font-JakartaBold" accessibilityRole="header">
+        {t("safety.share.title")}
+      </Text>
       <Text className="text-xs text-general-200 mt-1">
-        Anyone with the link sees the trip status, your driver&apos;s first
-        name, vehicle and plate, the destination and the driver&apos;s
-        approximate position while the trip is active. They can&apos;t see
-        payments, messages or your account. Links stop working when you stop
-        sharing, after {SAFETY_RULES.shareTtlMinutes / 60} hours, or{" "}
-        {SAFETY_RULES.shareAfterTripMinutes} minutes after the trip ends.
+        {t("safety.share.body", {
+          hours: SAFETY_RULES.shareTtlMinutes / 60,
+          minutes: SAFETY_RULES.shareAfterTripMinutes,
+        })}
       </Text>
       {latest && (
         <Text className="text-xs mt-2" selectable>
@@ -210,15 +216,18 @@ const ShareSection = ({
           className="flex flex-row items-center justify-between border-t border-general-700 mt-2 pt-2"
         >
           <Text className="text-sm flex-1">
-            Link active until {formatDate(s.expiresAt)} · {s.views} view
-            {s.views === 1 ? "" : "s"}
+            {t("safety.share.active", { date: dateTime(s.expiresAt) })} ·{" "}
+            {tn("safety.share.views", s.views)}
           </Text>
           <Pressable
             onPress={() => revoke(s.id)}
             disabled={busy}
             accessibilityRole="button"
+            className="min-h-[44px] justify-center pl-3"
           >
-            <Text className="text-sm text-red-500">Stop sharing</Text>
+            <Text className="text-sm text-red-600">
+              {t("safety.share.stop")}
+            </Text>
           </Pressable>
         </View>
       ))}
@@ -232,7 +241,7 @@ const ShareSection = ({
       )}
       {view.canShare && (
         <CustomButton
-          title={busy ? "Working…" : "Create a share link"}
+          title={busy ? t("safety.share.working") : t("safety.share.create")}
           disabled={busy}
           className="mt-3"
           onPress={create}
@@ -243,6 +252,7 @@ const ShareSection = ({
 };
 
 const SafetyScreen = () => {
+  const { t, tn, queryError, dateTime } = useI18n();
   const { id } = useLocalSearchParams<{ id: string }>();
   const rideId = String(id);
   const query = useApiQuery<SafetyView>(`/api/rides/${rideId}/safety`, {
@@ -266,30 +276,21 @@ const SafetyScreen = () => {
         className="px-5"
         contentContainerStyle={{ paddingBottom: 60 }}
       >
-        <View className="flex flex-row items-center justify-between my-5">
-          <Text className="text-2xl font-JakartaExtraBold">Safety</Text>
-          <CustomButton
-            title="Back"
-            bgVariant="outline"
-            textVariant="primary"
-            className="w-24"
-            onPress={back}
-          />
-        </View>
+        <ScreenHeader title={t("safety.title")} onBack={back} />
 
         <View className="bg-red-50 rounded-2xl p-4" accessibilityRole="alert">
           <Text className="text-sm text-red-700 font-JakartaSemiBold">
-            {EMERGENCY_NOTICE}
+            {t("safety.emergency")}
           </Text>
         </View>
 
         {!v && query.status === "loading" && (
-          <ListState kind="loading" message="Loading…" />
+          <ListState kind="loading" message={t("common.loading")} />
         )}
         {!v && query.status === "error" && (
           <ListState
             kind="error"
-            message={query.error}
+            message={queryError(query)}
             onRetry={query.refetch}
           />
         )}
@@ -297,31 +298,37 @@ const SafetyScreen = () => {
         {v && (
           <>
             <View className="bg-white rounded-2xl px-5 py-3 mt-4">
-              <Row label="Ride ID" value={v.rideId} />
-              <Row label="Status" value={v.status.replace(/_/g, " ")} />
+              <Row label={t("safety.rideId")} value={v.rideId} />
+              <View className="flex flex-row justify-between items-center py-2 border-b border-general-700">
+                <Text className="text-sm text-general-200">
+                  {t("safety.rideStatus")}
+                </Text>
+                <StatusBadge status={v.status} />
+              </View>
               {v.driver && (
                 <>
-                  <Row label="Driver" value={v.driver.name} />
-                  <Row label="Vehicle" value={v.driver.vehicle} />
-                  <Row label="Plate" value={v.driver.plate} />
+                  <Row label={t("safety.driver")} value={v.driver.name} />
+                  <Row label={t("safety.vehicle")} value={v.driver.vehicle} />
+                  <Row label={t("safety.plate")} value={v.driver.plate} />
                 </>
               )}
               {v.passengerName && (
-                <Row label="Passenger" value={v.passengerName} />
+                <Row label={t("safety.passenger")} value={v.passengerName} />
               )}
               {!v.currentParticipant && (
                 <Text className="text-xs text-general-200 py-2">
-                  You&apos;re no longer assigned to this ride, but you can still
-                  report what happened while you were.
+                  {t("safety.notAssigned")}
                 </Text>
               )}
             </View>
 
             {sent && (
               <View className="bg-green-50 rounded-2xl p-4 mt-4">
-                <Text className="text-sm text-green-700">
-                  Thanks. Your report was sent to our safety team. You can
-                  follow its status below.
+                <Text
+                  className="text-sm text-green-700"
+                  accessibilityLiveRegion="polite"
+                >
+                  {t("safety.sent")}
                 </Text>
               </View>
             )}
@@ -340,7 +347,7 @@ const SafetyScreen = () => {
             ) : v.canReport ? (
               <View className="mt-4">
                 <CustomButton
-                  title="Report a safety issue"
+                  title={t("safety.report")}
                   bgVariant="danger"
                   onPress={() => {
                     setSent(false);
@@ -348,7 +355,7 @@ const SafetyScreen = () => {
                   }}
                 />
                 <CustomButton
-                  title="Contact support"
+                  title={t("safety.contactSupport")}
                   bgVariant="outline"
                   textVariant="primary"
                   className="mt-3"
@@ -366,14 +373,13 @@ const SafetyScreen = () => {
                 />
                 {v.reportBy && (
                   <Text className="text-xs text-general-200 mt-2">
-                    Reports for this ride can be sent until{" "}
-                    {formatDate(v.reportBy)}.
+                    {t("safety.reportUntil", { date: dateTime(v.reportBy) })}
                   </Text>
                 )}
               </View>
             ) : (
               <Text className="text-sm text-general-200 mt-4">
-                The reporting period for this ride has ended.
+                {t("safety.reportEnded")}
               </Text>
             )}
 
@@ -382,28 +388,31 @@ const SafetyScreen = () => {
             )}
 
             <View className="bg-white rounded-2xl px-5 py-3 mt-4">
-              <Text className="text-base font-JakartaBold py-2">
-                Your reports
+              <Text
+                className="text-base font-JakartaBold py-2"
+                accessibilityRole="header"
+              >
+                {t("safety.yourReports")}
               </Text>
               {v.reports.length === 0 && (
                 <Text className="text-sm text-general-200 pb-2">
-                  You haven&apos;t reported anything for this ride.
+                  {t("safety.noReports")}
                 </Text>
               )}
               {v.reports.map((r) => (
                 <View key={r.id} className="py-2 border-t border-general-700">
                   <View className="flex flex-row justify-between">
                     <Text className="text-sm font-JakartaSemiBold">
-                      {SAFETY_CATEGORY_LABEL[r.category]}
+                      {t(`safety.category.${r.category}`)}
                     </Text>
                     <Text className="text-sm text-general-200">
-                      {SAFETY_STATUS_LABEL[r.status]}
+                      {t(`safety.status.${r.status}`)}
                     </Text>
                   </View>
                   <Text className="text-xs text-general-200 mt-1">
-                    Sent {formatDate(r.createdAt)}
+                    {t("safety.sentOn", { date: dateTime(r.createdAt) })}
                     {r.reportedMessages > 0
-                      ? ` · ${r.reportedMessages} message${r.reportedMessages === 1 ? "" : "s"} attached`
+                      ? ` · ${tn("safety.attached", r.reportedMessages)}`
                       : ""}
                   </Text>
                 </View>

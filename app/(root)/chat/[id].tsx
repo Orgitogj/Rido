@@ -15,29 +15,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import CustomButton from "@/components/CustomButton";
 import ListState from "@/components/ListState";
-import { ApiRequestError, useApi } from "@/lib/fetch";
-import { SAFETY_CATEGORY_LABEL } from "@/lib/safetyText";
+import { useApi } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
 import { useChat } from "@/lib/useChat";
 import {
   CHAT_RULES,
-  type ChatState,
   SAFETY_RULES,
   safetyCategories,
   type SafetyCategory,
 } from "@/shared/contracts";
 
 import type { ChatItem } from "@/lib/chatThread";
-
-const STATE_TEXT: Record<Exclude<ChatState, "open">, string> = {
-  waiting: "You can message once a driver accepts your ride.",
-  closed:
-    "This ride has ended. You can read the conversation, but not send new messages.",
-  expired: "This conversation is no longer available.",
-  unavailable: "Messaging isn't available for this ride.",
-};
-
-const time = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 const ReportPanel = ({
   rideId,
@@ -48,6 +36,7 @@ const ReportPanel = ({
   item: ChatItem;
   onClose: (sent: boolean) => void;
 }) => {
+  const { t, error: errorText } = useI18n();
   const request = useApi();
   const [category, setCategory] = useState<SafetyCategory>("harassment");
   const [description, setDescription] = useState("");
@@ -71,9 +60,7 @@ const ReportPanel = ({
       });
       onClose(true);
     } catch (e) {
-      setError(
-        e instanceof ApiRequestError ? e.message : "Couldn't send the report.",
-      );
+      setError(errorText(e, t("chat.reportFailed")));
     } finally {
       setSending(false);
     }
@@ -81,21 +68,26 @@ const ReportPanel = ({
 
   return (
     <View className="bg-white px-4 py-3 border-t border-neutral-200">
-      <Text className="text-base font-JakartaBold">Report this message</Text>
+      <Text className="text-base font-JakartaBold" accessibilityRole="header">
+        {t("chat.reportTitle")}
+      </Text>
       <Text className="text-xs text-general-200 mt-1" numberOfLines={2}>
         “{item.body}”
       </Text>
-      <View className="flex flex-row flex-wrap mt-2">
+      <View
+        className="flex flex-row flex-wrap mt-2"
+        accessibilityRole="radiogroup"
+      >
         {safetyCategories.map((c) => (
           <Pressable
             key={c}
             onPress={() => setCategory(c)}
             accessibilityRole="radio"
             accessibilityState={{ checked: category === c }}
-            className={`px-3 py-1.5 rounded-full mr-2 mb-2 border ${category === c ? "bg-[#0286FF] border-[#0286FF]" : "border-neutral-300"}`}
+            className={`px-3 min-h-[44px] justify-center rounded-full mr-2 mb-2 border ${category === c ? "bg-[#0286FF] border-[#0286FF]" : "border-neutral-400"}`}
           >
             <Text className={category === c ? "text-white text-xs" : "text-xs"}>
-              {SAFETY_CATEGORY_LABEL[c]}
+              {t(`safety.category.${c}`)}
             </Text>
           </Pressable>
         ))}
@@ -103,20 +95,20 @@ const ReportPanel = ({
       <TextInput
         value={description}
         onChangeText={setDescription}
-        placeholder="Anything else we should know? (optional)"
+        placeholder={t("chat.reportDetails")}
         multiline
         maxLength={SAFETY_RULES.descriptionMaxLength}
-        accessibilityLabel="Optional details"
+        accessibilityLabel={t("chat.reportDetailsLabel")}
         className="border border-neutral-200 rounded-xl px-3 py-2 max-h-[100px]"
       />
       <Text className="text-xs text-general-200 mt-1">
-        Our safety team sees only this message, not the rest of your
-        conversation.
+        {t("chat.reportScope")}
       </Text>
       {tooShort && (
         <Text className="text-xs text-red-500 mt-1">
-          Add at least {SAFETY_RULES.descriptionMinLength} characters, or leave
-          it empty.
+          {t("chat.reportTooShort", {
+            count: SAFETY_RULES.descriptionMinLength,
+          })}
         </Text>
       )}
       {error && (
@@ -130,7 +122,13 @@ const ReportPanel = ({
       <View className="flex flex-row mt-2">
         <View className="flex-1 mr-2">
           <CustomButton
-            title={sending ? "Sending…" : error ? "Try again" : "Send report"}
+            title={
+              sending
+                ? t("common.sending")
+                : error
+                  ? t("common.retry")
+                  : t("chat.reportSend")
+            }
             bgVariant="danger"
             disabled={sending || tooShort}
             onPress={submit}
@@ -138,7 +136,7 @@ const ReportPanel = ({
         </View>
         <View className="flex-1">
           <CustomButton
-            title="Cancel"
+            title={t("common.cancel")}
             bgVariant="outline"
             textVariant="primary"
             disabled={sending}
@@ -159,21 +157,22 @@ const Bubble = ({
   onRetry: (clientMessageId: string) => void;
   onReport: (item: ChatItem) => void;
 }) => {
+  const { t, clock } = useI18n();
   const reportable = !item.mine && item.id !== null;
   const failed = item.delivery === "failed";
   const status =
     item.delivery === "sending"
-      ? "Sending…"
+      ? t("common.sending")
       : failed
-        ? (item.error ?? "Not sent. Tap to retry.")
-        : time(item.createdAt);
+        ? t("chat.notSent")
+        : clock(item.createdAt);
   const bubble = (
     <View
       className={`max-w-[80%] rounded-2xl px-4 py-2 ${item.mine ? "bg-[#0286FF] self-end" : "bg-white self-start"} ${failed ? "opacity-70" : ""}`}
     >
       {item.earlierDriver && (
         <Text className="text-[10px] text-general-200 mb-1">
-          Previous driver
+          {t("chat.previousDriver")}
         </Text>
       )}
       <Text
@@ -190,14 +189,14 @@ const Bubble = ({
         <Pressable
           onPress={() => onRetry(item.clientMessageId!)}
           accessibilityRole="button"
-          accessibilityLabel={`Message not sent: ${item.body}. Tap to retry.`}
+          accessibilityLabel={t("chat.notSentLabel", { body: item.body })}
         >
           {bubble}
         </Pressable>
       ) : reportable ? (
         <Pressable
           onLongPress={() => onReport(item)}
-          accessibilityHint="Long press to report this message"
+          accessibilityHint={t("chat.reportHint")}
         >
           {bubble}
         </Pressable>
@@ -208,7 +207,7 @@ const Bubble = ({
         className={`flex flex-row mt-0.5 ${item.mine ? "self-end" : "self-start"}`}
       >
         <Text
-          className={`text-[11px] ${failed ? "text-red-500" : "text-general-200"}`}
+          className={`text-xs ${failed ? "text-red-600" : "text-general-200"}`}
           accessibilityLiveRegion={failed ? "polite" : "none"}
         >
           {status}
@@ -217,10 +216,11 @@ const Bubble = ({
           <Pressable
             onPress={() => onReport(item)}
             accessibilityRole="button"
-            accessibilityLabel="Report this message"
+            accessibilityLabel={t("chat.reportTitle")}
+            hitSlop={14}
             className="ml-3"
           >
-            <Text className="text-[11px] text-red-500">Report</Text>
+            <Text className="text-xs text-red-600">{t("chat.report")}</Text>
           </Pressable>
         )}
       </View>
@@ -229,6 +229,7 @@ const Bubble = ({
 };
 
 const ChatScreen = () => {
+  const { t, language } = useI18n();
   const { id } = useLocalSearchParams<{ id: string }>();
   const rideId = String(id);
   const {
@@ -258,8 +259,8 @@ const ChatScreen = () => {
 
   const title = chat
     ? (chat.counterpartName ??
-      (chat.role === "passenger" ? "Your driver" : "Passenger"))
-    : "Messages";
+      (chat.role === "passenger" ? t("chat.yourDriver") : t("chat.passenger")))
+    : t("chat.title");
 
   const submit = () => {
     const text = draft.trim();
@@ -271,12 +272,17 @@ const ChatScreen = () => {
   return (
     <SafeAreaView className="flex-1 bg-general-500">
       <View className="flex flex-row items-center justify-between px-4 py-3 bg-white">
-        <Pressable onPress={back} accessibilityRole="button" className="pr-3">
-          <Text className="text-base text-[#0286FF]">Back</Text>
+        <Pressable
+          onPress={back}
+          accessibilityRole="button"
+          className="pr-3 min-h-[44px] justify-center"
+        >
+          <Text className="text-base text-[#0066CC]">{t("common.back")}</Text>
         </Pressable>
         <Text
           className="text-lg font-JakartaBold flex-1 text-center"
           numberOfLines={1}
+          accessibilityRole="header"
         >
           {title}
         </Text>
@@ -285,25 +291,24 @@ const ChatScreen = () => {
 
       {connection === "reconnecting" && load === "ready" && (
         <View className="bg-orange-100 px-4 py-2">
-          <Text className="text-xs text-orange-700">
-            Reconnecting… new messages will appear when the connection is back.
+          <Text className="text-xs text-orange-800">
+            {t("chat.reconnecting")}
           </Text>
         </View>
       )}
 
       {load === "loading" && items.length === 0 && (
-        <ListState kind="loading" message="Loading messages…" />
+        <ListState kind="loading" message={t("chat.loading")} />
       )}
       {load === "not_found" && (
-        <ListState
-          kind="empty"
-          message="This conversation isn't available to you."
-        />
+        <ListState kind="empty" message={t("chat.notAvailable")} />
       )}
       {load === "error" && items.length === 0 && (
         <ListState
           kind="error"
-          message={loadError ?? "Couldn't load messages."}
+          message={
+            language === "en" && loadError ? loadError : t("chat.loadFailed")
+          }
           onRetry={reload}
         />
       )}
@@ -336,9 +341,7 @@ const ChatScreen = () => {
             }
             ListEmptyComponent={
               <Text className="text-sm text-general-200 text-center mt-10 px-8">
-                {chat?.canSend
-                  ? "No messages yet. Messages are only shared between you and your current ride partner."
-                  : ""}
+                {chat?.canSend ? t("chat.empty") : ""}
               </Text>
             }
             contentContainerStyle={{ paddingVertical: 8, flexGrow: 1 }}
@@ -350,8 +353,7 @@ const ChatScreen = () => {
                 className="text-sm text-green-700"
                 accessibilityLiveRegion="polite"
               >
-                Report sent to our safety team. You can follow it from the
-                ride&apos;s Safety screen.
+                {t("chat.reportSent")}
               </Text>
             </View>
           )}
@@ -370,7 +372,7 @@ const ChatScreen = () => {
           {chat && chat.state !== "open" && (
             <View className="bg-white px-4 py-3">
               <Text className="text-sm text-general-200">
-                {STATE_TEXT[chat.state]}
+                {t(`chat.state.${chat.state}`)}
               </Text>
             </View>
           )}
@@ -380,15 +382,15 @@ const ChatScreen = () => {
               <TextInput
                 value={draft}
                 onChangeText={setDraft}
-                placeholder="Message"
+                placeholder={t("chat.message")}
                 multiline
                 maxLength={CHAT_RULES.maxLength}
-                accessibilityLabel="Message"
-                className="flex-1 border border-neutral-200 rounded-2xl px-3 py-2 max-h-[120px]"
+                accessibilityLabel={t("chat.message")}
+                className="flex-1 border border-neutral-300 rounded-2xl px-3 py-2 min-h-[44px] max-h-[120px]"
               />
               <View className="w-24 ml-2">
                 <CustomButton
-                  title="Send"
+                  title={t("common.send")}
                   disabled={!draft.trim()}
                   onPress={submit}
                 />

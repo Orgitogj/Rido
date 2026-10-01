@@ -5,18 +5,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import CustomButton from "@/components/CustomButton";
 import ListState from "@/components/ListState";
+import ScreenHeader from "@/components/ScreenHeader";
 import { usePaged } from "@/lib/adminApi";
 import { buildQuery } from "@/lib/adminFormat";
 import {
-  ENTRY_LABEL,
+  EARNINGS_PERIODS,
   type EarningsPeriod,
   formatRate,
-  PERIOD_LABEL,
   periodRange,
-  RIDE_STATE_LABEL,
 } from "@/lib/earningsText";
 import { useApiQuery } from "@/lib/fetch";
-import { formatCents, formatDate } from "@/lib/utils";
+import { type I18n, useI18n } from "@/lib/i18n";
 
 import type { DriverEarningRide, EarningsSummary } from "@/shared/contracts";
 
@@ -31,22 +30,23 @@ const Row = ({
 }) => (
   <View className="flex flex-row justify-between py-1.5">
     <Text
-      className={`text-sm ${strong ? "font-JakartaBold" : "text-general-200"}`}
+      className={`text-sm flex-1 ${strong ? "font-JakartaBold" : "text-general-200"}`}
     >
       {label}
     </Text>
     <Text
-      className={`text-sm ${strong ? "font-JakartaBold" : "font-JakartaSemiBold"}`}
+      className={`text-sm ml-3 ${strong ? "font-JakartaBold" : "font-JakartaSemiBold"}`}
     >
       {value}
     </Text>
   </View>
 );
 
-const signed = (cents: number) =>
-  cents < 0 ? `−${formatCents(-cents)}` : formatCents(cents);
+const signed = (cents: number, money: I18n["money"]) =>
+  cents < 0 ? `−${money(-cents)}` : money(cents);
 
 const RideRow = ({ ride }: { ride: DriverEarningRide }) => {
+  const { t, money, dateTime } = useI18n();
   const [open, setOpen] = useState(false);
   return (
     <View className="border-t border-general-700 py-3">
@@ -54,6 +54,7 @@ const RideRow = ({ ride }: { ride: DriverEarningRide }) => {
         onPress={() => setOpen(!open)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
+        className="min-h-[44px] justify-center"
       >
         <View className="flex flex-row justify-between">
           <Text
@@ -63,44 +64,57 @@ const RideRow = ({ ride }: { ride: DriverEarningRide }) => {
             {ride.pickupAddress} → {ride.destinationAddress}
           </Text>
           <Text className="text-sm font-JakartaBold ml-3">
-            {ride.state === "confirmed" ? signed(ride.netCents) : "—"}
+            {ride.state === "confirmed" ? signed(ride.netCents, money) : "—"}
           </Text>
         </View>
         <Text className="text-xs text-general-200 mt-1">
-          {ride.completedAt ? formatDate(ride.completedAt) : ""} ·{" "}
-          {RIDE_STATE_LABEL[ride.state]}
-          {ride.tip ? ` · tip ${ride.tip.status}` : ""}
-          {ride.disputeOpen ? " · payment disputed" : ""}
+          {ride.completedAt ? `${dateTime(ride.completedAt)} · ` : ""}
+          {t(`driver.earnings.rideState.${ride.state}`)}
+          {ride.tip
+            ? ` · ${ride.tip.status === "paid" ? t("driver.earnings.tipPaid") : t("driver.earnings.tipProcessing")}`
+            : ""}
+          {ride.disputeOpen ? ` · ${t("driver.earnings.disputed")}` : ""}
         </Text>
       </Pressable>
       {open && (
         <View className="bg-general-600 rounded-xl px-3 py-2 mt-2">
           <Row
-            label={ride.state === "confirmed" ? "Fare captured" : "Quoted fare"}
-            value={formatCents(ride.fareCents)}
+            label={
+              ride.state === "confirmed"
+                ? t("driver.earnings.fareCaptured")
+                : t("driver.earnings.quotedFare")
+            }
+            value={money(ride.fareCents)}
           />
           {ride.state === "confirmed" ? (
             <>
               <Row
-                label={`Platform commission (${formatRate(ride.commissionRateBps)}, policy ${ride.policyVersion})`}
-                value={signed(-(ride.commissionCents ?? 0))}
+                label={t("driver.earnings.commission", {
+                  rate: formatRate(ride.commissionRateBps),
+                  version: ride.policyVersion ?? "—",
+                })}
+                value={signed(-(ride.commissionCents ?? 0), money)}
               />
               <Row
-                label="Your share"
-                value={formatCents(ride.driverShareCents ?? 0)}
+                label={t("driver.earnings.yourShare")}
+                value={money(ride.driverShareCents ?? 0)}
               />
             </>
           ) : (
             <Text className="text-xs text-general-200 py-1">
               {ride.state === "pending"
-                ? "Not counted yet: the passenger's payment hasn't been confirmed by the card processor."
-                : "This fare was not charged, so nothing was earned."}
+                ? t("driver.earnings.pendingRide")
+                : t("driver.earnings.notCharged")}
             </Text>
           )}
           {ride.tip && (
             <Row
-              label={`Tip (${ride.tip.status === "paid" ? "paid" : "processing, not counted yet"})`}
-              value={formatCents(ride.tip.amountCents)}
+              label={
+                ride.tip.status === "paid"
+                  ? t("driver.earnings.tipLinePaid")
+                  : t("driver.earnings.tipLineProcessing")
+              }
+              value={money(ride.tip.amountCents)}
             />
           )}
           {ride.entries
@@ -108,11 +122,15 @@ const RideRow = ({ ride }: { ride: DriverEarningRide }) => {
             .map((e, i) => (
               <Row
                 key={i}
-                label={`${ENTRY_LABEL[e.kind]} · ${formatDate(e.occurredAt)}`}
-                value={signed(e.driverAmountCents)}
+                label={`${t(`driver.earnings.entry.${e.kind}`)} · ${dateTime(e.occurredAt)}`}
+                value={signed(e.driverAmountCents, money)}
               />
             ))}
-          <Row label="Net for this ride" value={signed(ride.netCents)} strong />
+          <Row
+            label={t("driver.earnings.netRide")}
+            value={signed(ride.netCents, money)}
+            strong
+          />
         </View>
       )}
     </View>
@@ -120,6 +138,7 @@ const RideRow = ({ ride }: { ride: DriverEarningRide }) => {
 };
 
 const EarningsScreen = () => {
+  const { t, tn, language, queryError, money } = useI18n();
   const [period, setPeriod] = useState<EarningsPeriod>("week");
   const range = useMemo(() => periodRange(period, new Date()), [period]);
   const summary = useApiQuery<EarningsSummary>(
@@ -135,46 +154,40 @@ const EarningsScreen = () => {
         className="px-5"
         contentContainerStyle={{ paddingBottom: 60 }}
       >
-        <View className="flex flex-row items-center justify-between my-5">
-          <Text className="text-2xl font-JakartaExtraBold">Earnings</Text>
-          <CustomButton
-            title="Back"
-            bgVariant="outline"
-            textVariant="primary"
-            className="w-24"
-            onPress={() =>
-              router.canGoBack()
-                ? router.back()
-                : router.replace("/(root)/driver")
-            }
-          />
-        </View>
+        <ScreenHeader
+          title={t("driver.earnings.title")}
+          onBack={() =>
+            router.canGoBack()
+              ? router.back()
+              : router.replace("/(root)/driver")
+          }
+        />
 
-        <View className="flex flex-row flex-wrap">
-          {(Object.keys(PERIOD_LABEL) as EarningsPeriod[]).map((p) => (
+        <View className="flex flex-row flex-wrap" accessibilityRole="tablist">
+          {EARNINGS_PERIODS.map((p) => (
             <Pressable
               key={p}
               onPress={() => setPeriod(p)}
-              accessibilityRole="button"
+              accessibilityRole="tab"
               accessibilityState={{ selected: period === p }}
-              className={`px-3 py-1.5 rounded-full mr-2 mb-2 border ${period === p ? "bg-[#0286FF] border-[#0286FF]" : "bg-white border-neutral-300"}`}
+              className={`px-4 min-h-[44px] justify-center rounded-full mr-2 mb-2 border ${period === p ? "bg-[#0066CC] border-[#0066CC]" : "bg-white border-neutral-400"}`}
             >
               <Text
-                className={`text-xs ${period === p ? "text-white" : "text-neutral-700"}`}
+                className={`text-sm ${period === p ? "text-white" : "text-neutral-700"}`}
               >
-                {PERIOD_LABEL[p]}
+                {t(`driver.earnings.period.${p}`)}
               </Text>
             </Pressable>
           ))}
         </View>
 
         {!s && summary.status === "loading" && (
-          <ListState kind="loading" message="Loading earnings…" />
+          <ListState kind="loading" message={t("driver.earnings.loading")} />
         )}
         {!s && summary.status === "error" && (
           <ListState
             kind="error"
-            message={summary.error}
+            message={queryError(summary)}
             onRetry={summary.refetch}
           />
         )}
@@ -183,105 +196,119 @@ const EarningsScreen = () => {
           <>
             <View className="bg-white rounded-2xl p-5 mt-2">
               <Text className="text-sm text-general-200">
-                Confirmed earnings · {PERIOD_LABEL[period]}
+                {t("driver.earnings.confirmed", {
+                  period: t(`driver.earnings.period.${period}`),
+                })}
               </Text>
               <Text className="text-3xl font-JakartaExtraBold mt-1">
-                {signed(s.confirmed.netCents)}
+                {signed(s.confirmed.netCents, money)}
               </Text>
               <View className="mt-3">
                 <Row
-                  label="Completed rides"
+                  label={t("driver.earnings.completedRides")}
                   value={String(s.confirmed.rides)}
                 />
                 <Row
-                  label="Fares captured"
-                  value={formatCents(s.confirmed.fareCents)}
+                  label={t("driver.earnings.faresCaptured")}
+                  value={money(s.confirmed.fareCents)}
                 />
                 <Row
-                  label={`Platform commission (${formatRate(s.policy.fareCommissionBps)} now)`}
-                  value={signed(-s.confirmed.commissionCents)}
+                  label={t("driver.earnings.commissionNow", {
+                    rate: formatRate(s.policy.fareCommissionBps),
+                  })}
+                  value={signed(-s.confirmed.commissionCents, money)}
                 />
                 <Row
-                  label="Your fare share"
-                  value={formatCents(s.confirmed.driverShareCents)}
-                />
-                <Row label="Tips" value={formatCents(s.confirmed.tipsCents)} />
-                <Row
-                  label="Refund adjustments"
-                  value={signed(s.confirmed.adjustmentsCents)}
+                  label={t("driver.earnings.fareShare")}
+                  value={money(s.confirmed.driverShareCents)}
                 />
                 <Row
-                  label="Payment disputes"
-                  value={signed(s.confirmed.disputesCents)}
+                  label={t("driver.earnings.tips")}
+                  value={money(s.confirmed.tipsCents)}
                 />
                 <Row
-                  label="Net earned"
-                  value={signed(s.confirmed.netCents)}
+                  label={t("driver.earnings.refundAdjustments")}
+                  value={signed(s.confirmed.adjustmentsCents, money)}
+                />
+                <Row
+                  label={t("driver.earnings.disputes")}
+                  value={signed(s.confirmed.disputesCents, money)}
+                />
+                <Row
+                  label={t("driver.earnings.net")}
+                  value={signed(s.confirmed.netCents, money)}
                   strong
                 />
               </View>
             </View>
 
+            <View className="bg-white rounded-2xl p-4 mt-4">
+              <Text className="text-sm font-JakartaSemiBold">
+                {t("driver.earnings.noPayoutsTitle")}
+              </Text>
+              <Text className="text-xs text-general-200 mt-1">
+                {t("driver.earnings.noPayoutsBody")}
+              </Text>
+              <Text className="text-xs text-general-200 mt-2">
+                {language === "en"
+                  ? s.policy.label
+                  : t("driver.earnings.policy", { version: s.policy.version })}
+              </Text>
+            </View>
+
             {s.disputes.open > 0 && (
               <View className="bg-red-50 rounded-2xl p-5 mt-4">
                 <Text className="text-base font-JakartaBold text-red-700">
-                  {s.disputes.open} payment dispute
-                  {s.disputes.open === 1 ? "" : "s"} open
+                  {tn("driver.earnings.disputesOpen", s.disputes.open)}
                 </Text>
                 <Text className="text-xs text-red-700 mt-1">
-                  A passenger&apos;s bank is disputing a charge. Funds the card
-                  network withdraws are shown as separate lines and are added
-                  back if the dispute is won.
+                  {t("driver.earnings.disputesBody")}
                 </Text>
               </View>
             )}
 
             {(s.pending.rides > 0 || s.pending.tips > 0) && (
               <View className="bg-orange-50 rounded-2xl p-5 mt-4">
-                <Text className="text-base font-JakartaBold text-orange-700">
-                  Awaiting payment confirmation
+                <Text className="text-base font-JakartaBold text-orange-800">
+                  {t("driver.earnings.pendingTitle")}
                 </Text>
                 {s.pending.rides > 0 && (
-                  <Text className="text-sm text-orange-700 mt-1">
-                    {s.pending.rides} ride{s.pending.rides === 1 ? "" : "s"} ·{" "}
-                    {formatCents(s.pending.fareCents)} in fares
+                  <Text className="text-sm text-orange-800 mt-1">
+                    {tn("driver.earnings.pendingRides", s.pending.rides, {
+                      amount: money(s.pending.fareCents),
+                    })}
                   </Text>
                 )}
                 {s.pending.tips > 0 && (
-                  <Text className="text-sm text-orange-700 mt-1">
-                    {s.pending.tips} tip{s.pending.tips === 1 ? "" : "s"} ·{" "}
-                    {formatCents(s.pending.tipsCents)} processing
+                  <Text className="text-sm text-orange-800 mt-1">
+                    {tn("driver.earnings.pendingTips", s.pending.tips, {
+                      amount: money(s.pending.tipsCents),
+                    })}
                   </Text>
                 )}
-                <Text className="text-xs text-orange-700 mt-2">
-                  These aren&apos;t included above until the card processor
-                  confirms the payment.
+                <Text className="text-xs text-orange-800 mt-2">
+                  {t("driver.earnings.pendingNote")}
                 </Text>
               </View>
             )}
-
-            <View className="bg-white rounded-2xl p-4 mt-4">
-              <Text className="text-sm font-JakartaSemiBold">
-                No payouts yet
-              </Text>
-              <Text className="text-xs text-general-200 mt-1">
-                {s.payouts.message}
-              </Text>
-              <Text className="text-xs text-general-200 mt-2">
-                {s.policy.label}
-              </Text>
-            </View>
           </>
         )}
 
         <View className="bg-white rounded-2xl px-5 py-3 mt-4">
-          <Text className="text-lg font-JakartaBold py-2">Completed rides</Text>
+          <Text
+            className="text-lg font-JakartaBold py-2"
+            accessibilityRole="header"
+          >
+            {t("driver.earnings.ridesTitle")}
+          </Text>
           {rides.status === "error" && rides.error && (
-            <Text className="text-sm text-red-500">{rides.error}</Text>
+            <Text className="text-sm text-red-600">
+              {queryError({ error: rides.error })}
+            </Text>
           )}
           {rides.status === "ready" && rides.items.length === 0 && (
             <Text className="text-sm text-general-200 pb-2">
-              No completed rides in this period.
+              {t("driver.earnings.noRides")}
             </Text>
           )}
           {rides.items.map((ride) => (
@@ -289,7 +316,11 @@ const EarningsScreen = () => {
           ))}
           {rides.hasMore && (
             <CustomButton
-              title={rides.status === "loading" ? "Loading…" : "Load more"}
+              title={
+                rides.status === "loading"
+                  ? t("common.loading")
+                  : t("common.loadMore")
+              }
               bgVariant="outline"
               textVariant="primary"
               className="mt-3"

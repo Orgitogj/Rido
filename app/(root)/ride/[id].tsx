@@ -5,9 +5,11 @@ import ListState from "@/components/ListState";
 import RideLayout from "@/components/RideLayout";
 import RideMap from "@/components/RideMap";
 import RideStatusPanel from "@/components/RideStatusPanel";
+import { useI18n } from "@/lib/i18n";
 import { useRide } from "@/lib/rideUpdates";
 
 const RideScreen = () => {
+  const { t, language } = useI18n();
   const { id } = useLocalSearchParams<{ id: string }>();
   const rideId = String(id);
   const { ride, live, polyline, connection, error, perform } = useRide(rideId);
@@ -21,11 +23,11 @@ const RideScreen = () => {
 
   if (!ride) {
     return (
-      <RideLayout title="Your ride" onBack={back}>
+      <RideLayout title={t("ride.panel.title")} onBack={back}>
         {connection === "reconnecting" ? (
           <ListState
             kind="error"
-            message={`${error ?? "Couldn't load this ride."} Retrying automatically.`}
+            message={`${language === "en" && error ? error : t("ride.panel.loadFailed")} ${t("ride.panel.retrying")}`}
             onRetry={() =>
               router.replace({
                 pathname: "/(root)/ride/[id]",
@@ -34,7 +36,7 @@ const RideScreen = () => {
             }
           />
         ) : (
-          <ListState kind="loading" message="Loading your ride…" />
+          <ListState kind="loading" message={t("ride.panel.loading")} />
         )}
       </RideLayout>
     );
@@ -42,7 +44,11 @@ const RideScreen = () => {
 
   return (
     <RideLayout
-      title={ride.viewer === "driver" ? "Current ride" : "Your ride"}
+      title={
+        ride.viewer === "driver"
+          ? t("ride.panel.titleDriver")
+          : t("ride.panel.title")
+      }
       snapPoints={["55%", "90%"]}
       onBack={back}
       map={
@@ -61,8 +67,8 @@ const RideScreen = () => {
         connection={connection}
         perform={perform}
       />
-      <Text className="text-xs text-general-200">
-        Ride {ride.id.slice(0, 8)}
+      <Text className="text-xs text-general-200" selectable>
+        {t("ride.panel.rideId", { id: ride.id.slice(0, 8) })}
       </Text>
     </RideLayout>
   );

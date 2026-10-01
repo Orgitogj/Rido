@@ -1,4 +1,4 @@
-import { formatCents } from "../shared/contracts";
+import { NOTIFY, type NotificationText } from "./notificationText";
 
 import type { Database, SqlClient } from "./db";
 import type { Actor, RideRow } from "./lifecycle";
@@ -81,6 +81,32 @@ const TTL_SECONDS: Record<string, number> = {
   no_driver: 30 * 60,
   hold_released: 24 * 3600,
   chat_message: 10 * 60,
+  application_update: 24 * 3600,
+  support_update: 24 * 3600,
+  safety_update: 24 * 3600,
+};
+
+export type NotificationCategory =
+  "ride" | "chat" | "offer" | "account" | "support" | "safety";
+
+export const KIND_CATEGORY: Record<string, NotificationCategory> = {
+  offer: "offer",
+  chat_message: "chat",
+  application_update: "account",
+  support_update: "support",
+  safety_update: "safety",
+};
+
+export const categoryOf = (kind: string): NotificationCategory =>
+  KIND_CATEGORY[kind] ?? "ride";
+
+const PREFERENCE_COLUMN: Record<NotificationCategory, string> = {
+  ride: "ride_updates",
+  chat: "chat_messages",
+  offer: "ride_offers",
+  account: "account_updates",
+  support: "account_updates",
+  safety: "account_updates",
 };
 const MAX_ATTEMPTS = 5;
 const RECLAIM_SECONDS = 60;
@@ -93,6 +119,7 @@ interface NotificationInput {
   dedupeKey: string;
   title: string;
   body: string;
+  sq?: { title: string; body: string };
   target: string;
 }
 
@@ -103,14 +130,29 @@ export async function enqueueNotification(
 ) {
   await tx.query(
     `INSERT INTO mobility.notifications
-       (user_id, ride_id, kind, dedupe_key, title, body, data, created_at)
-     SELECT $1::uuid, $2::uuid, $3::varchar, $4::varchar, $5::varchar, $6::varchar,
+       (user_id, ride_id, kind, dedupe_key, title, body, data, created_at, category, inbox)
+     SELECT $1::uuid, $2::uuid, $3::varchar, $4::varchar,
+            left(CASE WHEN u.language = 'sq' AND $9::varchar IS NOT NULL THEN $9::varchar ELSE $5::varchar END, 100),
+            left(CASE WHEN u.language = 'sq' AND $10::varchar IS NOT NULL THEN $10::varchar ELSE $6::varchar END, 200),
             jsonb_build_object('kind', $3::varchar, 'rideId', COALESCE($2::uuid::text, ''),
                                'target', $7::varchar, 'recipient', u.clerk_id),
-            $8::timestamptz
-       FROM mobility.users u WHERE u.id = $1::uuid
+            $8::timestamptz, $11::varchar, $12::boolean
+       FROM mobility.users u WHERE u.id = $1::uuid AND u.deleted_at IS NULL
      ON CONFLICT (dedupe_key) DO NOTHING`,
-    [n.userId, n.rideId, n.kind, n.dedupeKey, n.title, n.body, n.target, now],
+    [
+      n.userId,
+      n.rideId,
+      n.kind,
+      n.dedupeKey,
+      n.title,
+      n.body,
+      n.target,
+      now,
+      n.sq?.title ?? null,
+      n.sq?.body ?? null,
+      categoryOf(n.kind),
+      !["offer", "chat"].includes(categoryOf(n.kind)),
+    ],
   );
 }
 
@@ -137,8 +179,7 @@ export async function enqueueForTransition(
   const rideTarget = `/ride/${after.id}`;
   const toPassenger = (
     kind: NotificationInput["kind"],
-    title: string,
-    body: string,
+    text: NotificationText,
   ) =>
     enqueueNotification(
       tx,
@@ -147,8 +188,7 @@ export async function enqueueForTransition(
         rideId: after.id,
         kind,
         dedupeKey: `ride:${after.id}:${after.status}:${after.rematch_count}:${after.user_id}`,
-        title,
-        body,
+        ...text,
         target: rideTarget,
       },
       now,
@@ -160,35 +200,18 @@ export async function enqueueForTransition(
   );
   switch (after.status) {
     case "accepted":
-      return toPassenger(
-        "ride_accepted",
-        "Driver on the way",
-        driver
-          ? `${driver.display_name} accepted your ride (${driver.vehicle_plate}).`
-          : "A driver accepted your ride.",
-      );
+      return toPassenger("ride_accepted", NOTIFY.rideAccepted(driver));
     case "arrived":
-      return toPassenger(
-        "ride_arrived",
-        "Your driver has arrived",
-        driver
-          ? `Meet ${driver.display_name} at the pickup (${driver.vehicle_plate}).`
-          : "Your driver is at the pickup.",
-      );
+      return toPassenger("ride_arrived", NOTIFY.rideArrived(driver));
     case "in_progress":
-      return toPassenger("ride_started", "Trip started", "Enjoy your ride.");
+      return toPassenger("ride_started", NOTIFY.rideStarted());
     case "completed":
       return toPassenger(
         "ride_completed",
-        "Trip completed",
-        `Thanks for riding. Fare: ${formatCents(after.fare_cents)}.`,
+        NOTIFY.rideCompleted(after.fare_cents),
       );
     case "no_driver":
-      return toPassenger(
-        "no_driver",
-        "No drivers available",
-        "Nobody accepted your request. The hold on your card is being released.",
-      );
+      return toPassenger("no_driver", NOTIFY.noDriver());
     case "cancelled": {
       if (actor === "passenger" && driver) {
         return enqueueNotification(
@@ -198,26 +221,17 @@ export async function enqueueForTransition(
             rideId: after.id,
             kind: "ride_cancelled",
             dedupeKey: `ride:${after.id}:cancelled:${after.rematch_count}:${driver.user_id}`,
-            title: "Ride cancelled",
-            body: "The passenger cancelled this ride.",
+            ...NOTIFY.cancelledByPassenger(),
             target: "/driver",
           },
           now,
         );
       }
       if (actor === "driver") {
-        return toPassenger(
-          "ride_cancelled",
-          "Ride cancelled",
-          "Your driver cancelled and we couldn't assign another one. The hold on your card is being released.",
-        );
+        return toPassenger("ride_cancelled", NOTIFY.cancelledByDriver());
       }
       if (actor === "system" && before.status !== "awaiting_payment") {
-        return toPassenger(
-          "ride_cancelled",
-          "Ride cancelled",
-          "Your request ended. The hold on your card is being released.",
-        );
+        return toPassenger("ride_cancelled", NOTIFY.cancelledBySystem());
       }
       return;
     }
@@ -229,19 +243,12 @@ export async function enqueueForTransition(
       ) {
         return toPassenger(
           "ride_rematching",
-          "Finding you another driver",
-          actor === "driver"
-            ? "Your driver cancelled. We're looking for another driver now; your price hasn't changed."
-            : "Your driver can't complete this ride. We're looking for another driver now; your price hasn't changed.",
+          NOTIFY.rematching(actor === "driver"),
         );
       }
       return;
     case "interrupted":
-      return toPassenger(
-        "ride_interrupted",
-        "Trip ended early",
-        "Your driver ended the trip early. The hold on your card is being released; your receipt will confirm it.",
-      );
+      return toPassenger("ride_interrupted", NOTIFY.interrupted());
     default:
       return;
   }
@@ -266,8 +273,7 @@ export async function enqueueOffer(
       rideId: null,
       kind: "offer",
       dedupeKey: `offer:${offer.id}`,
-      title: "New ride request",
-      body: `${formatCents(offer.fareCents)} · pickup about ${(offer.distanceMeters / 1000).toFixed(1)} km away`,
+      ...NOTIFY.offer(offer.fareCents, offer.distanceMeters),
       target: "/driver",
     },
     now,
@@ -334,6 +340,15 @@ export async function deliverPending(
       (now.getTime() - new Date(n.created_at).getTime()) / 1000;
     if (ageSeconds > ttl) {
       await finish(n.id, "skipped", "expired");
+      continue;
+    }
+    const column = PREFERENCE_COLUMN[categoryOf(n.kind)];
+    const { rows: muted } = await deps.db.query(
+      `SELECT 1 FROM mobility.notification_preferences WHERE user_id = $1 AND NOT ${column}`,
+      [n.user_id],
+    );
+    if (muted.length) {
+      await finish(n.id, "skipped", "muted");
       continue;
     }
     const { rows: tokens } = await deps.db.query<{ token: string }>(

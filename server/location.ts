@@ -1,6 +1,6 @@
 import { haversineMeters } from "../shared/geo";
 
-import { transaction } from "./db";
+import { transaction, type SqlClient } from "./db";
 import { ASSIGNED_STATUSES } from "./lifecycle";
 
 import type { Database } from "./db";
@@ -150,7 +150,7 @@ export async function recordDriverLocation(
 }
 
 export async function clearDriverLocation(
-  db: Database,
+  db: SqlClient,
   driverProfileId: string,
 ) {
   await db.query(

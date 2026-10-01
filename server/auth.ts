@@ -4,6 +4,7 @@ import { requireEnv, unauthenticated } from "./errors";
 
 export interface Identity {
   clerkId: string;
+  factorAgeMinutes: number | null;
 }
 export type Authenticate = (request: Request) => Promise<Identity>;
 
@@ -26,7 +27,7 @@ export function clerkAuthenticator(env = process.env): Authenticate {
       .map((v) => v.trim())
       .filter(Boolean);
 
-    let payload: { sub?: unknown; sid?: unknown };
+    let payload: { sub?: unknown; sid?: unknown; fva?: unknown };
     try {
       payload = await verifyToken(token, {
         jwtKey,
@@ -45,6 +46,13 @@ export function clerkAuthenticator(env = process.env): Authenticate {
         "Your session could not be verified. Please sign in again.",
       );
     }
-    return { clerkId: payload.sub };
+    const age = Array.isArray(payload.fva) ? payload.fva[0] : null;
+    return {
+      clerkId: payload.sub,
+      factorAgeMinutes:
+        typeof age === "number" && Number.isFinite(age) && age >= 0
+          ? age
+          : null,
+    };
   };
 }

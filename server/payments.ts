@@ -72,6 +72,7 @@ export interface PaymentGateway {
     idempotencyKey: string,
   ): Promise<IntentSnapshot>;
   createEphemeralKey(customerId: string): Promise<{ secret: string }>;
+  deleteCustomer(customerId: string): Promise<void>;
   parseWebhook(rawBody: string, signature: string): WebhookEvent;
   createRefund(
     input: {
@@ -150,6 +151,13 @@ export function stripeGateway(): PaymentGateway {
         { idempotencyKey },
       );
       return { id: customer.id };
+    },
+    async deleteCustomer(customerId) {
+      try {
+        await stripe().customers.del(customerId);
+      } catch (e) {
+        if ((e as { code?: string }).code !== "resource_missing") throw e;
+      }
     },
     async createPaymentIntent(input, idempotencyKey) {
       const intent = await stripe().paymentIntents.create(

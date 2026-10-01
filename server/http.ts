@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { clerkIdentityAdmin, type IdentityAdmin } from "./account";
 import { type Authenticate, clerkAuthenticator } from "./auth";
 import { type Database, database } from "./db";
 import { ApiError } from "./errors";
@@ -19,6 +20,7 @@ export interface Deps {
   routing: RoutingProvider | null;
   push: PushGateway | null;
   storage: DocumentStorage | null;
+  identity: IdentityAdmin | null;
   now: () => Date;
   sleep: (ms: number) => Promise<void>;
 }
@@ -34,6 +36,7 @@ export function defaultDeps(): Deps {
     routing: routingFromEnv(),
     push: process.env.PUSH_NOTIFICATIONS === "off" ? null : expoPushGateway(),
     storage: storageFromEnv(),
+    identity: clerkIdentityAdmin(),
     now: () => new Date(),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };

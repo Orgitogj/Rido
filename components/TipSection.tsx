@@ -5,13 +5,14 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import CustomButton from "@/components/CustomButton";
 import TipPay from "@/components/TipPay";
 import { dollarsToCents } from "@/lib/adminFormat";
-import { TIP_REASON_TEXT, TIP_STATUS_TEXT } from "@/lib/earningsText";
-import { ApiRequestError, useApi, useApiQuery } from "@/lib/fetch";
-import { formatCents } from "@/lib/utils";
+import { tipReasonText } from "@/lib/earningsText";
+import { useApi, useApiQuery } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
 
 import type { TipState } from "@/shared/contracts";
 
 const TipSection = ({ rideId }: { rideId: string }) => {
+  const { t, language, error: errorText, money } = useI18n();
   const request = useApi();
   const query = useApiQuery<TipState>(`/api/rides/${rideId}/tip`, {
     refetchOnFocus: true,
@@ -34,7 +35,7 @@ const TipSection = ({ rideId }: { rideId: string }) => {
   const s = state;
   if (!s) return null;
   const tip = s.tip;
-  const reasonText = s.reason ? TIP_REASON_TEXT[s.reason] : null;
+  const reasonText = tipReasonText(s.reason, language);
   if (!tip && !s.eligible && !reasonText) return null;
 
   const onDone = (next: TipState) => {
@@ -56,33 +57,42 @@ const TipSection = ({ rideId }: { rideId: string }) => {
       );
       setConfirming(null);
     } catch (e) {
-      setError(e instanceof ApiRequestError ? e.message : "Couldn't cancel.");
+      setError(errorText(e, t("pay.tip.cancelFailed")));
       query.refetch();
     } finally {
       setCancelling(false);
     }
   };
 
-  const customCents = custom.trim() ? dollarsToCents(custom) : null;
-  const amount = custom.trim() ? customCents : choice;
+  const typed = custom.trim().replace(",", ".");
+  const customCents = typed ? dollarsToCents(typed) : null;
+  const amount = typed ? customCents : choice;
   const amountError =
-    custom.trim() &&
+    typed &&
     (customCents === null ||
       customCents < s.minCents ||
       customCents > s.maxCents)
-      ? `Enter an amount between ${formatCents(s.minCents)} and ${formatCents(s.maxCents)}.`
+      ? t("pay.tip.range", {
+          min: money(s.minCents),
+          max: money(s.maxCents),
+        })
       : null;
-  const driver = s.driverName ?? "your driver";
+  const driver = s.driverName ?? t("pay.tip.yourDriver");
 
   return (
     <View className="bg-white rounded-2xl p-5 mt-4">
-      <Text className="text-base font-JakartaBold">Tip {driver}</Text>
+      <Text className="text-base font-JakartaBold" accessibilityRole="header">
+        {t("pay.tip.title", { driver })}
+      </Text>
 
       {tip && (tip.status === "succeeded" || tip.status === "processing") && (
         <Text className="text-sm mt-2">
-          {formatCents(tip.amountCents)} · {TIP_STATUS_TEXT[tip.status]}
+          {t("pay.tip.line", {
+            amount: money(tip.amountCents),
+            status: t(`pay.tip.status.${tip.status}`),
+          })}
           {tip.refundedCents > 0
-            ? ` · ${formatCents(tip.refundedCents)} refunded`
+            ? ` · ${t("pay.tip.refunded", { amount: money(tip.refundedCents) })}`
             : ""}
         </Text>
       )}
@@ -90,23 +100,25 @@ const TipSection = ({ rideId }: { rideId: string }) => {
       {tip && tip.status !== "succeeded" && tip.status !== "processing" && (
         <>
           <Text className="text-sm mt-2">
-            {formatCents(tip.amountCents)} tip · {TIP_STATUS_TEXT[tip.status]}.
-            You have not been charged.
+            {t("pay.tip.unpaid", {
+              amount: money(tip.amountCents),
+              status: t(`pay.tip.status.${tip.status}`),
+            })}
           </Text>
-          {tip.lastError && (
-            <Text className="text-xs text-red-500 mt-1">{tip.lastError}</Text>
+          {tip.lastError && language === "en" && (
+            <Text className="text-xs text-red-600 mt-1">{tip.lastError}</Text>
           )}
           {s.eligible && (
             <TipPay
               rideId={rideId}
               amountCents={tip.amountCents}
               idempotencyKey={resumeKey}
-              title={`Pay ${formatCents(tip.amountCents)} tip`}
+              title={t("pay.tip.pay", { amount: money(tip.amountCents) })}
               onDone={onDone}
             />
           )}
           <CustomButton
-            title={cancelling ? "Cancelling…" : "Cancel tip"}
+            title={cancelling ? t("pay.tip.cancelling") : t("pay.tip.cancel")}
             bgVariant="outline"
             textVariant="primary"
             disabled={cancelling}
@@ -123,10 +135,12 @@ const TipSection = ({ rideId }: { rideId: string }) => {
       {!tip && s.eligible && !confirming && (
         <>
           <Text className="text-xs text-general-200 mt-1">
-            Optional. Tips go to your driver in full and are charged separately
-            from your fare.
+            {t("pay.tip.intro")}
           </Text>
-          <View className="flex flex-row flex-wrap mt-3">
+          <View
+            className="flex flex-row flex-wrap mt-3"
+            accessibilityRole="radiogroup"
+          >
             {s.suggestionsCents.map((cents) => (
               <Pressable
                 key={cents}
@@ -136,14 +150,14 @@ const TipSection = ({ rideId }: { rideId: string }) => {
                 }}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: choice === cents && !custom }}
-                className={`px-4 py-2 rounded-full mr-2 mb-2 border ${choice === cents && !custom ? "bg-[#0286FF] border-[#0286FF]" : "border-neutral-300"}`}
+                className={`px-4 min-h-[44px] justify-center rounded-full mr-2 mb-2 border ${choice === cents && !custom ? "bg-[#0286FF] border-[#0286FF]" : "border-neutral-400"}`}
               >
                 <Text
                   className={
                     choice === cents && !custom ? "text-white" : "text-black"
                   }
                 >
-                  {formatCents(cents)}
+                  {money(cents)}
                 </Text>
               </Pressable>
             ))}
@@ -151,16 +165,21 @@ const TipSection = ({ rideId }: { rideId: string }) => {
           <TextInput
             value={custom}
             onChangeText={setCustom}
-            placeholder="Other amount"
+            placeholder={t("pay.tip.other")}
             keyboardType="decimal-pad"
-            accessibilityLabel="Other tip amount in dollars"
-            className="border border-neutral-200 rounded-xl p-3 mt-1"
+            accessibilityLabel={t("pay.tip.otherLabel")}
+            className="border border-neutral-300 rounded-xl p-3 mt-1 min-h-[44px]"
           />
           {amountError && (
-            <Text className="text-xs text-red-500 mt-1">{amountError}</Text>
+            <Text
+              className="text-xs text-red-600 mt-1"
+              accessibilityLiveRegion="polite"
+            >
+              {amountError}
+            </Text>
           )}
           <CustomButton
-            title="Review tip"
+            title={t("pay.tip.review")}
             disabled={!amount || !!amountError}
             className="mt-3"
             onPress={() =>
@@ -174,11 +193,13 @@ const TipSection = ({ rideId }: { rideId: string }) => {
       {!tip && s.eligible && confirming && (
         <View className="mt-3">
           <Text className="text-base font-JakartaSemiBold">
-            Tip {formatCents(confirming.amountCents)} to {driver}?
+            {t("pay.tip.confirm", {
+              amount: money(confirming.amountCents),
+              driver,
+            })}
           </Text>
           <Text className="text-xs text-general-200 mt-1">
-            Your card will only be charged after you confirm the payment on the
-            next screen. This is a separate charge from your fare.
+            {t("pay.tip.confirmNote")}
           </Text>
           <TipPay
             rideId={rideId}
@@ -187,7 +208,7 @@ const TipSection = ({ rideId }: { rideId: string }) => {
             onDone={onDone}
           />
           <CustomButton
-            title="Back"
+            title={t("common.back")}
             bgVariant="outline"
             textVariant="primary"
             className="mt-3"
@@ -198,7 +219,7 @@ const TipSection = ({ rideId }: { rideId: string }) => {
 
       {error && (
         <Text
-          className="text-sm text-red-500 mt-2"
+          className="text-sm text-red-600 mt-2"
           accessibilityLiveRegion="polite"
         >
           {error}

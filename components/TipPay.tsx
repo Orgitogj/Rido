@@ -7,8 +7,8 @@ import { useRef, useState } from "react";
 import { Text } from "react-native";
 
 import CustomButton from "@/components/CustomButton";
-import { ApiRequestError, useApi } from "@/lib/fetch";
-import { formatCents } from "@/lib/utils";
+import { useApi } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
 
 import type { TipCheckout, TipState } from "@/shared/contracts";
 
@@ -29,6 +29,7 @@ const TipPayButton = ({
   title,
   onDone,
 }: TipPayProps) => {
+  const { t, error: errorText, money } = useI18n();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const request = useApi();
   const [busy, setBusy] = useState(false);
@@ -52,7 +53,7 @@ const TipPayButton = ({
         returnURL: `myapp://receipt/${rideId}`,
       });
       if (init.error) {
-        setError(init.error.message || "Couldn't start the payment.");
+        setError(init.error.message || t("pay.startFailed"));
         return;
       }
       const sheet = await presentPaymentSheet();
@@ -65,12 +66,10 @@ const TipPayButton = ({
       );
       onDone(state);
       if (sheet.error && sheet.error.code !== PaymentSheetError.Canceled) {
-        setError(sheet.error.message || "The payment didn't go through.");
+        setError(sheet.error.message || t("pay.declined"));
       }
     } catch (e) {
-      setError(
-        e instanceof ApiRequestError ? e.message : "Something went wrong.",
-      );
+      setError(errorText(e));
       request<TipState>(`/api/rides/${rideId}/tip`)
         .then(onDone)
         .catch(() => undefined);
@@ -84,7 +83,7 @@ const TipPayButton = ({
     <>
       {error && (
         <Text
-          className="text-sm text-red-500 mt-2"
+          className="text-sm text-red-600 mt-2"
           accessibilityLiveRegion="polite"
         >
           {error}
@@ -93,8 +92,8 @@ const TipPayButton = ({
       <CustomButton
         title={
           busy
-            ? "Opening payment…"
-            : (title ?? `Pay ${formatCents(amountCents)} tip`)
+            ? t("pay.tip.opening")
+            : (title ?? t("pay.tip.pay", { amount: money(amountCents) }))
         }
         disabled={busy}
         className="mt-3"
@@ -105,10 +104,11 @@ const TipPayButton = ({
 };
 
 const TipPay = (props: TipPayProps) => {
+  const { t } = useI18n();
   if (!stripePublishableKey) {
     return (
-      <Text className="text-sm text-red-500 mt-2">
-        Payments aren&apos;t configured. Set EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY.
+      <Text className="text-sm text-red-600 mt-2">
+        {t("pay.notConfigured")}
       </Text>
     );
   }

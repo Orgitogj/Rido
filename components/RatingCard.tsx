@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import CustomButton from "@/components/CustomButton";
-import { ApiRequestError, useApi } from "@/lib/fetch";
-import { RATING_REASON_TEXT, STAR_LABELS } from "@/lib/ratingText";
+import { useApi } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
+import { ratingReasonText, starLabel } from "@/lib/ratingText";
 import { RATING_RULES, type RideRatingState } from "@/shared/contracts";
 
 const RatingCard = ({
@@ -14,9 +15,10 @@ const RatingCard = ({
 }: {
   rideId: string;
   rating: RideRatingState;
-  counterpart: string;
+  counterpart: "driver" | "passenger";
   onSaved?: (next: RideRatingState) => void;
 }) => {
+  const { t, tn, language, error: errorText } = useI18n();
   const request = useApi();
   const [state, setState] = useState(rating);
   const [editing, setEditing] = useState(false);
@@ -34,7 +36,7 @@ const RatingCard = ({
   }, [rating, editing]);
 
   const rated = state.stars !== null;
-  const reasonText = state.reason ? RATING_REASON_TEXT[state.reason] : null;
+  const reasonText = ratingReasonText(state.reason, language);
   if (!rated && !state.eligible && !reasonText) return null;
 
   const submit = async () => {
@@ -50,9 +52,7 @@ const RatingCard = ({
       setEditing(false);
       onSaved?.(next);
     } catch (e) {
-      setError(
-        e instanceof ApiRequestError ? e.message : "Couldn't save your rating.",
-      );
+      setError(errorText(e, t("rating.saveFailed")));
     } finally {
       setSending(false);
     }
@@ -61,23 +61,33 @@ const RatingCard = ({
   const form = !rated || editing;
   return (
     <View className="bg-white rounded-2xl p-5 mt-4">
-      <Text className="text-base font-JakartaBold">Rate {counterpart}</Text>
+      <Text className="text-base font-JakartaBold" accessibilityRole="header">
+        {t("rating.title", {
+          counterpart: t(
+            counterpart === "driver"
+              ? "ride.panel.rateDriver"
+              : "ride.panel.ratePassenger",
+          ),
+        })}
+      </Text>
       {!form && (
         <>
           <Text
             className="text-2xl mt-2"
-            accessibilityLabel={`You rated ${state.stars} out of 5`}
+            accessibilityLabel={t("rating.youRated", {
+              stars: state.stars ?? 0,
+            })}
           >
             {"★".repeat(state.stars ?? 0)}
             {"☆".repeat(5 - (state.stars ?? 0))}
           </Text>
           <Text className="text-xs text-general-200 mt-1">
-            Thanks for your rating.
-            {state.canEdit ? " You can still change it for a short time." : ""}
+            {t("rating.thanks")}
+            {state.canEdit ? ` ${t("rating.canChange")}` : ""}
           </Text>
           {state.canEdit && (
             <CustomButton
-              title="Change rating"
+              title={t("rating.change")}
               bgVariant="outline"
               textVariant="primary"
               className="mt-3"
@@ -98,10 +108,10 @@ const RatingCard = ({
                 onPress={() => setStars(n)}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: stars === n }}
-                accessibilityLabel={`${n} star${n === 1 ? "" : "s"}, ${STAR_LABELS[n - 1]}`}
-                className="mr-2 p-1"
+                accessibilityLabel={`${tn("rating.star", n)}, ${starLabel(n, language)}`}
+                className="mr-1 w-11 h-11 items-center justify-center"
               >
-                <Text className="text-3xl text-[#F5B400]">
+                <Text className="text-3xl text-[#B37E00]">
                   {n <= stars ? "★" : "☆"}
                 </Text>
               </Pressable>
@@ -109,25 +119,24 @@ const RatingCard = ({
           </View>
           {stars > 0 && (
             <Text className="text-xs text-general-200">
-              {STAR_LABELS[stars - 1]}
+              {starLabel(stars, language)}
             </Text>
           )}
           <TextInput
             value={comment}
             onChangeText={setComment}
-            placeholder="Optional feedback"
+            placeholder={t("rating.feedback")}
             multiline
             maxLength={RATING_RULES.commentMaxLength}
-            accessibilityLabel="Optional feedback"
-            className="border border-neutral-200 rounded-xl p-3 mt-3 min-h-[70px]"
+            accessibilityLabel={t("rating.feedback")}
+            className="border border-neutral-300 rounded-xl p-3 mt-3 min-h-[70px]"
           />
           <Text className="text-xs text-general-200 mt-1">
-            Written feedback is private: only our support team can read it.{" "}
-            {counterpart} only sees an average rating.
+            {t("rating.privacy")}
           </Text>
           {error && (
             <Text
-              className="text-sm text-red-500 mt-2"
+              className="text-sm text-red-600 mt-2"
               accessibilityLiveRegion="polite"
             >
               {error}
@@ -135,7 +144,11 @@ const RatingCard = ({
           )}
           <CustomButton
             title={
-              sending ? "Saving…" : rated ? "Save changes" : "Submit rating"
+              sending
+                ? t("common.saving")
+                : rated
+                  ? t("rating.saveChanges")
+                  : t("rating.submit")
             }
             disabled={sending || stars < 1}
             className="mt-3"

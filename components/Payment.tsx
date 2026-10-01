@@ -4,24 +4,26 @@ import { Text } from "react-native";
 
 import CustomButton from "@/components/CustomButton";
 import { ApiRequestError, useApi } from "@/lib/fetch";
-import { formatCents } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { PaymentProps } from "@/types/type";
 
-import type {
-  BookingResponse,
-  PaymentStatus,
-  RideView,
-} from "@/shared/contracts";
+import type { BookingResponse, RideView } from "@/shared/contracts";
 
-const NOT_AUTHORIZED: Partial<Record<PaymentStatus, string>> = {
-  requires_action:
-    "Your bank needs extra verification that wasn't completed. Please try again.",
-  failed: "Your card was declined. Please try another card.",
-  pending: "The card wasn't authorized. You have not been charged.",
-  cancelled: "This request was cancelled. Refresh the price to try again.",
-};
+const NOT_AUTHORIZED = [
+  "requires_action",
+  "failed",
+  "pending",
+  "cancelled",
+] as const;
 
-const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
+const Payment = ({
+  quoteId,
+  fareCents,
+  onRequested,
+  onExpired,
+  disabled,
+}: PaymentProps) => {
+  const { t, error: errorText, money } = useI18n();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const request = useApi();
   const [busy, setBusy] = useState(false);
@@ -31,7 +33,7 @@ const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
   const openActiveRide = async () => {
     const active = await request<RideView | null>("/api/rides/active");
     if (active) onRequested(active.id);
-    else setError("You already have a ride in progress.");
+    else setError(t("pay.activeRide"));
   };
 
   const requestRide = async () => {
@@ -53,9 +55,7 @@ const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
         returnURL: "myapp://confirm-ride",
       });
       if (init.error) {
-        setError(
-          init.error.message || "Couldn't start the payment. Please try again.",
-        );
+        setError(init.error.message || t("pay.startFailed"));
         return;
       }
 
@@ -68,19 +68,19 @@ const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
           method: "POST",
         });
       } catch {
-        setError(
-          "We couldn't confirm your card yet. Check Home for your ride before trying again.",
-        );
+        setError(t("pay.notConfirmed"));
         return;
       }
 
       if (ride.paymentStatus === "authorized") {
         onRequested(ride.id);
       } else {
+        const known = NOT_AUTHORIZED.find((s) => s === ride.paymentStatus);
         setError(
           sheet.error?.message ||
-            NOT_AUTHORIZED[ride.paymentStatus] ||
-            "Your card wasn't authorized.",
+            (known
+              ? t(`pay.notAuthorizedState.${known}`)
+              : t("pay.notAuthorized")),
         );
       }
     } catch (e) {
@@ -88,17 +88,12 @@ const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
         e instanceof ApiRequestError &&
         (e.code === "ACTIVE_RIDE_EXISTS" || e.code === "ALREADY_REQUESTED")
       ) {
-        await openActiveRide().catch(() =>
-          setError("You already have a ride in progress."),
-        );
+        await openActiveRide().catch(() => setError(t("pay.activeRide")));
       } else if (e instanceof ApiRequestError && e.code === "QUOTE_EXPIRED") {
-        setError("This price has expired. Tap Refresh price.");
+        if (onExpired) onExpired();
+        else setError(t("pay.quoteExpired"));
       } else {
-        setError(
-          e instanceof Error
-            ? e.message
-            : "Something went wrong. Please try again.",
-        );
+        setError(errorText(e));
       }
     } finally {
       inFlight.current = false;
@@ -110,7 +105,7 @@ const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
     <>
       {error && (
         <Text
-          className="text-sm text-red-500 text-center mt-5"
+          className="text-sm text-red-600 text-center mt-5"
           accessibilityLiveRegion="polite"
         >
           {error}
@@ -119,10 +114,12 @@ const Payment = ({ quoteId, fareCents, onRequested }: PaymentProps) => {
 
       <CustomButton
         title={
-          busy ? "Requesting…" : `Request ride · ${formatCents(fareCents)}`
+          busy
+            ? t("pay.requesting")
+            : t("pay.requestRide", { price: money(fareCents) })
         }
         className="mt-6 mb-4"
-        disabled={busy}
+        disabled={busy || disabled}
         onPress={requestRide}
       />
     </>

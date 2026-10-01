@@ -27,6 +27,7 @@ describe("quote problems", () => {
       changeLocations: false,
     });
     expect(quoteProblem("SOMETHING_NEW", "server says")).toEqual({
+      code: "SOMETHING_NEW",
       title: "Couldn't get a price",
       message: "server says",
       retry: true,

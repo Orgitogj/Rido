@@ -7,13 +7,13 @@ import InputField from "@/components/InputField";
 import {
   checkFile,
   currentDocument,
-  DOCUMENT_LABELS,
-  DOCUMENT_STATUS,
   isIsoDate,
   needsExpiry,
+  UploadError,
   uploadToStorage,
 } from "@/lib/driverVerification";
-import { ApiRequestError, useApi } from "@/lib/fetch";
+import { useApi } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
 import {
   type DocumentKind,
   documentKinds,
@@ -32,6 +32,7 @@ const DocumentRow = ({
   editable: boolean;
   onChanged: () => Promise<void> | void;
 }) => {
+  const { t, error: errorText } = useI18n();
   const request = useApi();
   const [expiresOn, setExpiresOn] = useState(document?.expiresOn ?? "");
   const [busy, setBusy] = useState<string | null>(null);
@@ -40,7 +41,7 @@ const DocumentRow = ({
   const upload = async () => {
     setError(null);
     if (needsExpiry(kind) && !isIsoDate(expiresOn.trim())) {
-      setError("Enter the expiry date shown on the document (YYYY-MM-DD).");
+      setError(t("driver.documents.expiryRequired"));
       return;
     }
     const picked = await DocumentPicker.getDocumentAsync({
@@ -52,11 +53,11 @@ const DocumentRow = ({
     const asset = picked.assets[0];
     const checked = checkFile(asset.name, asset.mimeType, asset.size);
     if (!checked.ok) {
-      setError(checked.message);
+      setError(t(`driver.documents.${checked.reason}`));
       return;
     }
     try {
-      setBusy("Preparing…");
+      setBusy(t("driver.documents.preparing"));
       const ticket = await request<DocumentUploadTicket>(
         "/api/driver/documents",
         {
@@ -68,23 +69,23 @@ const DocumentRow = ({
           },
         },
       );
-      setBusy("Uploading…");
+      setBusy(t("driver.documents.uploading"));
       await uploadToStorage(ticket, {
         uri: asset.uri,
         name: asset.name,
         contentType: checked.contentType,
         blob: asset.file ?? null,
       });
-      setBusy("Checking…");
+      setBusy(t("driver.documents.checking"));
       await request(`/api/driver/documents/${ticket.document.id}/complete`, {
         method: "POST",
       });
       await onChanged();
     } catch (e) {
       setError(
-        e instanceof ApiRequestError || e instanceof Error
-          ? e.message
-          : "Upload failed. Try again.",
+        e instanceof UploadError && e.code === "STORAGE_REFUSED"
+          ? t("driver.documents.storageRefused")
+          : errorText(e, t("driver.documents.uploadFailed")),
       );
       await onChanged();
     } finally {
@@ -96,33 +97,35 @@ const DocumentRow = ({
     <View className="border-t border-general-700 pt-3 mt-3">
       <View className="flex flex-row items-center justify-between">
         <Text className="text-base font-JakartaSemiBold">
-          {DOCUMENT_LABELS[kind]}
+          {t(`driver.documents.kind.${kind}`)}
         </Text>
         <Text
           className={`text-sm ${
             document?.status === "accepted"
               ? "text-green-700"
               : document?.status === "rejected"
-                ? "text-red-500"
+                ? "text-red-600"
                 : "text-general-200"
           }`}
         >
-          {document ? DOCUMENT_STATUS[document.status] : "Not uploaded"}
+          {document
+            ? t(`driver.documents.status.${document.status}`)
+            : t("driver.documents.notUploaded")}
         </Text>
       </View>
       {document?.expiresOn && (
         <Text className="text-xs text-general-200 mt-1">
-          Expires {document.expiresOn}
+          {t("driver.documents.expires", { date: document.expiresOn })}
         </Text>
       )}
       {document?.reviewNote && (
-        <Text className="text-sm text-red-500 mt-1">{document.reviewNote}</Text>
+        <Text className="text-sm text-red-600 mt-1">{document.reviewNote}</Text>
       )}
       {editable && (
         <>
           {needsExpiry(kind) && (
             <InputField
-              label="Expiry date (YYYY-MM-DD)"
+              label={t("driver.documents.expiry")}
               value={expiresOn}
               onChangeText={setExpiresOn}
               autoCapitalize="none"
@@ -134,8 +137,8 @@ const DocumentRow = ({
             title={
               busy ??
               (document && document.status !== "pending_upload"
-                ? "Replace file"
-                : "Choose file")
+                ? t("driver.documents.replace")
+                : t("driver.documents.choose"))
             }
             bgVariant="outline"
             textVariant="primary"
@@ -147,7 +150,7 @@ const DocumentRow = ({
       )}
       {error && (
         <Text
-          className="text-sm text-red-500 mt-2"
+          className="text-sm text-red-600 mt-2"
           accessibilityLiveRegion="polite"
         >
           {error}
@@ -165,24 +168,27 @@ const DriverDocuments = ({
   documents: DriverDocumentView[];
   editable: boolean;
   onChanged: () => Promise<void> | void;
-}) => (
-  <View className="bg-white rounded-2xl p-5 mt-5">
-    <Text className="text-lg font-JakartaBold">Documents</Text>
-    <Text className="text-sm text-general-200 mt-1">
-      JPEG, PNG, or PDF up to 10 MB. Files are stored privately and are only
-      seen by the operators who review your application. A person checks them;
-      nothing is verified automatically.
-    </Text>
-    {documentKinds.map((kind) => (
-      <DocumentRow
-        key={`${kind}-${currentDocument(documents, kind)?.id ?? "none"}`}
-        kind={kind}
-        document={currentDocument(documents, kind)}
-        editable={editable}
-        onChanged={onChanged}
-      />
-    ))}
-  </View>
-);
+}) => {
+  const { t } = useI18n();
+  return (
+    <View className="bg-white rounded-2xl p-5 mt-5">
+      <Text className="text-lg font-JakartaBold" accessibilityRole="header">
+        {t("driver.documents.title")}
+      </Text>
+      <Text className="text-sm text-general-200 mt-1">
+        {t("driver.documents.intro")}
+      </Text>
+      {documentKinds.map((kind) => (
+        <DocumentRow
+          key={`${kind}-${currentDocument(documents, kind)?.id ?? "none"}`}
+          kind={kind}
+          document={currentDocument(documents, kind)}
+          editable={editable}
+          onChanged={onChanged}
+        />
+      ))}
+    </View>
+  );
+};
 
 export default DriverDocuments;

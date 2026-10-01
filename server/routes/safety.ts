@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   type AdminSafetyItem,
   adminSafetyQuerySchema,
@@ -10,6 +12,7 @@ import {
 } from "../../shared/contracts";
 import { type Deps, parseInput, readJson } from "../http";
 import { audit, requireOperator } from "../operators";
+import { enforceRateLimit } from "../rateLimit";
 import {
   createSafetyReport,
   getMyReport,
@@ -45,6 +48,7 @@ export async function createReport(
   const user = await currentUser(request, deps);
   const rideId = parseInput(rideIdSchema, params.id);
   const input = await readJson(request, safetyReportSchema);
+  await enforceRateLimit(deps.db, "safetyReports", user.id, deps.now());
   const { report, created } = await createSafetyReport(
     deps,
     user.id,
@@ -90,6 +94,7 @@ export async function createShare(
 ) {
   const user = await currentUser(request, deps);
   const rideId = parseInput(rideIdSchema, params.id);
+  await enforceRateLimit(deps.db, "shareCreates", user.id, deps.now());
   return Response.json(
     { data: await createTripShare(deps, user.id, rideId) },
     { status: 201 },
@@ -112,6 +117,12 @@ export async function viewShare(
   deps: Deps,
 ) {
   const token = parseInput(shareTokenSchema, params.token);
+  await enforceRateLimit(
+    deps.db,
+    "shareViews",
+    createHash("sha256").update(token).digest("hex").slice(0, 32),
+    deps.now(),
+  );
   const response = Response.json({ data: await viewSharedTrip(deps, token) });
   response.headers.set("Referrer-Policy", "no-referrer");
   response.headers.set("X-Robots-Tag", "noindex");

@@ -28,6 +28,7 @@ import { type DisputeRow, syncDisputesForIntent } from "../disputes";
 import { entryView, type EntryRow, reconcileRide } from "../earnings";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
+import { deliverPending } from "../notifications";
 import {
   audit,
   type OperatorRow,
@@ -43,6 +44,7 @@ import {
   syncRefundsForIntent,
 } from "../refunds";
 import { settlementState } from "../rides";
+import { notifySupport } from "../support";
 import {
   applyTipRefundSnapshot,
   createTipRefund,
@@ -287,7 +289,7 @@ export async function rideDetail(
       review_resolver: string | null;
     }
   >(
-    `SELECT r.*, u.name AS passenger_name, u.clerk_id AS passenger_clerk_id,
+    `SELECT r.*, COALESCE(r.passenger_name, u.name) AS passenger_name, u.clerk_id AS passenger_clerk_id,
             dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model, dp.vehicle_plate,
             o.display_name AS review_resolver
        FROM mobility.rides r
@@ -974,6 +976,20 @@ async function supportChange(
     result: "succeeded",
     detail: { fromStatus: before.status, toStatus: rows[0].status },
   });
+  if (before.status !== rows[0].status) {
+    await notifySupport(
+      deps.db,
+      id,
+      action === "assigned"
+        ? "in_progress"
+        : action === "resolved"
+          ? "resolved"
+          : "reopened",
+      String(before.version + 1),
+      deps.now(),
+    );
+    await deliverPending(deps).catch(() => undefined);
+  }
   return Response.json({ data: await supportDetailBody(deps, id, operator) });
 }
 

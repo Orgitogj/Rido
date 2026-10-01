@@ -6,6 +6,7 @@ import {
 } from "../../shared/contracts";
 import { notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
+import { enforceRateLimit } from "../rateLimit";
 import { ratingEligibility } from "../ratings";
 import { RECEIPT_SQL, receiptFrom, type ReceiptRow } from "../receipts";
 import { ensureUser } from "../users";
@@ -118,6 +119,7 @@ export async function createSupportRequest(
   const user = await currentUser(request, deps);
   const rideId = parseInput(receiptIdSchema, params.id);
   const { category, message } = await readJson(request, supportRequestSchema);
+  await enforceRateLimit(deps.db, "supportRequests", user.id, deps.now());
   const { rows: owned } = await deps.db.query(
     `SELECT 1 FROM mobility.rides r WHERE r.id = $1 AND r.user_id = $2 AND ${VISIBLE}`,
     [rideId, user.id],

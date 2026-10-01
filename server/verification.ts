@@ -22,7 +22,12 @@ import { eligibleDriverSql } from "./eligibility";
 import { ApiError, notFound } from "./errors";
 import { ASSIGNED_STATUSES, lockRide, PRE_PICKUP_STATUSES } from "./lifecycle";
 import { clearDriverLocation } from "./location";
-import { deliverPending, type PushGateway } from "./notifications";
+import {
+  deliverPending,
+  enqueueNotification,
+  type PushGateway,
+} from "./notifications";
+import { NOTIFY } from "./notificationText";
 import { audit, type OperatorRow } from "./operators";
 import { flagRideReview } from "./review";
 import { type DocumentStorage, matchesSignature } from "./storage";
@@ -1104,6 +1109,18 @@ export async function decideApplication(
       applicantMessage: input.applicantMessage ?? null,
       now,
     });
+    await enqueueNotification(
+      tx,
+      {
+        userId: profile.user_id,
+        rideId: null,
+        kind: "application_update",
+        dedupeKey: `application:${profileId}:${profile.review_version + 1}:${input.action}`,
+        ...NOTIFY.application(input.action),
+        target: "/driver",
+      },
+      now,
+    );
     return { from: profile.status, to };
   };
   const outcome = await transaction(deps.db, async (tx) => {
@@ -1138,6 +1155,7 @@ export async function decideApplication(
   if (input.action === "suspend") {
     await handleIneligibleDriver(deps, profileId, "driver_suspended");
   }
+  await deliverPending(deps).catch(() => undefined);
 }
 
 export async function handleIneligibleDriver(

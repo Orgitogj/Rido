@@ -13,6 +13,8 @@ import { chatAccess, findVisibleMessage, type MessageRow } from "./chat";
 import { type Database, type SqlClient, transaction } from "./db";
 import { ApiError, notFound } from "./errors";
 import { TERMINAL_STATUSES } from "./lifecycle";
+import { enqueueNotification } from "./notifications";
+import { NOTIFY } from "./notificationText";
 import { audit, type OperatorRow } from "./operators";
 import { listShares, SHAREABLE_STATUSES } from "./shares";
 
@@ -54,7 +56,7 @@ export async function safetyParticipant(
     `SELECT r.id, r.user_id, r.status, r.driver_profile_id, dp.user_id AS driver_user_id,
             r.demo_driver_id, r.completed_at, r.cancelled_at, r.interrupted_at,
             dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model,
-            dp.vehicle_plate, u.name AS passenger_name
+            dp.vehicle_plate, COALESCE(r.passenger_name, u.name) AS passenger_name
        FROM mobility.rides r
        JOIN mobility.users u ON u.id = r.user_id
        LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
@@ -458,7 +460,7 @@ export async function safetyDetail(
       vehicle_plate: string | null;
     }>(
       `SELECT r.status, r.created_at, r.completed_at, r.interrupted_at, r.cancelled_at,
-              r.rematch_count, u.name AS passenger_name, u.clerk_id AS passenger_clerk_id,
+              r.rematch_count, COALESCE(r.passenger_name, u.name) AS passenger_name, u.clerk_id AS passenger_clerk_id,
               dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model, dp.vehicle_plate
          FROM mobility.rides r
          JOIN mobility.users u ON u.id = r.user_id
@@ -677,6 +679,20 @@ export async function triageSafetyReport(
         now,
       ],
     );
+    if (next !== before.status) {
+      await enqueueNotification(
+        tx,
+        {
+          userId: before.reporter_user_id,
+          rideId: before.ride_id,
+          kind: "safety_update",
+          dedupeKey: `safety:${reportId}:${rows[0].version}`,
+          ...NOTIFY.safety(next),
+          target: `/safety/${before.ride_id}`,
+        },
+        now,
+      );
+    }
     return { ok: true as const, before, after: rows[0] };
   });
   await audit(deps.db, {

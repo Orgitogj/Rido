@@ -1,59 +1,41 @@
+import { sections } from "@/lib/i18n/sections";
 import {
   type DocumentKind,
   type DocumentStatus,
   type DocumentUploadTicket,
   documentContentTypes,
   type DriverApplicationStatus,
+  driverApplicationStatuses,
   type DriverDocumentView,
   VERIFICATION_RULES,
 } from "@/shared/contracts";
 
-export const DOCUMENT_LABELS: Record<DocumentKind, string> = {
-  identity: "Proof of identity",
-  driving_license: "Driving licence",
-  vehicle_registration: "Vehicle registration",
-  insurance: "Vehicle insurance",
-};
+export const DOCUMENT_LABELS: Record<DocumentKind, string> =
+  sections.driver.en.documents.kind;
 
-export const APPLICATION_STATUS: Record<
-  DriverApplicationStatus,
-  { title: string; body: string }
-> = {
-  draft: {
-    title: "Draft",
-    body: "Finish your details and upload each document, then submit for review.",
-  },
-  submitted: {
-    title: "Submitted for review",
-    body: "An operator will review your details and documents. You can't edit them while they're being reviewed.",
-  },
-  changes_requested: {
-    title: "Changes requested",
-    body: "An operator asked for changes. Update what's listed below and submit again.",
-  },
-  approved: {
-    title: "Approved",
-    body: "You can go online and receive ride requests.",
-  },
-  rejected: {
-    title: "Not approved",
-    body: "Your application wasn't approved. You can start a new application.",
-  },
-  suspended: {
-    title: "Suspended",
-    body: "You can't go online. Contact support if you think this is a mistake.",
-  },
-};
+const STATUS_TEXT = sections.driver.en.status;
 
-export const DOCUMENT_STATUS: Record<DocumentStatus, string> = {
-  pending_upload: "Upload not finished",
-  uploaded: "Waiting for review",
-  accepted: "Accepted",
-  rejected: "Rejected",
-  replaced: "Replaced",
-  invalid: "Invalid file",
-  deleted: "Deleted",
-};
+export const APPLICATION_STATUS = Object.fromEntries(
+  driverApplicationStatuses.map((status) => [
+    status,
+    {
+      title: STATUS_TEXT[`${status}_title`],
+      body: STATUS_TEXT[`${status}_body`],
+    },
+  ]),
+) as Record<DriverApplicationStatus, { title: string; body: string }>;
+
+export const DOCUMENT_STATUS: Record<DocumentStatus, string> =
+  sections.driver.en.documents.status;
+
+export class UploadError extends Error {
+  constructor(
+    public code: "STORAGE_REFUSED" | "UPLOAD_FAILED",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export function needsExpiry(kind: DocumentKind) {
   return VERIFICATION_RULES.expiryRequired.includes(kind);
@@ -96,16 +78,16 @@ export function checkFile(
       contentType: (typeof documentContentTypes)[number];
       size: number;
     }
-  | { ok: false; message: string } {
+  | { ok: false; reason: "badType" | "empty" | "tooLarge" } {
   const contentType = guessContentType(name, mimeType);
   if (!contentType) {
-    return { ok: false, message: "Use a JPEG, PNG, or PDF file." };
+    return { ok: false, reason: "badType" };
   }
   if (!size || size < VERIFICATION_RULES.minBytes) {
-    return { ok: false, message: "That file looks empty." };
+    return { ok: false, reason: "empty" };
   }
   if (size > VERIFICATION_RULES.maxBytes) {
-    return { ok: false, message: "Files must be 10 MB or smaller." };
+    return { ok: false, reason: "tooLarge" };
   }
   return {
     ok: true,
@@ -168,10 +150,12 @@ export async function uploadToStorage(
   const { url, init } = uploadRequest(ticket, file, blob);
   const res = await send(url, init);
   if (!res.ok) {
-    throw new Error(
-      res.status === 400 || res.status === 403
-        ? "The storage service refused this file. Check that it is the size and type you chose, then try again."
-        : `Upload failed (${res.status}). Try again.`,
+    const refused = res.status === 400 || res.status === 403;
+    throw new UploadError(
+      refused ? "STORAGE_REFUSED" : "UPLOAD_FAILED",
+      refused
+        ? sections.driver.en.documents.storageRefused
+        : sections.driver.en.documents.uploadFailed,
     );
   }
 }

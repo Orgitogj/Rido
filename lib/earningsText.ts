@@ -1,18 +1,17 @@
-import type {
-  DriverEarningRide,
-  EarningEntryKind,
-  TipIneligibleReason,
-  TipStatus,
-} from "@/shared/contracts";
+import { sections } from "@/lib/i18n/sections";
+import { translate } from "@/lib/i18n/translate";
+
+import type { Language } from "@/shared/account";
+import type { TipIneligibleReason, TipStatus } from "@/shared/contracts";
 
 export type EarningsPeriod = "today" | "week" | "month" | "all";
 
-export const PERIOD_LABEL: Record<EarningsPeriod, string> = {
-  today: "Today",
-  week: "Last 7 days",
-  month: "Last 30 days",
-  all: "All time",
-};
+export const EARNINGS_PERIODS: EarningsPeriod[] = [
+  "today",
+  "week",
+  "month",
+  "all",
+];
 
 export function periodRange(
   period: EarningsPeriod,
@@ -26,39 +25,18 @@ export function periodRange(
   return { from: start.toISOString() };
 }
 
-export const ENTRY_LABEL: Record<EarningEntryKind, string> = {
-  ride_earning: "Fare earned",
-  tip: "Tip",
-  fare_refund_adjustment: "Refund adjustment (fare)",
-  tip_refund_adjustment: "Refund adjustment (tip)",
-  dispute_withdrawal: "Payment disputed: funds withdrawn",
-  dispute_reinstatement: "Dispute resolved: funds reinstated",
-};
+export const TIP_STATUS_TEXT: Record<TipStatus, string> =
+  sections.pay.en.tip.status;
 
-export const RIDE_STATE_LABEL: Record<DriverEarningRide["state"], string> = {
-  confirmed: "Confirmed",
-  pending: "Awaiting payment confirmation",
-  not_charged: "Not charged",
-};
-
-export const TIP_STATUS_TEXT: Record<TipStatus, string> = {
-  creating: "Starting payment…",
-  pending: "Not paid yet",
-  requires_action: "Waiting for your bank's verification",
-  processing: "Processing",
-  failed: "Payment declined",
-  succeeded: "Paid",
-  canceled: "Cancelled",
-};
-
-export const TIP_REASON_TEXT: Record<TipIneligibleReason, string | null> = {
-  not_completed: null,
-  simulated: null,
-  no_driver: null,
-  payment_pending: "You can add a tip once your fare payment is confirmed.",
-  window_closed: "The time to add a tip for this trip has passed.",
-  already_tipped: null,
-};
+export function tipReasonText(
+  reason: TipIneligibleReason | null,
+  language: Language = "en",
+): string | null {
+  if (reason === "payment_pending" || reason === "window_closed") {
+    return translate(language, `pay.tip.reason.${reason}`);
+  }
+  return null;
+}
 
 export const formatRate = (bps: number | null) =>
   bps === null ? "—" : `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;

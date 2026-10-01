@@ -1,20 +1,33 @@
+import { translate, translateCount } from "@/lib/i18n/translate";
+
+import type { Language } from "@/shared/account";
 import type { RatingIneligibleReason, RatingSummary } from "@/shared/contracts";
 
-export function formatRating(summary: RatingSummary | null): string {
-  if (!summary || summary.count === 0) return "New · no ratings yet";
+export function formatRating(
+  summary: RatingSummary | null,
+  language: Language = "en",
+): string {
+  if (!summary || summary.count === 0)
+    return translate(language, "rating.none");
   if (summary.average === null) {
-    return `New · ${summary.count} rating${summary.count === 1 ? "" : "s"}`;
+    return translateCount(language, "rating.few", summary.count);
   }
-  return `${summary.average.toFixed(1)} ★ · ${summary.count} ratings`;
+  return translateCount(language, "rating.summary", summary.count, {
+    average: summary.average.toFixed(1),
+  });
 }
 
-export const RATING_REASON_TEXT: Record<RatingIneligibleReason, string | null> =
-  {
-    not_completed: null,
-    simulated: null,
-    no_counterpart: null,
-    payment_pending: "You can rate this trip once the payment is confirmed.",
-    window_closed: "The rating period for this trip has ended.",
-  };
+export function ratingReasonText(
+  reason: RatingIneligibleReason | null,
+  language: Language = "en",
+): string | null {
+  if (reason === "payment_pending" || reason === "window_closed") {
+    return translate(language, `rating.reason.${reason}`);
+  }
+  return null;
+}
 
-export const STAR_LABELS = ["Poor", "Fair", "Good", "Great", "Excellent"];
+export function starLabel(stars: number, language: Language = "en") {
+  const n = Math.min(5, Math.max(1, Math.round(stars))) as 1 | 2 | 3 | 4 | 5;
+  return translate(language, `rating.label.s${n}`);
+}

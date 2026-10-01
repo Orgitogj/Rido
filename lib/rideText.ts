@@ -1,39 +1,59 @@
+import { type TKey, translate } from "@/lib/i18n/translate";
+
+import type { Language } from "@/shared/account";
 import type {
+  CancellationPreview,
   PaymentStatus,
-  SettlementState,
   RideAction,
   RideStatus,
   RideView,
+  SettlementState,
 } from "@/shared/contracts";
 
 export type BadgeTone = "success" | "neutral" | "active" | "warning";
 
-export const STATUS_BADGE: Record<
-  RideStatus,
-  { label: string; tone: BadgeTone }
-> = {
-  awaiting_payment: { label: "Awaiting payment", tone: "warning" },
-  requested: { label: "Finding driver", tone: "active" },
-  offered: { label: "Finding driver", tone: "active" },
-  accepted: { label: "Driver assigned", tone: "active" },
-  arriving: { label: "Driver on the way", tone: "active" },
-  arrived: { label: "Driver arrived", tone: "active" },
-  in_progress: { label: "On trip", tone: "active" },
-  completed: { label: "Completed", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
-  no_driver: { label: "No driver found", tone: "neutral" },
-  interrupted: { label: "Ended early", tone: "warning" },
-  legacy: { label: "Demo booking", tone: "neutral" },
+const TONES: Record<RideStatus, BadgeTone> = {
+  awaiting_payment: "warning",
+  requested: "active",
+  offered: "active",
+  accepted: "active",
+  arriving: "active",
+  arrived: "active",
+  in_progress: "active",
+  completed: "success",
+  cancelled: "neutral",
+  no_driver: "neutral",
+  interrupted: "warning",
+  legacy: "neutral",
 };
 
-export const ACTION_LABEL: Record<RideAction, string> = {
-  arriving: "Start driving to pickup",
-  arrived: "I've arrived at pickup",
-  in_progress: "Start trip",
-  completed: "Complete trip",
-  cancel: "Cancel ride",
-  interrupt: "End trip early",
-};
+export const statusTone = (status: RideStatus) => TONES[status];
+
+export const statusLabel = (status: RideStatus, language: Language = "en") =>
+  translate(language, `ride.status.${status}`);
+
+export const actionLabel = (action: RideAction, language: Language = "en") =>
+  translate(language, `ride.action.${action}`);
+
+export const STATUS_BADGE = Object.fromEntries(
+  (Object.keys(TONES) as RideStatus[]).map((status) => [
+    status,
+    { label: statusLabel(status), tone: TONES[status] },
+  ]),
+) as Record<RideStatus, { label: string; tone: BadgeTone }>;
+
+export const ACTION_LABEL = Object.fromEntries(
+  (
+    [
+      "arriving",
+      "arrived",
+      "in_progress",
+      "completed",
+      "cancel",
+      "interrupt",
+    ] as RideAction[]
+  ).map((action) => [action, actionLabel(action)]),
+) as Record<RideAction, string>;
 
 export const isTerminal = (status: RideStatus) =>
   status === "completed" ||
@@ -42,60 +62,63 @@ export const isTerminal = (status: RideStatus) =>
   status === "interrupted" ||
   status === "legacy";
 
-export function rideHeadline(ride: RideView): string {
-  const driver = ride.driver?.name ?? "Your driver";
+export function rideHeadline(
+  ride: RideView,
+  language: Language = "en",
+): string {
+  const h = (key: string, params?: Record<string, string>) =>
+    translate(language, `ride.headline.${key}` as TKey, params);
+  const driver = ride.driver?.name ?? h("yourDriver");
   if (ride.viewer === "driver") {
     switch (ride.status) {
       case "accepted":
-        return "Ride accepted. Head to the pickup when ready.";
+        return h("driverAccepted");
       case "arriving":
-        return "Driving to pickup";
+        return h("driverArriving");
       case "arrived":
-        return "Waiting for your passenger";
+        return h("driverArrived");
       case "in_progress":
-        return "On trip to destination";
+        return h("driverInProgress");
       case "completed":
-        return "Trip completed";
+        return h("driverCompleted");
       case "cancelled":
         return ride.cancelledBy === "driver"
-          ? "You cancelled this ride"
-          : "The passenger cancelled this ride";
+          ? h("driverCancelledSelf")
+          : h("driverCancelledOther");
       case "interrupted":
-        return "You ended this trip early";
+        return h("driverInterrupted");
       default:
-        return STATUS_BADGE[ride.status].label;
+        return statusLabel(ride.status, language);
     }
   }
   switch (ride.status) {
     case "awaiting_payment":
-      return "Confirming your payment…";
+      return h("awaitingPayment");
     case "requested":
     case "offered":
-      return ride.rematchCount > 0
-        ? "Your driver cancelled. Finding you another driver…"
-        : "Finding you a driver…";
+      return ride.rematchCount > 0 ? h("rematching") : h("searching");
     case "accepted":
-      return `${driver} accepted your ride`;
+      return h("accepted", { driver });
     case "arriving":
-      return `${driver} is on the way`;
+      return h("arriving", { driver });
     case "arrived":
-      return `${driver} has arrived at the pickup`;
+      return h("arrived", { driver });
     case "in_progress":
-      return "On your way";
+      return h("inProgress");
     case "completed":
-      return "You've arrived";
+      return h("completed");
     case "cancelled":
       return ride.cancelledBy === "driver"
-        ? "Your driver cancelled this ride"
+        ? h("cancelledByDriver")
         : ride.cancelledBy === "system"
-          ? "This request expired"
-          : "You cancelled this ride";
+          ? h("cancelledBySystem")
+          : h("cancelledBySelf");
     case "no_driver":
-      return "No drivers were available";
+      return h("noDriver");
     case "interrupted":
-      return "Your driver ended the trip early";
+      return h("interrupted");
     case "legacy":
-      return "Demo booking (simulated driver)";
+      return h("legacy");
   }
 }
 
@@ -103,35 +126,49 @@ export function paymentNote(
   status: PaymentStatus,
   rideStatus: RideStatus,
   settlement: SettlementState = "none",
+  language: Language = "en",
 ): string {
+  const p = (key: string) => translate(language, `ride.payment.${key}` as TKey);
   const ended =
     rideStatus === "cancelled" ||
     rideStatus === "no_driver" ||
     rideStatus === "interrupted";
   const delay =
     settlement === "retrying" || settlement === "needs_review"
-      ? " Our payment provider is responding slowly; we'll keep retrying automatically."
+      ? ` ${p("slow")}`
       : "";
   switch (status) {
     case "authorized":
-      if (rideStatus === "completed") return `Finalizing your charge…${delay}`;
-      if (ended) {
-        return `The hold on your card is being released. It is not a charge.${delay}`;
-      }
-      return "Your card has a hold for this fare. You're charged only when the trip is completed.";
+      if (rideStatus === "completed") return `${p("finalizing")}${delay}`;
+      if (ended) return `${p("releasing")}${delay}`;
+      return p("hold");
     case "paid":
-      return "Charged to your card. See the receipt for details.";
+      return p("paid");
     case "cancelled":
-      return "The hold on your card was released. You were not charged.";
+      return p("released");
     case "expired":
-      return "The card authorization expired. You were not charged.";
+      return p("expired");
     case "failed":
-      return "The card was declined. No payment was taken.";
+      return p("failed");
     case "requires_action":
-      return "Your bank needs additional verification.";
+      return p("requiresAction");
     case "processing":
-      return "Your bank is processing the payment.";
+      return p("processing");
     case "pending":
-      return "No payment has been taken.";
+      return p("pending");
   }
+}
+
+export function cancellationText(
+  preview: CancellationPreview,
+  hold: string,
+  language: Language = "en",
+) {
+  if (!preview.variant) {
+    return { title: preview.title, body: preview.consequence };
+  }
+  return {
+    title: translate(language, `ride.cancel.${preview.variant}_title`),
+    body: translate(language, `ride.cancel.${preview.variant}_body`, { hold }),
+  };
 }

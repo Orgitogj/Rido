@@ -7,6 +7,7 @@ import "react-native-reanimated";
 import { LogBox } from "react-native";
 
 import { tokenCache } from "@/lib/auth";
+import { useLanguage } from "@/lib/i18n";
 import { useNotificationRouting } from "@/lib/notifications";
 import "@/lib/tracking";
 
@@ -38,13 +39,20 @@ export default function RootLayout() {
     "Jakarta-SemiBold": require("../assets/fonts/PlusJakartaSans-SemiBold.ttf"),
   });
 
+  const languageReady = useLanguage((s) => s.ready);
+  const initLanguage = useLanguage((s) => s.init);
+
   useEffect(() => {
-    if (loaded) {
+    initLanguage();
+  }, [initLanguage]);
+
+  useEffect(() => {
+    if (loaded && languageReady) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, languageReady]);
 
-  if (!loaded) {
+  if (!loaded || !languageReady) {
     return null;
   }
 

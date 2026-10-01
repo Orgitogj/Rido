@@ -6,23 +6,52 @@ import Swiper from "react-native-swiper";
 
 import CustomButton from "@/components/CustomButton";
 import { onboarding } from "@/constants";
+import { type TKey, useI18n, useLanguage } from "@/lib/i18n";
+import { languages } from "@/shared/account";
 
-const Home = () => {
+const SLIDES: { title: TKey; body: TKey }[] = [
+  { title: "auth.slide1Title", body: "auth.slide1Body" },
+  { title: "auth.slide2Title", body: "auth.slide2Body" },
+  { title: "auth.slide3Title", body: "auth.slide3Body" },
+];
+
+const Welcome = () => {
   const swiperRef = useRef<Swiper>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-
-  const isLastSlide = activeIndex === onboarding.length - 1;
+  const { t, language } = useI18n();
+  const setLanguage = useLanguage((s) => s.setLanguage);
+  const isLastSlide = activeIndex === SLIDES.length - 1;
 
   return (
     <SafeAreaView className="flex h-full items-center justify-between bg-white">
-      <TouchableOpacity
-        onPress={() => {
-          router.replace("/(auth)/sign-up");
-        }}
-        className="w-full flex justify-end items-end p-5"
-      >
-        <Text className="text-black text-md font-JakartaBold">Skip</Text>
-      </TouchableOpacity>
+      <View className="w-full flex flex-row justify-between items-center p-5">
+        <View className="flex flex-row">
+          {languages.map((code) => (
+            <TouchableOpacity
+              key={code}
+              onPress={() => setLanguage(code)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: language === code }}
+              className="mr-4 min-h-[44px] justify-center"
+            >
+              <Text
+                className={`text-md ${language === code ? "font-JakartaBold text-[#0286FF]" : "font-Jakarta text-neutral-600"}`}
+              >
+                {code === "en" ? t("common.english") : t("common.albanian")}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity
+          onPress={() => router.replace("/(auth)/sign-up")}
+          accessibilityRole="button"
+          className="min-h-[44px] justify-center"
+        >
+          <Text className="text-black text-md font-JakartaBold">
+            {t("auth.skip")}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <Swiper
         ref={swiperRef}
@@ -35,27 +64,30 @@ const Home = () => {
         }
         onIndexChanged={(index) => setActiveIndex(index)}
       >
-        {onboarding.map((item) => (
-          <View key={item.id} className="flex items-center justify-center p-5">
+        {SLIDES.map((slide, index) => (
+          <View
+            key={slide.title}
+            className="flex items-center justify-center p-5"
+          >
             <Image
-              source={item.image}
+              source={onboarding[index]?.image}
               className="w-full h-[300px]"
               resizeMode="contain"
             />
             <View className="flex flex-row items-center justify-center w-full mt-10">
               <Text className="text-black text-3xl font-bold mx-10 text-center">
-                {item.title}
+                {t(slide.title)}
               </Text>
             </View>
             <Text className="text-md font-JakartaSemiBold text-center text-[#858585] mx-10 mt-3">
-              {item.description}
+              {t(slide.body)}
             </Text>
           </View>
         ))}
       </Swiper>
 
       <CustomButton
-        title={isLastSlide ? "Get Started" : "Next"}
+        title={isLastSlide ? t("auth.getStarted") : t("auth.next")}
         onPress={() =>
           isLastSlide
             ? router.replace("/(auth)/sign-up")
@@ -67,4 +99,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default Welcome;

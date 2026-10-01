@@ -1,34 +1,38 @@
 import { Linking, Switch, Text, View } from "react-native";
 
 import CustomButton from "@/components/CustomButton";
+import { type I18n, useI18n } from "@/lib/i18n";
 
 import type { TrackingStatus as Status } from "@/lib/tracking";
 
-const describe = (status: Status) => {
+const describe = (status: Status, t: I18n["t"]) => {
   switch (status.state) {
     case "off":
-      return "Location sharing is off.";
+      return t("ride.tracking.off");
     case "starting":
-      return "Starting location sharing…";
+      return t("ride.tracking.starting");
     case "denied":
-      return "Location permission is off, so riders can't see you and you won't get nearby requests.";
+      return t("ride.tracking.denied");
     case "services_off":
-      return "Location services are turned off on this device.";
+      return t("ride.tracking.servicesOff");
     case "unavailable":
-      return "Your location isn't available right now.";
+      return t("ride.tracking.unavailable");
     case "tracking":
-      if (status.lastProblem === "offline") {
-        return "No connection: your position isn't reaching the server. Riders see your last update and its age.";
-      }
+      if (status.lastProblem === "offline") return t("ride.tracking.offline");
       if (status.lastProblem === "weak_gps") {
-        return `Weak GPS signal (±${Math.round(status.accuracy ?? 0)} m). Your position may be off.`;
+        return t("ride.tracking.weakGps", {
+          meters: Math.round(status.accuracy ?? 0),
+        });
       }
-      if (status.lastProblem === "rejected") {
-        return "Your last position couldn't be confirmed and wasn't shared.";
-      }
+      if (status.lastProblem === "rejected") return t("ride.tracking.rejected");
       return status.lastSentAt
-        ? `Sharing your location · last sent ${Math.max(0, Math.round((Date.now() - status.lastSentAt) / 1000))}s ago`
-        : "Sharing your location";
+        ? t("ride.tracking.sharingAgo", {
+            seconds: Math.max(
+              0,
+              Math.round((Date.now() - status.lastSentAt) / 1000),
+            ),
+          })
+        : t("ride.tracking.sharing");
   }
 };
 
@@ -41,6 +45,7 @@ const TrackingStatus = ({
   wantBackground: boolean;
   onToggleBackground: (value: boolean) => void;
 }) => {
+  const { t } = useI18n();
   const problem =
     status.state === "denied" ||
     status.state === "services_off" ||
@@ -49,16 +54,18 @@ const TrackingStatus = ({
 
   return (
     <View className="bg-white rounded-2xl p-5 mt-5">
-      <Text className="text-lg font-JakartaBold">Location</Text>
+      <Text className="text-lg font-JakartaBold" accessibilityRole="header">
+        {t("ride.tracking.title")}
+      </Text>
       <Text
-        className={`text-sm mt-1 ${problem ? "text-orange-700" : "text-general-200"}`}
+        className={`text-sm mt-1 ${problem ? "text-orange-800" : "text-general-200"}`}
         accessibilityLiveRegion="polite"
       >
-        {describe(status)}
+        {describe(status, t)}
       </Text>
       {(status.state === "denied" || status.state === "services_off") && (
         <CustomButton
-          title="Open Settings"
+          title={t("ride.tracking.openSettings")}
           bgVariant="outline"
           textVariant="primary"
           className="mt-3"
@@ -68,23 +75,26 @@ const TrackingStatus = ({
       <View className="flex flex-row items-center justify-between mt-4">
         <View className="flex-1 pr-3">
           <Text className="text-base font-JakartaSemiBold">
-            Keep sharing in the background
+            {t("ride.tracking.background")}
           </Text>
           <Text className="text-xs text-general-200 mt-1">
             {status.background === "unsupported"
-              ? "Not available in Expo Go. Keep this screen open, or use a development build."
+              ? t("ride.tracking.backgroundUnsupported")
               : status.background === "denied"
-                ? 'Background location was not allowed. Enable "Allow all the time" in Settings.'
+                ? t("ride.tracking.backgroundDenied")
                 : status.background === "on"
-                  ? "On: a system notification shows while your location is shared."
-                  : "Off: sharing pauses when you leave the app."}
+                  ? t("ride.tracking.backgroundOn")
+                  : t("ride.tracking.backgroundOff")}
+          </Text>
+          <Text className="text-xs text-general-200 mt-1">
+            {t("ride.tracking.forceQuit")}
           </Text>
         </View>
         <Switch
           value={wantBackground && status.background === "on"}
           disabled={status.background === "unsupported"}
           onValueChange={onToggleBackground}
-          accessibilityLabel="Keep sharing location in the background"
+          accessibilityLabel={t("ride.tracking.background")}
         />
       </View>
     </View>

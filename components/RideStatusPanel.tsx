@@ -2,7 +2,6 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   Platform,
@@ -17,14 +16,15 @@ import RatingCard from "@/components/RatingCard";
 import StatusBadge from "@/components/StatusBadge";
 import { icons } from "@/constants";
 import { ApiRequestError } from "@/lib/fetch";
+import { useI18n } from "@/lib/i18n";
 import { formatRating } from "@/lib/ratingText";
 import {
-  ACTION_LABEL,
+  actionLabel,
+  cancellationText,
   isTerminal,
   paymentNote,
   rideHeadline,
 } from "@/lib/rideText";
-import { formatCents, formatDate, formatTime } from "@/lib/utils";
 
 import type {
   LiveTripView,
@@ -59,7 +59,9 @@ const openInMaps = (place: Place) => {
 const Row = ({ label, value }: { label: string; value: string }) => (
   <View className="flex flex-row items-center justify-between w-full border-b border-white py-3">
     <Text className="text-base font-Jakarta">{label}</Text>
-    <Text className="text-base font-JakartaSemiBold">{value}</Text>
+    <Text className="text-base font-JakartaSemiBold ml-3 flex-shrink text-right">
+      {value}
+    </Text>
   </View>
 );
 
@@ -91,21 +93,39 @@ const RideStatusPanel = ({
   connection: "connecting" | "live" | "reconnecting";
   perform: (action: RideAction, reason?: string) => Promise<"ok" | "left">;
 }) => {
+  const {
+    t,
+    language,
+    error: errorText,
+    money,
+    dateTime,
+    duration,
+  } = useI18n();
   const [busy, setBusy] = useState<RideAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<"cancel" | "interrupt" | null>(
+    null,
+  );
+  const [choosingReason, setChoosingReason] = useState(false);
   const searching = ride.status === "requested" || ride.status === "offered";
   const secondsLeft = useSecondsLeft(
     searching ? ride.searchDeadline : null,
     ride.serverTime,
   );
   const isDriver = ride.viewer === "driver";
+  const preview = ride.cancellation
+    ? cancellationText(ride.cancellation, money(ride.fareCents), language)
+    : null;
 
-  const [choosingReason, setChoosingReason] = useState(false);
+  useEffect(() => {
+    if (!ride.cancellation) setConfirming(null);
+  }, [ride.cancellation]);
 
   const run = async (action: RideAction, reason?: string) => {
     if (busy) return;
     setBusy(action);
     setError(null);
+    setConfirming(null);
     try {
       const result = await perform(action, reason);
       if (result === "left") router.replace("/(root)/driver");
@@ -121,39 +141,33 @@ const RideStatusPanel = ({
       }
       setError(
         e instanceof ApiRequestError && e.code === "INVALID_TRANSITION"
-          ? "The ride changed before your action went through. Showing the latest status."
-          : e instanceof Error
-            ? e.message
-            : "Something went wrong.",
+          ? t("ride.panel.changed")
+          : errorText(e),
       );
     } finally {
       setBusy(null);
     }
   };
 
-  const confirm = (action: "cancel" | "interrupt") => {
-    const preview = ride.cancellation;
-    if (!preview) return;
-    Alert.alert(preview.title, preview.consequence, [
-      {
-        text: action === "interrupt" ? "Keep driving" : "Keep ride",
-        style: "cancel",
-      },
-      {
-        text: action === "interrupt" ? "Choose a reason" : "Cancel ride",
-        style: "destructive",
-        onPress: () =>
-          action === "interrupt" ? setChoosingReason(true) : run("cancel"),
-      },
-    ]);
-  };
+  const busyLabel = (action: RideAction) =>
+    action === "cancel"
+      ? t("ride.busy.cancelling")
+      : action === "interrupt"
+        ? t("ride.busy.ending")
+        : t("ride.busy.updating");
+
+  const navigateTo =
+    ride.status === "in_progress" ? ride.destination : ride.pickup;
 
   return (
     <View className="pb-10">
       {connection === "reconnecting" && (
-        <View className="bg-orange-100 rounded-lg px-3 py-2 mb-3">
-          <Text className="text-xs text-orange-700">
-            Reconnecting… showing the last known status.
+        <View
+          className="bg-orange-100 rounded-lg px-3 py-2 mb-3"
+          accessibilityLiveRegion="polite"
+        >
+          <Text className="text-xs text-orange-800">
+            {t("ride.panel.reconnecting")}
           </Text>
         </View>
       )}
@@ -161,21 +175,27 @@ const RideStatusPanel = ({
       <View className="flex flex-row items-center justify-between mb-2">
         <StatusBadge status={ride.status} />
         <Text className="text-lg font-JakartaBold">
-          {formatCents(ride.fareCents)}
+          {money(ride.fareCents)}
         </Text>
       </View>
-      <Text className="text-2xl font-JakartaBold mt-2">
-        {rideHeadline(ride)}
+      <Text
+        className="text-2xl font-JakartaBold mt-2"
+        accessibilityRole="header"
+        accessibilityLiveRegion="polite"
+      >
+        {rideHeadline(ride, language)}
       </Text>
 
       {searching && !isDriver && (
         <View className="flex flex-row items-center mt-4">
           <ActivityIndicator size="small" color="#0286FF" />
-          <Text className="text-sm text-general-200 ml-3">
+          <Text className="text-sm text-general-200 ml-3 flex-1">
             {ride.status === "offered"
-              ? "A nearby driver is reviewing your request."
-              : "Looking for available drivers nearby."}
-            {secondsLeft !== null ? ` Search ends in ${secondsLeft}s.` : ""}
+              ? t("ride.panel.offerReview")
+              : t("ride.panel.lookingNearby")}
+            {secondsLeft !== null
+              ? ` ${t("ride.panel.searchEnds", { seconds: secondsLeft })}`
+              : ""}
           </Text>
         </View>
       )}
@@ -186,37 +206,64 @@ const RideStatusPanel = ({
 
       {ride.driver && !isDriver && (
         <View className="bg-general-600 rounded-2xl px-4 py-2 mt-4">
-          <Row label="Driver" value={ride.driver.name} />
+          <Row label={t("ride.panel.driver")} value={ride.driver.name} />
           <Row
-            label="Vehicle"
+            label={t("ride.panel.vehicle")}
             value={[ride.driver.color, ride.driver.vehicle]
               .filter(Boolean)
               .join(" ")}
           />
-          <Row label="Plate" value={ride.driver.plate} />
-          <Row label="Seats" value={String(ride.driver.seats)} />
-          <Row label="Rating" value={formatRating(ride.counterpartRating)} />
+          <Row label={t("ride.panel.plate")} value={ride.driver.plate} />
+          <Row
+            label={t("ride.panel.seats")}
+            value={String(ride.driver.seats)}
+          />
+          <Row
+            label={t("ride.panel.rating")}
+            value={formatRating(ride.counterpartRating, language)}
+          />
         </View>
       )}
 
       {isDriver && (
         <View className="bg-general-600 rounded-2xl px-4 py-2 mt-4">
-          <Row label="Passenger" value={ride.passengerName ?? "Passenger"} />
-          <Row label="Rating" value={formatRating(ride.counterpartRating)} />
           <Row
-            label="Est. trip time"
-            value={formatTime(ride.durationSeconds / 60)}
+            label={t("ride.panel.passenger")}
+            value={ride.passengerName ?? t("ride.panel.passengerFallback")}
+          />
+          <Row
+            label={t("ride.panel.rating")}
+            value={formatRating(ride.counterpartRating, language)}
+          />
+          <Row
+            label={t("ride.panel.tripTime")}
+            value={duration(ride.durationSeconds / 60)}
           />
         </View>
       )}
 
-      {ride.status !== "legacy" && (
+      {isDriver && !isTerminal(ride.status) && (
         <CustomButton
-          title="Safety"
+          title={
+            ride.status === "in_progress"
+              ? t("ride.panel.navigateDestination")
+              : t("ride.panel.navigatePickup")
+          }
           bgVariant="outline"
           textVariant="primary"
           className="mt-4"
-          accessibilityHint="Report a safety issue, contact support or share your trip"
+          accessibilityHint={t("ride.panel.navigateHint")}
+          onPress={() => openInMaps(navigateTo)}
+        />
+      )}
+
+      {ride.status !== "legacy" && (
+        <CustomButton
+          title={t("ride.panel.safety")}
+          bgVariant="outline"
+          textVariant="primary"
+          className="mt-4"
+          accessibilityHint={t("ride.panel.safetyHint")}
           onPress={() =>
             router.push({
               pathname: "/(root)/safety/[id]",
@@ -232,12 +279,12 @@ const RideStatusPanel = ({
           <CustomButton
             title={
               ride.chat.state === "open"
-                ? `Message ${isDriver ? "passenger" : "driver"}${ride.chat.unread > 0 ? ` (${ride.chat.unread} new)` : ""}`
-                : "View messages"
+                ? `${t(isDriver ? "ride.panel.messagePassenger" : "ride.panel.messageDriver")}${ride.chat.unread > 0 ? ` (${t("ride.panel.newMessages", { count: ride.chat.unread })})` : ""}`
+                : t("ride.panel.viewMessages")
             }
             bgVariant={ride.chat.unread > 0 ? "primary" : "outline"}
             textVariant={ride.chat.unread > 0 ? "default" : "primary"}
-            accessibilityHint="Opens the conversation for this ride"
+            accessibilityHint={t("ride.panel.chatHint")}
             onPress={() =>
               router.push({
                 pathname: "/(root)/chat/[id]",
@@ -250,47 +297,37 @@ const RideStatusPanel = ({
 
       {ride.status === "legacy" && ride.legacyDemoDriver && (
         <Text className="text-sm text-general-200 mt-3">
-          Booked with the earlier demo flow and a simulated driver (
-          {ride.legacyDemoDriver}). No real driver was involved.
+          {t("ride.panel.legacyNote", { driver: ride.legacyDemoDriver })}
         </Text>
       )}
 
       <Route ride={ride} />
 
-      {isDriver && !isTerminal(ride.status) && (
-        <View className="flex flex-row mt-3 gap-x-3">
-          <CustomButton
-            title="Pickup in Maps"
-            bgVariant="outline"
-            textVariant="primary"
-            className="flex-1 w-auto"
-            onPress={() => openInMaps(ride.pickup)}
-          />
-          <CustomButton
-            title="Destination"
-            bgVariant="outline"
-            textVariant="primary"
-            className="flex-1 w-auto"
-            onPress={() => openInMaps(ride.destination)}
-          />
-        </View>
-      )}
-
       {ride.status === "completed" && (
         <View className="bg-general-600 rounded-2xl px-4 py-2 mt-4">
           <Row
-            label="Requested"
-            value={formatDate(ride.requestedAt ?? ride.createdAt)}
+            label={t("ride.panel.requested")}
+            value={dateTime(ride.requestedAt ?? ride.createdAt)}
           />
           {ride.startedAt && (
-            <Row label="Picked up" value={formatDate(ride.startedAt)} />
+            <Row
+              label={t("ride.panel.pickedUp")}
+              value={dateTime(ride.startedAt)}
+            />
           )}
           {ride.completedAt && (
-            <Row label="Dropped off" value={formatDate(ride.completedAt)} />
+            <Row
+              label={t("ride.panel.droppedOff")}
+              value={dateTime(ride.completedAt)}
+            />
           )}
           <Row
-            label={ride.paymentStatus === "paid" ? "Charged" : "Fare"}
-            value={formatCents(ride.fareCents)}
+            label={
+              ride.paymentStatus === "paid"
+                ? t("ride.panel.charged")
+                : t("ride.panel.fare")
+            }
+            value={money(ride.fareCents)}
           />
         </View>
       )}
@@ -299,19 +336,24 @@ const RideStatusPanel = ({
         <RatingCard
           rideId={ride.id}
           rating={ride.rating}
-          counterpart={isDriver ? "the passenger" : "your driver"}
+          counterpart={isDriver ? "passenger" : "driver"}
         />
       )}
 
       {!isDriver && ride.status !== "legacy" && (
         <Text className="text-sm text-general-200 mt-4">
-          {paymentNote(ride.paymentStatus, ride.status, ride.settlement)}
+          {paymentNote(
+            ride.paymentStatus,
+            ride.status,
+            ride.settlement,
+            language,
+          )}
         </Text>
       )}
 
       {error && (
         <Text
-          className="text-sm text-red-500 mt-4"
+          className="text-sm text-red-600 mt-4"
           accessibilityLiveRegion="polite"
         >
           {error}
@@ -323,37 +365,88 @@ const RideStatusPanel = ({
         .map((action) => (
           <CustomButton
             key={action}
-            title={busy === action ? "Updating…" : ACTION_LABEL[action]}
+            title={
+              busy === action
+                ? busyLabel(action)
+                : actionLabel(action, language)
+            }
             disabled={busy !== null}
             className="mt-5"
             onPress={() => run(action)}
           />
         ))}
 
-      {ride.allowedActions.includes("cancel") && (
+      {confirming && preview && (
+        <View
+          className="bg-red-50 rounded-2xl p-4 mt-5"
+          accessibilityRole="alert"
+        >
+          <Text className="text-base font-JakartaBold">{preview.title}</Text>
+          <Text className="text-sm text-neutral-700 mt-2">{preview.body}</Text>
+          <CustomButton
+            title={
+              confirming === "interrupt"
+                ? t("ride.cancel.chooseReason")
+                : t("ride.cancel.confirmCancel")
+            }
+            bgVariant="danger"
+            disabled={busy !== null}
+            className="mt-4"
+            onPress={() => {
+              if (confirming === "interrupt") {
+                setConfirming(null);
+                setChoosingReason(true);
+              } else {
+                run("cancel");
+              }
+            }}
+          />
+          <CustomButton
+            title={
+              confirming === "interrupt"
+                ? t("ride.cancel.keepDriving")
+                : t("ride.cancel.keepRide")
+            }
+            bgVariant="outline"
+            textVariant="primary"
+            className="mt-3"
+            onPress={() => setConfirming(null)}
+          />
+        </View>
+      )}
+
+      {!confirming && ride.allowedActions.includes("cancel") && (
         <CustomButton
-          title={busy === "cancel" ? "Cancelling…" : ACTION_LABEL.cancel}
+          title={
+            busy === "cancel"
+              ? busyLabel("cancel")
+              : actionLabel("cancel", language)
+          }
           bgVariant="danger"
-          disabled={busy !== null}
+          disabled={busy !== null || !preview}
           className="mt-5"
-          onPress={() => confirm("cancel")}
+          onPress={() => setConfirming("cancel")}
         />
       )}
 
-      {ride.allowedActions.includes("interrupt") && (
+      {!confirming && ride.allowedActions.includes("interrupt") && (
         <CustomButton
-          title={busy === "interrupt" ? "Ending trip…" : ACTION_LABEL.interrupt}
+          title={
+            busy === "interrupt"
+              ? busyLabel("interrupt")
+              : actionLabel("interrupt", language)
+          }
           bgVariant="outline"
           textVariant="danger"
-          disabled={busy !== null}
+          disabled={busy !== null || !preview}
           className="mt-5"
-          onPress={() => confirm("interrupt")}
+          onPress={() => setConfirming("interrupt")}
         />
       )}
 
       <InterruptReasonSheet
         visible={choosingReason}
-        consequence={ride.cancellation?.consequence ?? ""}
+        consequence={preview?.body ?? ""}
         onClose={() => setChoosingReason(false)}
         onChoose={(reason) => {
           setChoosingReason(false);
@@ -363,7 +456,7 @@ const RideStatusPanel = ({
 
       {!isDriver && isTerminal(ride.status) && ride.status !== "legacy" && (
         <CustomButton
-          title="View receipt"
+          title={t("ride.panel.viewReceipt")}
           bgVariant="outline"
           textVariant="primary"
           className="mt-5"
@@ -378,7 +471,7 @@ const RideStatusPanel = ({
 
       {!isDriver && ride.status === "no_driver" && (
         <CustomButton
-          title="Try again"
+          title={t("ride.panel.tryAgain")}
           className="mt-5"
           onPress={() => router.replace("/(root)/confirm-ride")}
         />
@@ -386,7 +479,9 @@ const RideStatusPanel = ({
 
       {isTerminal(ride.status) && (
         <CustomButton
-          title={isDriver ? "Back to driving" : "Back home"}
+          title={
+            isDriver ? t("ride.panel.backDriving") : t("ride.panel.backHome")
+          }
           bgVariant="outline"
           textVariant="primary"
           className="mt-5"

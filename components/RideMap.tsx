@@ -15,9 +15,11 @@ import MapView, {
 } from "react-native-maps";
 
 import { icons } from "@/constants";
+import { useI18n } from "@/lib/i18n";
 import { calculateRegion } from "@/lib/map";
 import { decodePolyline } from "@/shared/polyline";
 
+import type { I18n } from "@/lib/i18n";
 import type { DriverLocationView, Leg, Place } from "@/shared/contracts";
 
 const EDGE_PADDING = { top: 140, right: 60, bottom: 420, left: 60 };
@@ -25,14 +27,15 @@ const EDGE_PADDING = { top: 140, right: 60, bottom: 420, left: 60 };
 const describeLocation = (
   location: DriverLocationView | null,
   shared: boolean,
+  t: I18n["t"],
 ) => {
   if (!shared) return null;
-  if (!location) return "Driver location unavailable";
-  if (location.freshness === "live") return "Driver location · live";
+  if (!location) return t("ride.map.driverUnavailable");
+  if (location.freshness === "live") return t("ride.map.driverLive");
   const minutes = Math.floor(location.ageSeconds / 60);
   return minutes >= 1
-    ? `Driver location · updated ${minutes} min ago`
-    : `Driver location · updated ${location.ageSeconds}s ago`;
+    ? t("ride.map.driverMinutes", { minutes })
+    : t("ride.map.driverSeconds", { seconds: location.ageSeconds });
 };
 
 const RideMap = ({
@@ -48,6 +51,7 @@ const RideMap = ({
   driverLocation: DriverLocationView | null;
   polyline: string | null;
 }) => {
+  const { t } = useI18n();
   const mapRef = useRef<MapView>(null);
   const [following, setFollowing] = useState(true);
   const fittedFor = useRef<string | null>(null);
@@ -128,7 +132,7 @@ const RideMap = ({
       destination.longitude,
     ],
   );
-  const label = describeLocation(driverLocation, leg !== null);
+  const label = describeLocation(driverLocation, leg !== null, t);
 
   return (
     <View className="flex-1 w-full">
@@ -143,10 +147,14 @@ const RideMap = ({
         onMapReady={fit}
         onPanDrag={() => setFollowing(false)}
       >
-        <Marker coordinate={pickup} title="Pickup" image={icons.point} />
+        <Marker
+          coordinate={pickup}
+          title={t("ride.map.pickup")}
+          image={icons.point}
+        />
         <Marker
           coordinate={destination}
-          title="Destination"
+          title={t("ride.map.destination")}
           image={icons.pin}
         />
         {route && route.length > 1 && (
@@ -163,7 +171,7 @@ const RideMap = ({
         {hasDriver && (
           <MarkerAnimated
             coordinate={driverCoordinate as never}
-            title="Your driver"
+            title={t("ride.map.driver")}
             image={icons.selectedMarker}
             opacity={driverLocation?.freshness === "live" ? 1 : 0.5}
           />
@@ -177,15 +185,17 @@ const RideMap = ({
       {!following && (
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Recenter map"
+          accessibilityLabel={t("ride.map.recenterLabel")}
           onPress={() => {
             setFollowing(true);
             fittedFor.current = null;
             fit();
           }}
-          className="absolute top-36 right-3 bg-white rounded-full px-3 py-2 shadow-md shadow-neutral-400"
+          className="absolute top-36 right-3 bg-white rounded-full px-4 min-h-[44px] justify-center shadow-md shadow-neutral-400"
         >
-          <Text className="text-xs font-JakartaSemiBold">Recenter</Text>
+          <Text className="text-xs font-JakartaSemiBold">
+            {t("ride.map.recenter")}
+          </Text>
         </TouchableOpacity>
       )}
     </View>

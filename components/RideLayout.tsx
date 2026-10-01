@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import Map from "@/components/Map";
 import { icons } from "@/constants";
+import { useI18n } from "@/lib/i18n";
 
 const RideLayout = ({
   title,
@@ -26,6 +27,7 @@ const RideLayout = ({
   children: React.ReactNode;
 }) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const { t } = useI18n();
 
   return (
     <GestureHandlerRootView className="flex-1">
@@ -35,7 +37,7 @@ const RideLayout = ({
             <TouchableOpacity
               onPress={onBack ?? (() => router.back())}
               accessibilityRole="button"
-              accessibilityLabel="Go back"
+              accessibilityLabel={t("ride.panel.goBack")}
             >
               <View className="w-10 h-10 bg-white rounded-full items-center justify-center">
                 <Image
@@ -46,7 +48,7 @@ const RideLayout = ({
               </View>
             </TouchableOpacity>
             <Text className="text-xl font-JakartaSemiBold ml-5">
-              {title || "Go Back"}
+              {title || t("ride.panel.goBack")}
             </Text>
           </View>
 

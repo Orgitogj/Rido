@@ -4,12 +4,14 @@ import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
 import MapViewDirections from "react-native-maps-directions";
 
 import { icons } from "@/constants";
+import { useI18n } from "@/lib/i18n";
 import { calculateRegion, isCoord } from "@/lib/map";
 import { useLocationStore } from "@/store";
 
 const directionsAPI = process.env.EXPO_PUBLIC_GOOGLE_API_KEY;
 
 const Map = () => {
+  const { t } = useI18n();
   const {
     userLongitude,
     userLatitude,
@@ -51,13 +53,12 @@ const Map = () => {
           <>
             <ActivityIndicator size="small" color="#000" />
             <Text className="text-sm text-general-200 mt-2">
-              Finding your location…
+              {t("ride.map.locating")}
             </Text>
           </>
         ) : (
           <Text className="text-sm text-general-200 text-center">
-            Your location is unavailable. Choose a pickup address to see the
-            map.
+            {t("ride.map.unavailable")}
           </Text>
         )}
       </View>
@@ -85,7 +86,7 @@ const Map = () => {
               latitude: destinationLatitude,
               longitude: destinationLongitude,
             }}
-            title="Destination"
+            title={t("ride.map.destination")}
             image={icons.pin}
           />
         )}
@@ -108,8 +109,7 @@ const Map = () => {
       {hasDestination && (routeFailed || !directionsAPI) && (
         <View className="absolute bottom-2 left-2 right-2 bg-white/90 rounded-lg px-3 py-2">
           <Text className="text-xs text-general-200 text-center">
-            Route preview unavailable. Prices are still calculated by the
-            server.
+            {t("ride.map.noRoutePreview")}
           </Text>
         </View>
       )}

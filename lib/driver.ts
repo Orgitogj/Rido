@@ -12,6 +12,7 @@ export function useDriverDashboard() {
   const request = useApi();
   const [data, setData] = useState<DriverDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [receivedAt, setReceivedAt] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(0);
@@ -26,11 +27,13 @@ export function useDriverDashboard() {
       setData(next);
       setReceivedAt(Date.now());
       setError(null);
+      setErrorCode(null);
     } catch (e) {
       if (id === latest.current) {
         setError(
           e instanceof ApiRequestError ? e.message : "Connection problem",
         );
+        setErrorCode(e instanceof ApiRequestError ? e.code : "NETWORK");
       }
     }
   }, [request]);
@@ -60,5 +63,5 @@ export function useDriverDashboard() {
     setReceivedAt(Date.now());
   }, []);
 
-  return { data, error, receivedAt, refresh: beat, replace };
+  return { data, error, errorCode, receivedAt, refresh: beat, replace };
 }

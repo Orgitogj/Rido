@@ -6,6 +6,7 @@ declare interface SelectedPlace {
   latitude: number;
   longitude: number;
   address: string;
+  providerPlaceId?: string | null;
 }
 
 declare interface ButtonProps extends TouchableOpacityProps {
@@ -39,6 +40,8 @@ declare interface PaymentProps {
   quoteId: string;
   fareCents: number;
   onRequested: (rideId: string) => void;
+  onExpired?: () => void;
+  disabled?: boolean;
 }
 
 declare type LocationStatus =

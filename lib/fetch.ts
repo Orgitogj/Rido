@@ -120,9 +120,14 @@ export function useApi() {
 }
 
 export type QueryState<T> =
-  | { status: "loading"; data: T | null; error: null }
-  | { status: "success"; data: T; error: null }
-  | { status: "error"; data: T | null; error: string };
+  | { status: "loading"; data: T | null; error: null; errorCode: null }
+  | { status: "success"; data: T; error: null; errorCode: null }
+  | {
+      status: "error";
+      data: T | null;
+      error: string;
+      errorCode: string | null;
+    };
 
 export function useApiQuery<T>(
   path: string | null,
@@ -134,17 +139,23 @@ export function useApiQuery<T>(
     status: "loading",
     data: null,
     error: null,
+    errorCode: null,
   });
   const latest = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!path) return;
     const id = ++latest.current;
-    setState((prev) => ({ status: "loading", data: prev.data, error: null }));
+    setState((prev) => ({
+      status: "loading",
+      data: prev.data,
+      error: null,
+      errorCode: null,
+    }));
     try {
       const data = await request<T>(path);
       if (id === latest.current)
-        setState({ status: "success", data, error: null });
+        setState({ status: "success", data, error: null, errorCode: null });
     } catch (error) {
       if (id === latest.current) {
         setState((prev) => ({
@@ -152,6 +163,7 @@ export function useApiQuery<T>(
           data: prev.data,
           error:
             error instanceof Error ? error.message : "Something went wrong.",
+          errorCode: error instanceof ApiRequestError ? error.code : null,
         }));
       }
     }

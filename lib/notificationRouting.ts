@@ -9,9 +9,19 @@ const RECEIPT_ROUTE =
 const CHAT_ROUTE =
   /^\/chat\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
+const SUPPORT_ROUTE =
+  /^\/support\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SAFETY_ROUTE =
+  /^\/safety\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function safeInternalRoute(path: unknown): string | null {
   if (typeof path !== "string") return null;
-  if (path === "/driver" || path === "/admin") return path;
+  if (path === "/driver" || path === "/admin" || path === "/notifications") {
+    return path;
+  }
+  if (SUPPORT_ROUTE.test(path)) return path.toLowerCase();
+  if (SAFETY_ROUTE.test(path)) return path.toLowerCase();
   if (RIDE_ROUTE.test(path)) return path.toLowerCase();
   if (RECEIPT_ROUTE.test(path)) return path.toLowerCase();
   if (CHAT_ROUTE.test(path)) return path.toLowerCase();

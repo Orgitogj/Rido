@@ -13,6 +13,7 @@ import {
 } from "../../server/routing";
 import { haversineMeters } from "../../shared/geo";
 
+import type { IdentityAdmin } from "../../server/account";
 import type {
   PushGateway,
   PushMessage,
@@ -104,7 +105,11 @@ const b64url = (value: object | Buffer) =>
 
 export function sessionToken(
   clerkId: string,
-  opts: { expiresInSeconds?: number; signWithOtherKey?: boolean } = {},
+  opts: {
+    expiresInSeconds?: number;
+    signWithOtherKey?: boolean;
+    factorAgeMinutes?: number;
+  } = {},
 ) {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT", kid: "ins_test" };
@@ -115,6 +120,9 @@ export function sessionToken(
     iat: now - 5,
     nbf: now - 5,
     exp: now + (opts.expiresInSeconds ?? 60),
+    ...(opts.factorAgeMinutes === undefined
+      ? {}
+      : { fva: [opts.factorAgeMinutes, -1] }),
   };
   const input = `${b64url(header)}.${b64url(payload)}`;
   const signature = createSign("RSA-SHA256")
@@ -150,6 +158,13 @@ export class FakeStripe implements PaymentGateway {
   failNext: { capture?: boolean; cancel?: boolean } = {};
   private seq = 0;
   private real = stripeGateway();
+
+  deletedCustomers: string[] = [];
+  customerDeleteFails = false;
+  async deleteCustomer(id: string) {
+    if (this.customerDeleteFails) throw new Error("stripe unavailable");
+    this.deletedCustomers.push(id);
+  }
 
   async createCustomer(_input: { userId: string }, key: string) {
     this.calls.createCustomer++;
@@ -612,12 +627,22 @@ export class FakeStorage implements DocumentStorage {
   }
 }
 
+export class FakeIdentity implements IdentityAdmin {
+  deleted: string[] = [];
+  fail = false;
+  async deleteUser(clerkId: string) {
+    if (this.fail) throw new Error("clerk unavailable");
+    this.deleted.push(clerkId);
+  }
+}
+
 export interface TestContext {
   db: Pool;
   stripe: FakeStripe;
   routing: FakeRouting;
   push: FakePush;
   storage: FakeStorage;
+  identity: FakeIdentity;
   clock: { now: Date };
   onSleep: (() => Promise<void> | void) | null;
   deps: Deps;
@@ -632,6 +657,7 @@ export function createContext(db: Pool): TestContext {
   stripe.clock = null;
   const push = new FakePush();
   const storage = new FakeStorage();
+  const identity = new FakeIdentity();
   const clock = { now: new Date() };
   stripe.clock = clock;
   const ctx = {
@@ -640,6 +666,7 @@ export function createContext(db: Pool): TestContext {
     routing,
     push,
     storage,
+    identity,
     clock,
     onSleep: null,
   } as unknown as TestContext;
@@ -650,6 +677,7 @@ export function createContext(db: Pool): TestContext {
     routing,
     push,
     storage,
+    identity,
     now: () => clock.now,
     sleep: async (ms: number) => {
       clock.now = new Date(clock.now.getTime() + ms);
@@ -667,6 +695,7 @@ export async function call<P>(
   opts: {
     method?: string;
     user?: string;
+    factorAgeMinutes?: number;
     token?: string;
     body?: unknown;
     rawBody?: string;
@@ -678,7 +707,7 @@ export async function call<P>(
   const headers: Record<string, string> = { ...opts.headers };
   if (opts.token !== undefined) headers.authorization = opts.token;
   else if (opts.user)
-    headers.authorization = `Bearer ${sessionToken(opts.user)}`;
+    headers.authorization = `Bearer ${sessionToken(opts.user, { factorAgeMinutes: opts.factorAgeMinutes })}`;
   let body: string | undefined = opts.rawBody;
   if (opts.body !== undefined) {
     body = JSON.stringify(opts.body);

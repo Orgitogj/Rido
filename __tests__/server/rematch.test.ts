@@ -325,7 +325,11 @@ describe("cancellation previews", () => {
   it("shows each actor the consequence before they confirm", async () => {
     await onlineDriver(ctx, A);
     const { rideId, view } = await requestRide(ctx, P);
-    expect(view.cancellation).toMatchObject({ action: "cancel", feeCents: 0 });
+    expect(view.cancellation).toMatchObject({
+      action: "cancel",
+      variant: "passenger_searching",
+      feeCents: 0,
+    });
     expect(view.cancellation!.consequence).toMatch(
       /release the \$\d+\.\d\d hold/,
     );
@@ -334,11 +338,18 @@ describe("cancellation previews", () => {
     await assign(ctx, A, rideId);
     const driverView = (await viewRide(ctx, A, rideId)).json.data;
     expect(driverView.cancellation.consequence).toMatch(/another driver/);
+    expect(driverView.cancellation.variant).toBe("driver_rematch");
+    expect(
+      (await viewRide(ctx, P, rideId)).json.data.cancellation.variant,
+    ).toBe("passenger_assigned");
 
     await drive(ctx, A, rideId, "in_progress");
     const onTrip = (await viewRide(ctx, A, rideId)).json.data;
     expect(onTrip.allowedActions).toEqual(["completed", "interrupt"]);
-    expect(onTrip.cancellation).toMatchObject({ action: "interrupt" });
+    expect(onTrip.cancellation).toMatchObject({
+      action: "interrupt",
+      variant: "driver_interrupt",
+    });
     const passengerOnTrip = (await viewRide(ctx, P, rideId)).json.data;
     expect(passengerOnTrip.cancellation).toBeNull();
     expect(passengerOnTrip.allowedActions).toEqual([]);

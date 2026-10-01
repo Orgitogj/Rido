@@ -7,11 +7,11 @@ const getBgVariantStyle = (variant: ButtonProps["bgVariant"]) => {
     case "secondary":
       return "bg-gray-500";
     case "danger":
-      return "bg-red-500";
+      return "bg-red-600";
     case "success":
-      return "bg-green-500";
+      return "bg-green-700";
     case "outline":
-      return "bg-transparent border-neutral-300 border-[0.5px]";
+      return "bg-transparent border-neutral-400 border";
     default:
       return "bg-[#0286FF]";
   }
@@ -24,9 +24,9 @@ const getTextVariantStyle = (variant: ButtonProps["textVariant"]) => {
     case "secondary":
       return "text-gray-100";
     case "danger":
-      return "text-red-100";
+      return "text-red-600";
     case "success":
-      return "text-green-100";
+      return "text-green-700";
     default:
       return "text-white";
   }
@@ -45,13 +45,15 @@ const CustomButton = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className={`w-full rounded-full p-3 flex flex-row justify-center items-center shadow-md shadow-neutral-400/70 ${getBgVariantStyle(bgVariant)} ${props.disabled ? "opacity-50" : ""} ${className}`}
+      className={`w-full min-h-[48px] rounded-full p-3 flex flex-row justify-center items-center shadow-md shadow-neutral-400/70 ${getBgVariantStyle(bgVariant)} ${props.disabled ? "opacity-50" : ""} ${className}`}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!props.disabled }}
       {...props}
     >
       {IconLeft && <IconLeft />}
-      <Text className={`text-lg font-bold ${getTextVariantStyle(textVariant)}`}>
+      <Text
+        className={`text-lg font-bold text-center ${getTextVariantStyle(textVariant)}`}
+      >
         {title}
       </Text>
       {IconRight && <IconRight />}

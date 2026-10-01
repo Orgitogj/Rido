@@ -3,6 +3,7 @@ import { Image, Text, View } from "react-native";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 
 import { icons } from "@/constants";
+import { type TKey, useI18n } from "@/lib/i18n";
 import { GoogleInputProps } from "@/types/type";
 
 const googlePlacesApiKey =
@@ -16,10 +17,9 @@ const GoogleTextInput = ({
   textInputBackgroundColor,
   handlePress,
 }: GoogleInputProps) => {
-  const [error, setError] = useState<string | null>(
-    googlePlacesApiKey
-      ? null
-      : "Address search needs a Google Places API key (see README).",
+  const { t, language } = useI18n();
+  const [error, setError] = useState<TKey | null>(
+    googlePlacesApiKey ? null : "booking.search.noKey",
   );
 
   return (
@@ -29,7 +29,7 @@ const GoogleTextInput = ({
       >
         <GooglePlacesAutocomplete
           fetchDetails={true}
-          placeholder="Search"
+          placeholder={t("common.search")}
           minLength={2}
           debounce={200}
           styles={{
@@ -68,9 +68,7 @@ const GoogleTextInput = ({
             const lat = details?.geometry?.location?.lat;
             const lng = details?.geometry?.location?.lng;
             if (typeof lat !== "number" || typeof lng !== "number") {
-              setError(
-                "We couldn't find coordinates for that place. Try another result.",
-              );
+              setError("booking.search.noCoordinates");
               return;
             }
             setError(null);
@@ -78,11 +76,13 @@ const GoogleTextInput = ({
               latitude: lat,
               longitude: lng,
               address: data.description,
+              providerPlaceId:
+                typeof data.place_id === "string" ? data.place_id : null,
             });
           }}
           query={{
             key: googlePlacesApiKey,
-            language: "en",
+            language,
           }}
           GooglePlacesDetailsQuery={{
             fields: "formatted_address,geometry",
@@ -94,15 +94,9 @@ const GoogleTextInput = ({
             url: "https://maps.googleapis.com/maps/api",
             useOnPlatform: "all",
           }}
-          onFail={() =>
-            setError(
-              "Address search failed. Check your connection and try again.",
-            )
-          }
-          onNotFound={() => setError("No matching places found.")}
-          onTimeout={() =>
-            setError("Address search timed out. Please try again.")
-          }
+          onFail={() => setError("booking.search.failed")}
+          onNotFound={() => setError("booking.search.notFound")}
+          onTimeout={() => setError("booking.search.timeout")}
           renderLeftButton={() => (
             <View className="justify-center items-center w-6 h-6">
               <Image
@@ -114,7 +108,9 @@ const GoogleTextInput = ({
           )}
           textInputProps={{
             placeholderTextColor: "gray",
-            placeholder: initialLocation ?? "Where do you want to go?",
+            placeholder: initialLocation ?? t("booking.search.placeholder"),
+            accessibilityLabel:
+              initialLocation ?? t("booking.search.placeholder"),
             onChangeText: () =>
               setError((current) => (googlePlacesApiKey ? null : current)),
           }}
@@ -122,10 +118,10 @@ const GoogleTextInput = ({
       </View>
       {error && (
         <Text
-          className="text-xs text-red-500 mt-1 mx-5"
+          className="text-xs text-red-600 mt-1 mx-5"
           accessibilityLiveRegion="polite"
         >
-          {error}
+          {t(error)}
         </Text>
       )}
     </View>

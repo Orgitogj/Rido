@@ -20,7 +20,7 @@
       "output": "server"
     },
     "android": {
-      "package":"com.orgitogjoci.uber",
+      "package": "com.orgitogjoci.uber",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

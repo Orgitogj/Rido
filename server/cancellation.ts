@@ -21,6 +21,7 @@ export function cancellationPreview(
     if (ride.status === "awaiting_payment") {
       return {
         action: "cancel",
+        variant: "passenger_unpaid",
         title: "Cancel this request?",
         consequence:
           "No driver has been requested yet. If a hold was placed on your card, it will be released. There is no cancellation fee.",
@@ -30,6 +31,7 @@ export function cancellationPreview(
     if (ride.status === "requested" || ride.status === "offered") {
       return {
         action: "cancel",
+        variant: "passenger_searching",
         title: "Cancel ride request?",
         consequence: `We'll stop looking for a driver and release the ${hold} hold on your card. There is no cancellation fee.`,
         feeCents: 0,
@@ -38,6 +40,7 @@ export function cancellationPreview(
     if (PRE_PICKUP_STATUSES.includes(ride.status)) {
       return {
         action: "cancel",
+        variant: "passenger_assigned",
         title: "Cancel ride?",
         consequence: `Your driver will be told. We'll release the ${hold} hold on your card. There is no cancellation fee.`,
         feeCents: 0,
@@ -48,6 +51,10 @@ export function cancellationPreview(
   if (PRE_PICKUP_STATUSES.includes(ride.status)) {
     return {
       action: "cancel",
+      variant:
+        ride.rematch_count < REMATCH.maxRematches
+          ? "driver_rematch"
+          : "driver_final",
       title: "Cancel this ride?",
       consequence:
         ride.rematch_count < REMATCH.maxRematches
@@ -59,6 +66,7 @@ export function cancellationPreview(
   if (ride.status === "in_progress") {
     return {
       action: "interrupt",
+      variant: "driver_interrupt",
       title: "End trip early?",
       consequence:
         "Only do this if the trip can't continue, for example for safety or a vehicle problem. The trip ends as interrupted: the passenger is not charged, their hold is released, and the trip is flagged for review.",

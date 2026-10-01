@@ -16,6 +16,7 @@ import {
   enqueueNotification,
   type PushGateway,
 } from "./notifications";
+import { NOTIFY } from "./notificationText";
 
 export const CHAT = {
   burstWindowSeconds: 30,
@@ -106,7 +107,7 @@ export function chatSummary(
 const CHAT_RIDE_SQL = `
   SELECT r.id, r.user_id, r.status, r.driver_profile_id, dp.user_id AS driver_user_id,
          r.completed_at, r.cancelled_at, r.interrupted_at,
-         u.name AS passenger_name, dp.display_name AS driver_name,
+         COALESCE(r.passenger_name, u.name) AS passenger_name, dp.display_name AS driver_name,
          COALESCE(c.last_seq, 0) AS last_seq,
          COALESCE(c.passenger_read_seq, 0) AS passenger_read_seq,
          COALESCE(c.driver_read_seq, 0) AS driver_read_seq
@@ -378,11 +379,7 @@ export async function sendMessage(
           dedupeKey: `chat:${rideId}:${recipient}:${Math.floor(
             now.getTime() / (CHAT.pushQuietSeconds * 1000),
           )}`,
-          title:
-            access.role === "passenger"
-              ? "New message from your passenger"
-              : "New message from your driver",
-          body: "Open the app to read it.",
+          ...NOTIFY.chatMessage(access.role === "passenger"),
           target: `/chat/${rideId}`,
         },
         now,

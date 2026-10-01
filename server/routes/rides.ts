@@ -1,3 +1,4 @@
+import { historyQuerySchema } from "../../shared/account";
 import {
   type BookingResponse,
   bookingRequestSchema,
@@ -19,6 +20,10 @@ import {
   withLockedRide,
 } from "../rides";
 import { type AppUser, ensureUser } from "../users";
+
+import { decodeCursor, encodeCursor } from "./admin";
+
+import type { Page, RideView } from "../../shared/contracts";
 
 type Viewer = "passenger" | "driver";
 
@@ -71,6 +76,37 @@ export async function listRides(
     "ORDER BY r.created_at DESC, r.id DESC LIMIT 50",
   );
   return Response.json({ data: views });
+}
+
+export async function listRideHistory(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await currentUser(request, deps);
+  const q = parseInput(
+    historyQuerySchema,
+    Object.fromEntries(new URL(request.url).searchParams),
+  );
+  const cursor = decodeCursor(q.cursor);
+  const views = await rideViews(
+    deps.db,
+    `r.user_id = $1 AND (r.requested_at IS NOT NULL OR r.status = 'legacy')
+       AND ($2::timestamptz IS NULL OR (r.created_at, r.id) < ($2::timestamptz, $3::uuid))`,
+    [user.id, cursor?.[0] ?? null, cursor?.[1] ?? null],
+    "passenger",
+    deps.now(),
+    `ORDER BY r.created_at DESC, r.id DESC LIMIT ${q.limit + 1}`,
+  );
+  const more = views.length > q.limit;
+  const items = more ? views.slice(0, q.limit) : views;
+  const last = items[items.length - 1];
+  const body: Page<RideView> = {
+    items,
+    nextCursor:
+      more && last ? encodeCursor(new Date(last.createdAt), last.id) : null,
+  };
+  return Response.json({ data: body });
 }
 
 export async function getActiveRide(
@@ -236,12 +272,13 @@ export async function createBooking(
        origin_address, origin_latitude, origin_longitude,
        destination_address, destination_latitude, destination_longitude,
        distance_meters, duration_seconds, fare_cents, currency, created_at,
-       pricing_version, service_area_id, fare_policy_id, route_source)
+       pricing_version, service_area_id, fare_policy_id, route_source, passenger_name)
      SELECT q.id, q.user_id,
             q.pickup_address, q.pickup_latitude, q.pickup_longitude,
             q.destination_address, q.destination_latitude, q.destination_longitude,
             q.distance_meters, q.duration_seconds, q.fare_cents, q.currency, $2,
-            q.pricing_version, q.service_area_id, q.fare_policy_id, q.route_source
+            q.pricing_version, q.service_area_id, q.fare_policy_id, q.route_source,
+            (SELECT u.name FROM mobility.users u WHERE u.id = q.user_id)
        FROM mobility.quotes q
       WHERE q.id = $1 AND q.expires_at > $2
         AND (q.service_area_id IS NULL OR EXISTS (

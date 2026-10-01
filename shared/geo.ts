@@ -26,35 +26,53 @@ export interface MaybePlace {
   address: string | null;
 }
 
+export type TripProblemCode =
+  "PICKUP_MISSING" | "DESTINATION_MISSING" | "UNRESOLVED" | "TOO_CLOSE";
+
+const TRIP_PROBLEM_TEXT: Record<TripProblemCode, string> = {
+  PICKUP_MISSING: "Choose a pickup location.",
+  DESTINATION_MISSING: "Choose a destination.",
+  UNRESOLVED:
+    "One of these locations couldn't be resolved. Please pick it again.",
+  TOO_CLOSE: "Pickup and destination are too close together.",
+};
+
 export function tripProblem(
   pickup: MaybePlace,
   destination: MaybePlace,
 ): string | null {
+  const code = tripProblemCode(pickup, destination);
+  return code ? TRIP_PROBLEM_TEXT[code] : null;
+}
+
+export function tripProblemCode(
+  pickup: MaybePlace,
+  destination: MaybePlace,
+): TripProblemCode | null {
   if (
     pickup.latitude === null ||
     pickup.longitude === null ||
     !pickup.address
   ) {
-    return "Choose a pickup location.";
+    return "PICKUP_MISSING";
   }
   if (
     destination.latitude === null ||
     destination.longitude === null ||
     !destination.address
   ) {
-    return "Choose a destination.";
+    return "DESTINATION_MISSING";
   }
   if (
     !placeSchema.safeParse(pickup).success ||
     !placeSchema.safeParse(destination).success
   ) {
-    return "One of these locations couldn't be resolved. Please pick it again.";
+    return "UNRESOLVED";
   }
   const meters = haversineMeters(
     { latitude: pickup.latitude, longitude: pickup.longitude },
     { latitude: destination.latitude, longitude: destination.longitude },
   );
-  if (meters < MIN_TRIP_METERS)
-    return "Pickup and destination are too close together.";
+  if (meters < MIN_TRIP_METERS) return "TOO_CLOSE";
   return null;
 }

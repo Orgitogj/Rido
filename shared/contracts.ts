@@ -364,6 +364,13 @@ export interface CancellationPreview {
   title: string;
   consequence: string;
   feeCents: 0;
+  variant?:
+    | "passenger_unpaid"
+    | "passenger_searching"
+    | "passenger_assigned"
+    | "driver_rematch"
+    | "driver_final"
+    | "driver_interrupt";
 }
 
 export type SettlementState =

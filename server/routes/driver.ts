@@ -13,6 +13,7 @@ import { type Deps, parseInput, readJson } from "../http";
 import { ASSIGNED_STATUSES, transitionRide } from "../lifecycle";
 import { clearDriverLocation, recordDriverLocation } from "../location";
 import { advanceRide, offerToNextDriver } from "../matching";
+import { enforceRateLimit } from "../rateLimit";
 import { summarySql, toSummary } from "../ratings";
 import { advanceRideById, rideViews, sweep, withLockedRide } from "../rides";
 import { type AppUser, ensureUser } from "../users";
@@ -219,6 +220,7 @@ export async function requestDocumentUpload(
 ) {
   const user = await currentUser(request, deps);
   const input = await readJson(request, documentUploadSchema);
+  await enforceRateLimit(deps.db, "uploadTickets", user.id, deps.now());
   return Response.json(
     { data: await requestUpload(deps, user.id, input) },
     { status: 201 },
@@ -287,7 +289,7 @@ export async function setAvailability(
         WHERE id = $1`,
       [profile.id, now],
     );
-    await sweep(deps);
+    await sweep(deps, 25, { maintenance: "throttled" });
   } else {
     const busy = await deps.db.query(
       `SELECT 1 FROM mobility.rides
@@ -349,7 +351,7 @@ export async function heartbeat(
         now,
       );
     }
-    await sweep(deps);
+    await sweep(deps, 25, { maintenance: "throttled" });
   }
   return Response.json({
     data: await dashboard(deps, profile ? await findProfile(deps, user) : null),

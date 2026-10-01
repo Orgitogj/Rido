@@ -1,16 +1,17 @@
 import {
   type AssignedDriver,
-  formatCents,
   type RideView,
   type SettlementState,
 } from "../shared/contracts";
 
+import { type IdentityAdmin, processAccountDeletions } from "./account";
 import { cancellationPreview } from "./cancellation";
 import { chatSummary, purgeExpiredChats } from "./chat";
 import { type Database, type SqlClient, transaction } from "./db";
 import { syncOpenDisputes } from "./disputes";
 import { ensureRideEarning, reconcileEarnings } from "./earnings";
 import { ApiError, notFound } from "./errors";
+import { claimJob, recordStep } from "./jobs";
 import {
   allowedActions,
   lockRide,
@@ -31,12 +32,14 @@ import {
   enqueueNotification,
   type PushGateway,
 } from "./notifications";
+import { NOTIFY } from "./notificationText";
 import {
   canChangePayment,
   type IntentSnapshot,
   type PaymentGateway,
   paymentStatusFor,
 } from "./payments";
+import { pruneRateLimits } from "./rateLimit";
 import { ratingState, summarySql, toSummary } from "./ratings";
 import { resubmitStaleRefunds, syncOpenRefunds } from "./refunds";
 import { pruneRoutingUsage } from "./routingBudget";
@@ -51,6 +54,7 @@ import type { DocumentStorage } from "./storage";
 export interface RideDeps {
   db: Database;
   payments: PaymentGateway;
+  identity?: IdentityAdmin | null;
   push?: PushGateway | null;
   storage?: DocumentStorage | null;
   routing?: RoutingProvider | null;
@@ -192,8 +196,7 @@ async function recordIntent(
         rideId: ride.id,
         kind: "hold_released",
         dedupeKey: `ride:${ride.id}:hold_released`,
-        title: "Hold released",
-        body: `The ${formatCents(ride.fare_cents)} hold on your card has been released. You were not charged.`,
+        ...NOTIFY.holdReleased(ride.fare_cents),
         target: `/receipt/${ride.id}`,
       },
       now,
@@ -368,7 +371,15 @@ export async function advanceRideById(
   return settlePayment(deps, ride);
 }
 
-export async function sweep(deps: RideDeps, limit = 25): Promise<number> {
+export const SWEEP = {
+  heartbeatMaintenanceSeconds: 20,
+} as const;
+
+export async function sweep(
+  deps: RideDeps,
+  limit = 25,
+  opts: { maintenance?: "always" | "throttled" } = {},
+): Promise<number> {
   const now = deps.now();
   const { rows } = await deps.db.query<{ id: string }>(
     `SELECT id FROM mobility.rides
@@ -397,37 +408,43 @@ export async function sweep(deps: RideDeps, limit = 25): Promise<number> {
       log("sweep_ride_failed", { rideId: id });
     }
   }
-  await syncOpenRefunds(deps).catch(() => {});
-  await syncOpenTips(deps).catch(() => {
-    log("tip_sync_failed", {});
-  });
-  await syncOpenTipRefunds(deps).catch(() => {
-    log("tip_refund_sync_failed", {});
-  });
-  await syncOpenDisputes(deps).catch(() => {
-    log("dispute_sync_failed", {});
-  });
-  await redactExpiredEvidence(deps).catch(() => {
-    log("safety_evidence_redaction_failed", {});
-  });
-  await pruneRoutingUsage(deps.db, now).catch(() => {
-    log("routing_usage_prune_failed", {});
-  });
-  await enforceDriverEligibility(deps).catch(() => {
-    log("driver_eligibility_enforcement_failed", {});
-  });
-  await purgeDriverDocuments(deps).catch(() => {
-    log("driver_document_purge_failed", {});
-  });
-  await reconcileEarnings(deps).catch(() => {
-    log("earnings_reconcile_failed", {});
-  });
-  await resubmitStaleRefunds(deps).catch(() => {});
-  await purgeExpiredChats(deps).catch(() => {
-    log("chat_purge_failed", {});
-  });
+  const maintain =
+    opts.maintenance !== "throttled" ||
+    (await claimJob(
+      deps.db,
+      "maintenance",
+      now,
+      SWEEP.heartbeatMaintenanceSeconds,
+    ));
+  if (maintain) {
+    const identityDeps = {
+      db: deps.db,
+      payments: deps.payments,
+      identity: deps.identity ?? null,
+      now: deps.now,
+    };
+    const steps: [string, () => Promise<unknown>][] = [
+      ["refund_sync", () => syncOpenRefunds(deps)],
+      ["tip_sync", () => syncOpenTips(deps)],
+      ["tip_refund_sync", () => syncOpenTipRefunds(deps)],
+      ["dispute_sync", () => syncOpenDisputes(deps)],
+      ["safety_evidence_redaction", () => redactExpiredEvidence(deps)],
+      ["account_deletion", () => processAccountDeletions(identityDeps)],
+      ["routing_usage_prune", () => pruneRoutingUsage(deps.db, now)],
+      ["rate_limit_prune", () => pruneRateLimits(deps.db, now)],
+      ["driver_eligibility", () => enforceDriverEligibility(deps)],
+      ["driver_document_purge", () => purgeDriverDocuments(deps)],
+      ["earnings_reconcile", () => reconcileEarnings(deps)],
+      ["refund_resubmit", () => resubmitStaleRefunds(deps)],
+      ["chat_purge", () => purgeExpiredChats(deps)],
+      ["push_receipts", () => checkReceipts(deps)],
+    ];
+    for (const [name, run] of steps) {
+      const error = await recordStep(deps.db, name, now, run);
+      if (error) log(`${name}_failed`, {});
+    }
+  }
   await deliverPending(deps, 100).catch(() => {});
-  await checkReceipts(deps).catch(() => {});
   return rows.length;
 }
 
@@ -454,7 +471,7 @@ interface ViewRow extends RideRow {
 }
 
 const viewSql = (nowRef: string) => `
-  SELECT r.*, u.name AS passenger_name,
+  SELECT r.*, COALESCE(r.passenger_name, u.name) AS passenger_name,
          dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model,
          dp.vehicle_plate, dp.vehicle_seats, dp.vehicle_color,
          CASE WHEN dd.id IS NULL THEN NULL

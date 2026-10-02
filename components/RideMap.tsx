@@ -41,12 +41,16 @@ const describeLocation = (
 const RideMap = ({
   pickup,
   destination,
+  stops = [],
+  stopsCompleted = 0,
   leg,
   driverLocation,
   polyline,
 }: {
   pickup: Place;
   destination: Place;
+  stops?: Place[];
+  stopsCompleted?: number;
   leg: Leg | null;
   driverLocation: DriverLocationView | null;
   polyline: string | null;
@@ -94,7 +98,8 @@ const RideMap = ({
     }
   }, [polyline]);
 
-  const target = leg === "destination" ? destination : pickup;
+  const target =
+    leg === "destination" ? (stops[stopsCompleted] ?? destination) : pickup;
   const origin = driverLocation ?? (leg === "destination" ? pickup : null);
 
   const fit = useCallback(() => {
@@ -102,20 +107,20 @@ const RideMap = ({
       target,
       ...(origin ? [origin] : []),
       ...(route ?? []),
-      ...(leg ? [] : [pickup, destination]),
+      ...(leg ? [] : [pickup, ...stops, destination]),
     ];
     mapRef.current?.fitToCoordinates(points, {
       edgePadding: EDGE_PADDING,
       animated: true,
     });
-  }, [target, origin, route, leg, pickup, destination]);
+  }, [target, origin, route, leg, pickup, destination, stops]);
 
   useEffect(() => {
-    const key = `${leg}:${hasDriver}:${Boolean(route)}`;
+    const key = `${leg}:${stopsCompleted}:${hasDriver}:${Boolean(route)}`;
     if (!following || fittedFor.current === key) return;
     fittedFor.current = key;
     fit();
-  }, [leg, hasDriver, route, following, fit]);
+  }, [leg, stopsCompleted, hasDriver, route, following, fit]);
 
   const initialRegion = useMemo(
     () =>
@@ -152,6 +157,16 @@ const RideMap = ({
           title={t("ride.map.pickup")}
           image={icons.point}
         />
+        {stops.map((stop, index) => (
+          <Marker
+            key={`stop-${index}`}
+            coordinate={stop}
+            title={t("ride.map.stop", { number: index + 1 })}
+            description={stop.address}
+            image={icons.marker}
+            opacity={index < stopsCompleted ? 0.4 : 1}
+          />
+        ))}
         <Marker
           coordinate={destination}
           title={t("ride.map.destination")}

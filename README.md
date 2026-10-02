@@ -21,6 +21,10 @@ Passengers request rides. Approved drivers go online, get offers, accept them, a
 | Updates | **Long polling**: about 1 s latency for ride status and driver position, with version cursors, reconnect recovery, and a 3 s polling fallback. See [Live updates](#live-updates). |
 | Driver earnings | **Ledger only, no payouts**: earnings are recorded when Stripe confirms a captured fare or a paid tip. Nothing is transferred to drivers. See [Driver earnings and tips](#driver-earnings-and-tips). |
 | Tips | **Stripe test mode, separate charge**: optional, confirmed by the passenger in the payment sheet. |
+| Profile and saved places | **Real**: name, email and password changes (through Clerk), language, Home, Work and custom places stored on the server. See [Accounts, inbox, support and deletion](#accounts-inbox-support-and-deletion). |
+| Inbox and support | **Real**: an in-app notification inbox with push preferences, and a support conversation per request with operator replies. |
+| Account deletion | **Real, with documented retention**: personal data is removed at once; financial, safety and audit records are kept without the name. No retention period is set. |
+| Languages | **English and Albanian** for the passenger and driver app. The operator console is English only. The Albanian text has not been reviewed by a translator. |
 | Demo drivers | The four seeded "demo drivers" from the first version are **simulated**. They are kept only so bookings made with the old demo flow still display, labelled "Demo booking (simulated driver)". They are never matched to new requests. |
 
 ## Ride lifecycle
@@ -543,7 +547,7 @@ Expo API routes handle plain requests and responses: the Expo server runtime has
   - Tokens are disabled when Expo reports `DeviceNotRegistered`, either immediately in the push ticket or in the receipt checked about 15 min later by the sweep.
 - **Taps.**
   - A notification carries only `{ kind, rideId, target, recipient }`.
-  - The app opens `target` only if it is a known in-app route (`/ride/<uuid>` or `/driver`) and `recipient` matches the signed-in user.
+  - The app opens `target` only if it is a known in-app route (a ride, receipt, chat, support request or safety screen by UUID, `/driver`, `/notifications`) and `recipient` matches the signed-in user.
   - When a notification arrives while signed out, the app sends the user to sign in and then to the ride. Deep links (`myapp://ride/<id>`) work the same way.
   - The ride screen is still authorized on the server, so another user's ride id returns 404.
   - Cold starts are handled through `getLastNotificationResponseAsync`.
@@ -829,6 +833,62 @@ Concurrent changes are safe:
 - Review resolution is single-winner (`ALREADY_RESOLVED`).
 - The console reloads after any conflict.
 
+## Accounts, inbox, support and deletion
+
+Status of every area, split into implemented, awaiting real-provider verification and blocked, is in [docs/implementation-checklist.md](docs/implementation-checklist.md). Deployment, backup, recovery, rate limits and retained records are in [docs/operations.md](docs/operations.md). The hands-on test plan is in [docs/manual-test-checklist.md](docs/manual-test-checklist.md).
+
+### Profile and saved places
+
+- Profile shows and edits the display name, email (verified by Clerk with a code to the new address), password and language.
+- The name used on a ride is copied onto the ride when it is booked, so later renames don't rewrite history.
+- Saved places: one Home, one Work, and up to 20 custom places per user. Each stores an address, coordinates and the provider's place ID.
+- The server checks ownership on every read and write, validates coordinates and lengths, enforces the limits under concurrency, and treats a repeated submission with the same client ID as the same place.
+- Saved places can be chosen as pickup or destination. A saved place outside every service area stays saved; the booking screen explains why it can't be used for this trip.
+- Signing out or switching account clears places, inbox, quote and location state held on the device.
+
+### Booking consistency
+
+- The confirmation screen counts down the quote. When it expires, or the server answers `QUOTE_EXPIRED`, the request button is replaced by a notice that nothing was charged and a **Get a new price** button.
+- After a refresh the screen says whether the price changed, with both amounts. A price never changes silently.
+- Ride history is paginated (`GET /api/rides/history`), 20 at a time.
+- Cancellation is confirmed inline with the consequence computed by the server, including that there is no cancellation fee.
+
+### Notification inbox
+
+- Every notification is stored for its recipient and listed in the app with read state, newest first, 20 at a time.
+- Preferences switch **push alerts** per category (ride updates, chat, ride requests for drivers, account and support). An item muted for push still appears in the inbox.
+- New kinds: driver application decisions, support replies and status changes, safety report status changes.
+- Notification text is written in the recipient's language at the time it is created.
+- The console shows counts for the review, support, safety and driver queues, limited to what the operator's permissions allow.
+
+### Support
+
+- A passenger opens a request from a receipt, then follows its status and conversation under **Help and support**.
+- The passenger can reply while the request is open, within length and rate limits. Each participant sees only their own requests.
+- An operator must assign the request to themself before replying. Replies notify the passenger. Internal notes are stored separately and are never returned by passenger routes.
+- Resolving requires a closing message. Support never refunds; refunds are separate, permissioned operator actions.
+
+### Account deletion
+
+- Requires the password to be re-verified in the last 10 minutes (checked from the session token, not from the client's word).
+- Refused with a reason while a ride is active, while online as a driver, while a payment is settling, or for an operator account.
+- What is removed, what is retained, and the retry behaviour for the Clerk identity and Stripe customer are listed in [docs/operations.md](docs/operations.md#account-deletion-and-retained-records).
+- **No retention period is implemented for retained records.** That is a legal decision for the service owner.
+
+### Health, readiness and limits
+
+- `GET /api/health` (liveness) and `GET /api/ready` (database, schema version, required configuration).
+- The sweep takes a database lease, so overlapping schedulers don't run it twice.
+- Per-user rate limits on saved places, profile writes, upload tickets, safety reports, support requests, share links and deletion attempts.
+- The console's **System** page lists the configuration checklist (presence only, never values), job status and queue counters.
+
+### Localization and accessibility
+
+- All passenger and driver screens read their text from `lib/i18n` in English and Albanian. A test checks both languages have the same keys and placeholders.
+- The server sends codes (ride status, payment state, cancellation variant, error code) and the app chooses the wording. Free text written by people (support replies, review notes) is shown as written.
+- Money, dates and distances are formatted for the selected language.
+- Buttons have a minimum height of 48 points, small controls at least 44, status changes are announced to screen readers, and error colours meet contrast on white. This has been checked in code only, not with a screen reader on a device.
+
 ## Requirements
 
 - Node.js **20.12+** (22 LTS recommended) and npm
@@ -889,6 +949,7 @@ npm run db:setup     # = db:migrate (db/migrations/*.sql) + db:seed (db/seed.sql
 - Migrations are tracked in `public.mobility_schema_migrations` and applied once each.
 - All tables live in the `mobility` schema, so older hand-made `public.*` tables are untouched.
 - Migration `002` keeps rides from the old demo flow and marks them `legacy`.
+- Migrations `013`–`017` add saved places and the language preference, the notification inbox and preferences, support conversations, account deletion, and rate limits with job status. They only add tables, columns and indexes.
 - The seed only restores the four simulated demo drivers those legacy rides reference. It creates no users, drivers, rides, or payments.
 
 ### 4. Run
@@ -1071,6 +1132,10 @@ Coverage by area:
   - Abandoned tips are cancelled, and a deleted ledger entry is detected and repaired.
 - **Chat.** Membership and assignment checks, a replaced driver losing access at once, a new driver not seeing earlier messages, read-only after the ride ends and expiry after retention (with the sweep purging rows), validation, stable ordering and pagination in both directions, watch wake-ups and unread counts, duplicate and concurrent sends, burst and per-ride limits with `Retry-After`, and collapsed notifications that don't contain message text.
 - **Ratings.** Eligibility (completed and paid only; cancelled, interrupted, unpaid, simulated and expired refused), no self-rating or rating someone else's ride, scale and length validation, one record under concurrent submissions, the edit window, averages hidden below 3 final ratings, private feedback never reaching the other party, and moderation with permissions, version conflicts, removal from averages and audit entries without feedback text.
+- **Profile and saved places** (`profile-places.test.ts`): ownership (404 for another user's place), validation, the Home/Work replacement rule, one Home and one Work under concurrent requests, the custom limit, idempotent retries, the name snapshot on rides, the language preference, and service-area rules still applying to a saved place.
+- **Inbox and support** (`inbox-support.test.ts`): inbox ownership, pagination, read state, push muted by preference while the inbox keeps the item, text in the recipient's language, application and safety status notices that don't expose the reason or contents; support conversations scoped to their owner, internal notes never returned to the passenger, reply limits, and queue badges limited by permission.
+- **Account deletion** (`account-deletion.test.ts`): re-authentication from the token and the exact confirmation, blockers, anonymisation, retained ride and payment rows, a deleted identity refused afterwards, retry after identity or payment provider failures, the pending state when identity deletion isn't configured, drivers taken off the road with documents scheduled for removal, and share links revoked.
+- **Operations** (`operations.test.ts`): rate-limit windows and `Retry-After`, health and readiness, configuration rules for development and production, the configuration checklist never returning values, the sweep lease under concurrent calls, throttled heartbeat maintenance, failing steps recorded for operators, the system status permission, and ride history paging.
 - **Notifications.** Recipients per event, no push for GPS, deduplication under duplicate taps and concurrent deliverers, outage retry, expired offers, users without devices, `DeviceNotRegistered` from tickets and receipts, account switching, and sign-out.
 
 **App tests** (`__tests__/app`) cover:
@@ -1082,6 +1147,7 @@ Coverage by area:
 - Status and payment wording.
 - Console helpers: dollar-to-cents parsing for refunds, date filters as UTC day bounds, query building, and the sign-in return to `/admin`.
 - Earnings: period ranges, commission rate formatting, and tip state wording that never calls an unpaid tip paid.
+- Localization (`i18n.test.ts`): identical keys and placeholders in English and Albanian, plural pairs, error codes mapped without leaking English into Albanian, money and distance formatting, ride, payment and cancellation wording in both languages, quote-expiry countdown, trip problem codes, and the inbox, support and safety notification routes.
 - Chat: optimistic messages reconciled with server copies without duplicates, retries keeping their ID, out-of-order pages merged by sequence, the chat cursor never moving backwards, chat deep links opening only after server authorization, and rating summary wording.
 
 PGlite runs every connection on one backend session, so locally the tests use one connection. Requests still interleave at every query and transaction boundary. The CI job `postgres` reruns the server tests on PostgreSQL 16 with four connections, so concurrency tests also contend on real row locks. To run that locally against a disposable database:
@@ -1150,6 +1216,18 @@ TEST_DATABASE_URL=postgresql://... TEST_DATABASE_ALLOW_RESET=1 TEST_DB_POOL_MAX=
 | `POST /api/driver/location` | approved driver, or any driver finishing an active ride | Latest device position, validated |
 | `POST /api/devices`, `/api/devices/unregister` | signed in | Register / remove this device's Expo push token |
 | `POST /api/driver/offers/:id/accept`, `/decline` | driver holding the offer | Respond to an offer |
+| `GET /api/me`, `PATCH /api/me` | signed in | Profile (name, language); update either |
+| `GET /api/places`, `POST /api/places` | signed in (own) | Saved places with the remaining custom allowance; save or replace Home/Work, add a custom place |
+| `PATCH /api/places/:id`, `DELETE /api/places/:id` | signed in (own) | Rename or move a place; delete it |
+| `GET /api/rides/history` | passenger | Paginated ride history (`cursor`, `limit`) |
+| `GET /api/notifications`, `POST /api/notifications/read` | signed in (own) | Inbox page with unread count; mark some or all read |
+| `GET /api/notifications/preferences`, `PUT /api/notifications/preferences` | signed in (own) | Push preferences per category |
+| `GET /api/support`, `GET /api/support/:id`, `POST /api/support/:id/messages` | passenger (own requests) | Requests with unread state; one conversation; reply while open |
+| `GET /api/admin/support/:id/messages`, `POST /api/admin/support/:id/messages` | operator (view / support, assignee) | Conversation; reply to the passenger |
+| `GET /api/admin/badges` | operator (view) | Queue counts allowed by the operator's permissions |
+| `GET /api/admin/system` | operator (view) | Configuration checklist, job status, queue counters |
+| `GET /api/account/deletion`, `POST /api/account/deletion` | signed in | Blockers and whether re-authentication is needed; delete the account (`confirm: "DELETE"`) |
+| `GET /api/health`, `GET /api/ready` | anyone | Liveness; readiness (database, schema, required configuration) |
 | `POST /api/stripe/webhook` | Stripe (signed) | Payment events |
 | `POST /api/internal/sweep` | scheduler (`CRON_SECRET`) | Advance due searches, retry settlements |
 
@@ -1164,10 +1242,11 @@ TEST_DATABASE_URL=postgresql://... TEST_DATABASE_ALLOW_RESET=1 TEST_DB_POOL_MAX=
    - Signatures are verified with `STRIPE_WEBHOOK_SECRET`, and event IDs are stored to ignore replays.
    - Every handler re-fetches the PaymentIntent, refund or dispute from Stripe instead of trusting the event body, so out-of-order delivery is harmless.
    - The sweep in step 6 is the recovery path if events are missed.
-6. Schedule `POST https://<your-host>/api/internal/sweep` with `Authorization: Bearer $CRON_SECRET` every minute. It also retries notifications and checks push receipts.
+6. Schedule `POST https://<your-host>/api/internal/sweep` with `Authorization: Bearer $CRON_SECRET` every minute. It also retries notifications, checks push receipts, deletes due documents and finishes account deletions. A database lease stops two schedulers from overlapping.
 7. Set `GOOGLE_ROUTES_API_KEY`, a server key restricted to the Routes API (and by IP where your host allows). Quotes need it. Then create a service area and fare policy in the console (see [Service areas and road-based quotes](#service-areas-and-road-based-quotes)); nothing can be quoted until you do. Set `EXPO_ACCESS_TOKEN` if you enable enhanced push security.
 8. For driver documents, create a private S3-compatible bucket and set the `DOCUMENT_STORAGE_*` variables (see [Private storage](#private-storage)). Without them, driver applications can't upload documents and approval is only possible through the CLI waiver.
-9. Make sure your host allows requests of at least **25 s**, which the long-poll `watch` route needs. If it doesn't, the app falls back to 3 s polling automatically.
+9. Point liveness checks at `GET /api/health` and readiness checks at `GET /api/ready`, then open the console's **System** page and clear every missing setting. Backup and recovery are described in [docs/operations.md](docs/operations.md).
+10. Make sure your host allows requests of at least **25 s**, which the long-poll `watch` route needs. If it doesn't, the app falls back to 3 s polling automatically.
 
 ## Project structure
 
@@ -1181,9 +1260,11 @@ app/                 screens (Expo Router); app/api/* thin route files
   (root)/earnings    driver earnings
   (root)/safety/[id] safety screen
   share/[token]      public trip-share page
+  (root)/places, notifications, support, delete-account   saved places, inbox, support conversations, account deletion
 server/              auth, db, pricing, lifecycle (state machine), matching, rides (payments ↔ rides),
                      location (validation), live + routing (ETA), notifications (outbox), routes
 shared/              request/response contracts, money formatting, geo validation
+lib/i18n/            dictionaries (English, Albanian), formatting, language store
 components/ lib/ store/   UI, API client, live updates (lib/rideUpdates.ts), driver heartbeat (lib/driver.ts),
                      location tracking (lib/tracking.ts), push + deep links (lib/notifications*.ts)
 db/migrations, db/seed.sql, scripts/   schema, seed, db and operator CLIs
@@ -1222,15 +1303,19 @@ __tests__/, jest/    tests and the PostgreSQL test database
 - **Chat and ratings.**
   - Text only: no photos, voice or calls, and no masked phone numbers.
   - Unsent messages are kept in memory, not on disk, so a failed message is lost if the app is closed before retrying.
-  - Operators can't read or moderate chat messages, and there is no in-app way to report a message.
+  - Operators can't read chat; they see only a message a participant reported.
   - Rating averages are computed on each request, with no caching or decay.
-- **Notifications.** Delivery is at-least-once: a send that crashes mid-flight can repeat once after 60 s. There are no notification preferences or quiet hours, and no Live Activities or ongoing notifications.
+- **Notifications.** Delivery is at-least-once: a send that crashes mid-flight can repeat once after 60 s. Preferences are per category with no quiet hours, and there are no Live Activities or ongoing notifications. Inbox items are kept until the account is deleted; there is no automatic expiry.
 - **Matching.** One offer at a time; at most 2 re-matches with a 120 s deadline each.
 - **Payments.**
-  - Not yet built: cancellation fees, tips, fare adjustments, driver payouts, re-authorization of long trips, and live-mode refunds (the console is test-mode only).
+  - Not built, and each needs a separate decision: cancellation fees, surge pricing, fare adjustments, driver payouts, another currency, re-authorization of long trips, and live-mode refunds (the console is test-mode only).
   - An interrupted trip is never charged, even if most of it was driven; support can review it, but charging part of the fare is not implemented.
 - **Operations.**
   - Operators are provisioned from the CLI only; there is no invitation flow, SSO, or MFA requirement beyond what Clerk enforces.
-  - No messaging with passengers beyond the resolution reply, no ratings or chat, and no driver-facing support.
+  - Support conversations are text only, opened by passengers from a receipt; drivers have safety reports but no support requests.
+  - The console is English only.
   - The console is a web page in the same build; it has no separate hosting or IP restriction.
+- **Account deletion.** No retention period is set for retained financial, safety and audit records, and backups are outside the application's control. Deletion of the Clerk identity and Stripe customer has only been tested against stand-ins.
+- **Localization.** Albanian text was written during implementation and not reviewed by a translator. Text written by people (support replies, review notes) and Stripe's own payment-sheet messages are not translated by the app.
+- **Not planned without a decision.** Scheduled rides, multiple stops, pooled rides, vehicle classes, emergency dispatch, phone masking, in-app calling, automated identity verification, and country-specific transport or insurance rules. See [docs/implementation-checklist.md](docs/implementation-checklist.md#features-requiring-a-separate-decision).
 - **Web.** Web is limited to building the API server; maps and payments are native-only.

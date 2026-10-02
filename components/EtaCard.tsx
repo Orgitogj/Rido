@@ -7,9 +7,11 @@ import type { LiveTripView } from "@/shared/contracts";
 const EtaCard = ({
   live,
   viewer,
+  stopNumber,
 }: {
   live: LiveTripView;
   viewer: "passenger" | "driver";
+  stopNumber?: number | null;
 }) => {
   const { t, clock, duration } = useI18n();
   if (!live.leg) return null;
@@ -25,7 +27,9 @@ const EtaCard = ({
               ? viewer === "driver"
                 ? t("ride.eta.pickupDriver")
                 : t("ride.eta.pickupPassenger")
-              : t("ride.eta.destination")}
+              : stopNumber
+                ? t("ride.eta.stop", { number: stopNumber })
+                : t("ride.eta.destination")}
           </Text>
           <Text className="text-2xl font-JakartaBold mt-1">
             {clock(eta.arrivalAt)}

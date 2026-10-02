@@ -22,7 +22,7 @@ export type RouteSource = "google_routes" | "test_provider";
 
 export interface RoutingProvider {
   source: RouteSource;
-  route(from: Point, to: Point): Promise<RouteResult | null>;
+  route(from: Point, to: Point, via?: Point[]): Promise<RouteResult | null>;
   routeMatrix(origins: Point[], destination: Point): Promise<MatrixElement[]>;
 }
 
@@ -107,13 +107,16 @@ export function googleRoutesProvider(
 
   return {
     source: "google_routes",
-    async route(from, to) {
+    async route(from, to, via = []) {
       const json = (await post(
         ROUTES_URL,
         ROUTES_FIELD_MASK,
         {
           origin: { location: latLng(from) },
           destination: { location: latLng(to) },
+          ...(via.length
+            ? { intermediates: via.map((p) => ({ location: latLng(p) })) }
+            : {}),
           travelMode: "DRIVE",
           routingPreference: "TRAFFIC_UNAWARE",
         },

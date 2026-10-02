@@ -12,6 +12,7 @@ import places from "./places";
 import rating from "./rating";
 import ride from "./ride";
 import safety from "./safety";
+import schedule from "./schedule";
 import support from "./support";
 
 export const sections = {
@@ -29,5 +30,6 @@ export const sections = {
   rating,
   ride,
   safety,
+  schedule,
   support,
 };

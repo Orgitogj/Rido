@@ -4,6 +4,12 @@ export default section(
   {
     title: "Drive",
     riderMode: "Rider mode",
+    categories: "Vehicle categories you're approved for: {names}",
+    categoriesInactive: "{name} (not offered right now)",
+    noCategories:
+      "Your vehicle isn't linked to an active category, so you won't receive requests. Contact support.",
+    categoriesNote:
+      "Categories are set when your vehicle is verified. Contact support to ask for a change.",
     loading: "Loading your driver account…",
     reconnecting: "Reconnecting… showing the last known information.",
     status: {
@@ -195,6 +201,12 @@ export default section(
   {
     title: "Shofer",
     riderMode: "Si pasagjer",
+    categories: "Kategoritë e automjetit për të cilat je miratuar: {names}",
+    categoriesInactive: "{name} (nuk ofrohet tani)",
+    noCategories:
+      "Automjeti yt nuk është i lidhur me një kategori aktive, ndaj nuk do të marrësh kërkesa. Kontakto ndihmën.",
+    categoriesNote:
+      "Kategoritë caktohen kur verifikohet automjeti. Kontakto ndihmën për të kërkuar një ndryshim.",
     loading: "Po ngarkohet llogaria e shoferit…",
     reconnecting: "Duke u rilidhur… po shfaqen të dhënat e fundit të njohura.",
     status: {

@@ -31,6 +31,12 @@ const PROBLEMS: Record<
   ROUTING_NOT_CONFIGURED: { retry: false, changeLocations: false },
   PRICING_NOT_CONFIGURED: { retry: false, changeLocations: false },
   NETWORK: { retry: true, changeLocations: false },
+  STOP_OUTSIDE_SERVICE_AREA: { retry: false, changeLocations: true },
+  STOPS_TOO_CLOSE: { retry: false, changeLocations: true },
+  CATEGORY_UNAVAILABLE: { retry: false, changeLocations: true },
+  TOO_MANY_PASSENGERS: { retry: false, changeLocations: true },
+  SCHEDULE_CLOSED: { retry: false, changeLocations: false },
+  SCHEDULE_NOT_OPEN: { retry: true, changeLocations: false },
 };
 
 const isKnown = (code: string | null): code is KnownCode =>

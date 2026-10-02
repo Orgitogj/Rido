@@ -57,6 +57,8 @@ export default section(
       from: "From",
       to: "To",
       findNow: "Get a price",
+      stopProblem:
+        "One of the stops is the same place as the stop or location next to it.",
       problem: {
         PICKUP_MISSING: "Choose a pickup location.",
         DESTINATION_MISSING: "Choose a destination.",
@@ -65,7 +67,47 @@ export default section(
         TOO_CLOSE: "Pickup and destination are too close together.",
       },
     },
+    stops: {
+      title: "Stops on the way",
+      hint: "Optional. Add up to {max} stops between pickup and destination. The driver visits them in this order.",
+      number: "Stop {number}",
+      moveUp: "Move stop {number} earlier",
+      moveDown: "Move stop {number} later",
+      remove: "Remove stop {number}",
+      search: "Search for a stop",
+      add: "Add a stop",
+      fixed:
+        "Stops can't be added, removed or reordered after you request the ride.",
+    },
+    vehicle: {
+      title: "Vehicle",
+      passengers: "Passengers",
+      fewer: "Fewer passengers",
+      more: "More passengers",
+      choosePickup:
+        "Choose a pickup to see the vehicle categories offered there.",
+      none: "No vehicle category is offered at this pickup right now.",
+      noneForCount:
+        "No vehicle category offered here seats that many passengers.",
+      upTo: "Up to {count} passengers",
+      nearby_one: "{count} suitable driver online nearby",
+      nearby_other: "{count} suitable drivers online nearby",
+      noneNearby: "No suitable drivers online nearby right now",
+      estimate:
+        "Counts are a live estimate of approved drivers online near the pickup, not a promise that one will accept.",
+      development: "Development example",
+    },
     confirm: {
+      itinerary: "Trip",
+      pickup: "Pickup",
+      destination: "Destination",
+      category: "Vehicle",
+      passengers: "Passengers",
+      oneFare:
+        "One price covers the whole trip, including the stops. There are no waiting fees, and stops can't be changed after you request.",
+      scheduledIntro:
+        "This is the current price for your scheduled request. A driver is requested only after you confirm payment below.",
+      backToScheduled: "Back to scheduled request",
       title: "Confirm your ride",
       loading: "Getting a price for your trip…",
       missing: "Pickup or destination is missing. Go back and choose both.",
@@ -103,6 +145,12 @@ export default section(
         ROUTING_NOT_CONFIGURED: "Pricing isn't available",
         PRICING_NOT_CONFIGURED: "Pricing isn't available here yet",
         NETWORK: "You're offline",
+        STOP_OUTSIDE_SERVICE_AREA: "A stop is outside our service area",
+        STOPS_TOO_CLOSE: "Stops are too close together",
+        CATEGORY_UNAVAILABLE: "That vehicle category isn't available",
+        TOO_MANY_PASSENGERS: "Too many passengers for that vehicle",
+        SCHEDULE_CLOSED: "This scheduled request has ended",
+        SCHEDULE_NOT_OPEN: "It's too early to confirm",
       },
     },
     notFound: {
@@ -171,6 +219,8 @@ export default section(
       from: "Nga",
       to: "Për",
       findNow: "Merr çmimin",
+      stopProblem:
+        "Njëra nga ndalesat është i njëjti vend me ndalesën ose vendndodhjen pranë saj.",
       problem: {
         PICKUP_MISSING: "Zgjidh një pikë nisjeje.",
         DESTINATION_MISSING: "Zgjidh një destinacion.",
@@ -179,7 +229,47 @@ export default section(
         TOO_CLOSE: "Nisja dhe destinacioni janë shumë afër.",
       },
     },
+    stops: {
+      title: "Ndalesa gjatë rrugës",
+      hint: "Opsionale. Shto deri në {max} ndalesa mes nisjes dhe destinacionit. Shoferi i viziton në këtë radhë.",
+      number: "Ndalesa {number}",
+      moveUp: "Zhvendose ndalesën {number} më herët",
+      moveDown: "Zhvendose ndalesën {number} më vonë",
+      remove: "Hiq ndalesën {number}",
+      search: "Kërko një ndalesë",
+      add: "Shto një ndalesë",
+      fixed:
+        "Ndalesat nuk mund të shtohen, hiqen ose rirenditen pasi ta kërkosh udhëtimin.",
+    },
+    vehicle: {
+      title: "Automjeti",
+      passengers: "Pasagjerë",
+      fewer: "Më pak pasagjerë",
+      more: "Më shumë pasagjerë",
+      choosePickup:
+        "Zgjidh një pikë nisjeje për të parë kategoritë e automjeteve që ofrohen aty.",
+      none: "Asnjë kategori automjeti nuk ofrohet në këtë pikë nisjeje tani.",
+      noneForCount:
+        "Asnjë kategori që ofrohet këtu nuk ka vende për kaq pasagjerë.",
+      upTo: "Deri në {count} pasagjerë",
+      nearby_one: "{count} shofer i përshtatshëm në linjë pranë",
+      nearby_other: "{count} shoferë të përshtatshëm në linjë pranë",
+      noneNearby: "Asnjë shofer i përshtatshëm në linjë pranë tani",
+      estimate:
+        "Numrat janë vlerësim i çastit i shoferëve të miratuar në linjë pranë nisjes, jo premtim se njëri do të pranojë.",
+      development: "Shembull zhvillimi",
+    },
     confirm: {
+      itinerary: "Udhëtimi",
+      pickup: "Nisja",
+      destination: "Destinacioni",
+      category: "Automjeti",
+      passengers: "Pasagjerë",
+      oneFare:
+        "Një çmim mbulon gjithë udhëtimin, përfshirë ndalesat. Nuk ka tarifa pritjeje dhe ndalesat nuk mund të ndryshohen pasi ta kërkosh.",
+      scheduledIntro:
+        "Ky është çmimi aktual për kërkesën tënde të planifikuar. Shoferi kërkohet vetëm pasi të konfirmosh pagesën më poshtë.",
+      backToScheduled: "Kthehu te kërkesa e planifikuar",
       title: "Konfirmo udhëtimin",
       loading: "Po marrim çmimin për udhëtimin…",
       missing: "Mungon nisja ose destinacioni. Kthehu dhe zgjidhi të dyja.",
@@ -217,6 +307,13 @@ export default section(
         ROUTING_NOT_CONFIGURED: "Çmimet nuk ofrohen",
         PRICING_NOT_CONFIGURED: "Çmimet ende nuk ofrohen këtu",
         NETWORK: "Nuk ke lidhje",
+        STOP_OUTSIDE_SERVICE_AREA:
+          "Një ndalesë është jashtë zonës së shërbimit",
+        STOPS_TOO_CLOSE: "Ndalesat janë shumë afër njëra-tjetrës",
+        CATEGORY_UNAVAILABLE: "Kjo kategori automjeti nuk ofrohet",
+        TOO_MANY_PASSENGERS: "Shumë pasagjerë për këtë automjet",
+        SCHEDULE_CLOSED: "Kjo kërkesë e planifikuar ka përfunduar",
+        SCHEDULE_NOT_OPEN: "Është herët për të konfirmuar",
       },
     },
     notFound: {

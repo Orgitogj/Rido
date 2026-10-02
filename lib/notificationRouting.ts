@@ -12,6 +12,9 @@ const CHAT_ROUTE =
 const SUPPORT_ROUTE =
   /^\/support\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const SCHEDULED_ROUTE =
+  /^\/scheduled\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const SAFETY_ROUTE =
   /^\/safety\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,6 +24,7 @@ export function safeInternalRoute(path: unknown): string | null {
     return path;
   }
   if (SUPPORT_ROUTE.test(path)) return path.toLowerCase();
+  if (SCHEDULED_ROUTE.test(path)) return path.toLowerCase();
   if (SAFETY_ROUTE.test(path)) return path.toLowerCase();
   if (RIDE_ROUTE.test(path)) return path.toLowerCase();
   if (RECEIPT_ROUTE.test(path)) return path.toLowerCase();

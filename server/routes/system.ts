@@ -1,10 +1,12 @@
+import { dashboardQuerySchema } from "../../shared/adminDashboard";
 import {
   checkConfig,
   configReady,
   environmentOf,
   stripeModeOf,
 } from "../config";
-import { type Deps } from "../http";
+import { dashboardRange, dashboardView } from "../dashboard";
+import { type Deps, parseInput } from "../http";
 import { requireOperator } from "../operators";
 
 import type { SystemStatus } from "../../shared/adminSystem";
@@ -127,4 +129,30 @@ export async function systemStatus(
     },
   };
   return Response.json({ data: body });
+}
+
+export async function adminDashboard(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const operator = await requireOperator(request, deps, "view", {
+    type: "console",
+    id: null,
+    action: "dashboard",
+  });
+  const q = parseInput(
+    dashboardQuerySchema,
+    Object.fromEntries(new URL(request.url).searchParams),
+  );
+  const now = deps.now();
+  const range = dashboardRange(q, now);
+  return Response.json({
+    data: await dashboardView(
+      deps.db,
+      operator,
+      { ...range, pinnedTo: q.to !== undefined },
+      now,
+    ),
+  });
 }

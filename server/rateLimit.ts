@@ -11,6 +11,7 @@ export const RATE_LIMITS = {
   shareCreates: { limit: 20, windowSeconds: 3600 },
   shareViews: { limit: 120, windowSeconds: 60 },
   accountDeletion: { limit: 5, windowSeconds: 3600 },
+  scheduleWrites: { limit: 20, windowSeconds: 3600 },
 } as const;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;

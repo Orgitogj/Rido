@@ -23,6 +23,7 @@ export default section(
       completed: "Complete trip",
       cancel: "Cancel ride",
       interrupt: "End trip early",
+      stop_reached: "Arrived at the stop",
     },
     busy: {
       updating: "Updating…",
@@ -34,6 +35,7 @@ export default section(
       driverArriving: "Driving to pickup",
       driverArrived: "Waiting for your passenger",
       driverInProgress: "On trip to destination",
+      driverToStop: "On trip to stop {number}",
       driverCompleted: "Trip completed",
       driverCancelledSelf: "You cancelled this ride",
       driverCancelledOther: "The passenger cancelled this ride",
@@ -125,6 +127,12 @@ export default section(
         "Booked with the earlier demo flow and a simulated driver ({driver}). No real driver was involved.",
       navigatePickup: "Navigate to pickup",
       navigateDestination: "Navigate to destination",
+      navigateStop: "Navigate to stop {number}",
+      stop: "Stop {number}",
+      stopReached: "Stop {number}, reached",
+      stopNext: "Stop {number}, next",
+      category: "Vehicle category",
+      passengers: "Passengers",
       navigateHint: "Opens your maps app",
       requested: "Requested",
       pickedUp: "Picked up",
@@ -148,6 +156,20 @@ export default section(
       mapWeb: "The map is available in the iOS and Android app.",
       goBack: "Go back",
     },
+    pin: {
+      title: "Trip PIN",
+      explain:
+        "Tell this PIN to your driver when you get in. The trip can't start without it. Don't share it with anyone else.",
+      driverTitle: "Passenger's trip PIN",
+      driverHint:
+        "Ask the passenger for their 4-digit PIN once they're in the car. It confirms you picked up the right person.",
+      inputLabel: "Trip PIN",
+      attemptsLeft_one: "{count} attempt left before a short lock.",
+      attemptsLeft_other: "{count} attempts left before a short lock.",
+      locked: "Too many incorrect PINs. Try again in {seconds}s.",
+      blocked:
+        "PIN entry is blocked for this pickup. Contact support, or cancel the ride so the passenger can be matched again.",
+    },
     map: {
       locating: "Finding your location…",
       unavailable:
@@ -156,6 +178,7 @@ export default section(
         "Route preview unavailable. Prices are still calculated by the server.",
       pickup: "Pickup",
       destination: "Destination",
+      stop: "Stop {number}",
       driver: "Your driver",
       driverUnavailable: "Driver location unavailable",
       driverLive: "Driver location · live",
@@ -168,6 +191,7 @@ export default section(
       pickupDriver: "Estimated arrival at pickup",
       pickupPassenger: "Estimated pickup",
       destination: "Estimated arrival at destination",
+      stop: "Estimated arrival at stop {number}",
       about: "about {duration}",
       routed:
         "Estimated from the driving route. Not a guaranteed time; it updates as the driver moves.",
@@ -184,6 +208,10 @@ export default section(
       seconds: "{seconds}s",
       distance: "Pickup about {pickup} away · trip {trip}",
       passengerRating: "Passenger rating: {rating}",
+      passengers_one: "{count} passenger",
+      passengers_other: "{count} passengers",
+      stops_one: "{count} stop on the way",
+      stops_other: "{count} stops on the way",
       decline: "Decline",
       accept: "Accept",
       expired: "This request expired.",
@@ -237,6 +265,7 @@ export default section(
       completed: "Përfundo udhëtimin",
       cancel: "Anulo udhëtimin",
       interrupt: "Përfundo udhëtimin para kohe",
+      stop_reached: "Mbërrita te ndalesa",
     },
     busy: {
       updating: "Duke përditësuar…",
@@ -249,6 +278,7 @@ export default section(
       driverArriving: "Duke shkuar te pika e nisjes",
       driverArrived: "Duke pritur pasagjerin",
       driverInProgress: "Në udhëtim drejt destinacionit",
+      driverToStop: "Në udhëtim drejt ndalesës {number}",
       driverCompleted: "Udhëtimi përfundoi",
       driverCancelledSelf: "E anulove këtë udhëtim",
       driverCancelledOther: "Pasagjeri e anuloi këtë udhëtim",
@@ -341,6 +371,12 @@ export default section(
         "U rezervua me versionin e mëparshëm demo dhe një shofer të simuluar ({driver}). Nuk mori pjesë asnjë shofer real.",
       navigatePickup: "Navigo te pika e nisjes",
       navigateDestination: "Navigo te destinacioni",
+      navigateStop: "Navigo te ndalesa {number}",
+      stop: "Ndalesa {number}",
+      stopReached: "Ndalesa {number}, e arritur",
+      stopNext: "Ndalesa {number}, në vijim",
+      category: "Kategoria e automjetit",
+      passengers: "Pasagjerë",
       navigateHint: "Hap aplikacionin e hartave",
       requested: "Kërkuar",
       pickedUp: "U mor",
@@ -364,6 +400,21 @@ export default section(
       mapWeb: "Harta ofrohet në aplikacionin për iOS dhe Android.",
       goBack: "Kthehu",
     },
+    pin: {
+      title: "PIN-i i udhëtimit",
+      explain:
+        "Thuaja këtë PIN shoferit kur të hipësh. Udhëtimi nuk mund të fillojë pa të. Mos e ndaj me askënd tjetër.",
+      driverTitle: "PIN-i i pasagjerit",
+      driverHint:
+        "Kërkoji pasagjerit PIN-in me 4 shifra pasi të hipë në makinë. Ai konfirmon që ke marrë personin e duhur.",
+      inputLabel: "PIN-i i udhëtimit",
+      attemptsLeft_one: "Edhe {count} përpjekje para një bllokimi të shkurtër.",
+      attemptsLeft_other:
+        "Edhe {count} përpjekje para një bllokimi të shkurtër.",
+      locked: "Shumë PIN-e të pasakta. Provo përsëri pas {seconds}s.",
+      blocked:
+        "Futja e PIN-it është bllokuar për këtë marrje. Kontakto ndihmën ose anulo udhëtimin që pasagjeri të gjejë një shofer tjetër.",
+    },
     map: {
       locating: "Po gjejmë vendndodhjen tënde…",
       unavailable:
@@ -372,6 +423,7 @@ export default section(
         "Pamja e rrugës nuk ofrohet. Çmimet llogariten gjithsesi nga serveri.",
       pickup: "Nisja",
       destination: "Destinacioni",
+      stop: "Ndalesa {number}",
       driver: "Shoferi yt",
       driverUnavailable: "Vendndodhja e shoferit nuk ofrohet",
       driverLive: "Vendndodhja e shoferit · tani",
@@ -385,6 +437,7 @@ export default section(
       pickupDriver: "Mbërritja e përafërt te pika e nisjes",
       pickupPassenger: "Marrja e përafërt",
       destination: "Mbërritja e përafërt në destinacion",
+      stop: "Mbërritja e përafërt te ndalesa {number}",
       about: "rreth {duration}",
       routed:
         "Llogaritur nga rruga me makinë. Nuk është kohë e garantuar; përditësohet ndërsa shoferi lëviz.",
@@ -401,6 +454,10 @@ export default section(
       seconds: "{seconds}s",
       distance: "Nisja rreth {pickup} larg · udhëtimi {trip}",
       passengerRating: "Vlerësimi i pasagjerit: {rating}",
+      passengers_one: "{count} pasagjer",
+      passengers_other: "{count} pasagjerë",
+      stops_one: "{count} ndalesë gjatë rrugës",
+      stops_other: "{count} ndalesa gjatë rrugës",
       decline: "Refuzo",
       accept: "Prano",
       expired: "Kjo kërkesë skadoi.",

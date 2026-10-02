@@ -82,6 +82,45 @@ export default section(
       "You've reached the limit of saved places. Delete one to add another.",
     LABEL_NOT_EDITABLE: "Home and Work can't be renamed.",
     SUPPORT_CLOSED: "This support request is closed.",
+    PIN_REQUIRED: "Enter the passenger's trip PIN to start.",
+    PIN_INCORRECT:
+      "That PIN doesn't match. Ask the passenger to read it again.",
+    PIN_LOCKED: "Too many incorrect PINs. Wait a moment before trying again.",
+    PIN_BLOCKED:
+      "PIN entry is blocked for this pickup. Contact support or cancel the ride.",
+    PIN_UNAVAILABLE:
+      "The trip PIN can't be checked right now. Contact support.",
+    ATTACHMENT_LIMIT: "You've reached the limit of photos for this request.",
+    ATTACHMENT_NOT_READY:
+      "One of the photos isn't available. Remove it and add it again.",
+    ATTACHMENT_SENT: "A photo that was already sent can't be removed.",
+    CATEGORY_REQUIRED: "Choose at least one vehicle category.",
+    CATEGORY_UNAVAILABLE:
+      "That vehicle category isn't available here right now. Choose another one.",
+    TOO_MANY_PASSENGERS:
+      "That vehicle category doesn't seat that many passengers.",
+    STOPS_TOO_CLOSE:
+      "Two places next to each other on this trip are the same or too close together.",
+    STOP_OUTSIDE_SERVICE_AREA:
+      "One of the stops is outside the area we serve from your pickup.",
+    STOPS_REMAINING: "Mark each stop as reached before completing the trip.",
+    STOP_OUT_OF_ORDER:
+      "That stop was already updated. Showing the latest status.",
+    SCHEDULE_TOO_SOON:
+      "That time is too soon to schedule. Pick a later time, or request a ride now.",
+    SCHEDULE_TOO_FAR: "That time is too far ahead to schedule.",
+    SCHEDULE_TIME_SKIPPED:
+      "That time doesn't exist on that day because the clocks go forward. Pick another time.",
+    SCHEDULE_TIME_AMBIGUOUS:
+      "That time happens twice on that day because the clocks go back. Choose the earlier or the later one.",
+    SCHEDULE_LIMIT:
+      "You've reached the limit of upcoming scheduled requests. Cancel one to add another.",
+    SCHEDULE_OVERLAP:
+      "You already have a scheduled request close to that time.",
+    SCHEDULE_CLOSED:
+      "This scheduled request has ended. Nothing was charged for it.",
+    SCHEDULE_NOT_OPEN:
+      "It's too early to confirm this scheduled request. We'll remind you when it opens.",
     DELETION_BLOCKED: "Your account can't be deleted yet.",
     REAUTH_REQUIRED: "Please confirm your identity again to continue.",
     VERSION_CONFLICT: "This changed since you opened it. Reload and try again.",
@@ -171,6 +210,44 @@ export default section(
       "Ke arritur kufirin e vendeve të ruajtura. Fshi një për të shtuar një tjetër.",
     LABEL_NOT_EDITABLE: "Shtëpia dhe Puna nuk mund të riemërtohen.",
     SUPPORT_CLOSED: "Kjo kërkesë për ndihmë është mbyllur.",
+    PIN_REQUIRED: "Shkruaj PIN-in e pasagjerit për të filluar.",
+    PIN_INCORRECT: "Ky PIN nuk përputhet. Kërkoji pasagjerit ta lexojë sërish.",
+    PIN_LOCKED: "Shumë PIN-e të pasakta. Prit pak para se të provosh përsëri.",
+    PIN_BLOCKED:
+      "Futja e PIN-it është bllokuar për këtë marrje. Kontakto ndihmën ose anulo udhëtimin.",
+    PIN_UNAVAILABLE:
+      "PIN-i i udhëtimit nuk mund të kontrollohet tani. Kontakto ndihmën.",
+    ATTACHMENT_LIMIT: "Ke arritur kufirin e fotove për këtë kërkesë.",
+    ATTACHMENT_NOT_READY:
+      "Njëra nga fotot nuk është e disponueshme. Hiqe dhe shtoje përsëri.",
+    ATTACHMENT_SENT: "Një foto që është dërguar nuk mund të hiqet.",
+    CATEGORY_REQUIRED: "Zgjidh të paktën një kategori automjeti.",
+    CATEGORY_UNAVAILABLE:
+      "Kjo kategori automjeti nuk ofrohet këtu tani. Zgjidh një tjetër.",
+    TOO_MANY_PASSENGERS:
+      "Kjo kategori automjeti nuk ka vende për kaq pasagjerë.",
+    STOPS_TOO_CLOSE:
+      "Dy vende radhazi në këtë udhëtim janë të njëjta ose shumë afër njëra-tjetrës.",
+    STOP_OUTSIDE_SERVICE_AREA:
+      "Njëra nga ndalesat është jashtë zonës që shërbejmë nga pika jote e nisjes.",
+    STOPS_REMAINING:
+      "Shëno çdo ndalesë si të arritur para se të përfundosh udhëtimin.",
+    STOP_OUT_OF_ORDER:
+      "Kjo ndalesë është përditësuar tashmë. Po shfaqet gjendja më e fundit.",
+    SCHEDULE_TOO_SOON:
+      "Kjo orë është shumë afër për t'u planifikuar. Zgjidh një orë më vonë ose kërko udhëtim tani.",
+    SCHEDULE_TOO_FAR: "Kjo orë është shumë larg për t'u planifikuar.",
+    SCHEDULE_TIME_SKIPPED:
+      "Kjo orë nuk ekziston atë ditë sepse ora shtyhet përpara. Zgjidh një orë tjetër.",
+    SCHEDULE_TIME_AMBIGUOUS:
+      "Kjo orë ndodh dy herë atë ditë sepse ora kthehet mbrapsht. Zgjidh të parën ose të dytën.",
+    SCHEDULE_LIMIT:
+      "Ke arritur kufirin e kërkesave të planifikuara. Anulo një për të shtuar një tjetër.",
+    SCHEDULE_OVERLAP: "Ke tashmë një kërkesë të planifikuar afër kësaj ore.",
+    SCHEDULE_CLOSED:
+      "Kjo kërkesë e planifikuar ka përfunduar. Nuk u tarifua asgjë për të.",
+    SCHEDULE_NOT_OPEN:
+      "Është herët për ta konfirmuar këtë kërkesë. Do të të kujtojmë kur të hapet.",
     DELETION_BLOCKED: "Llogaria jote nuk mund të fshihet ende.",
     REAUTH_REQUIRED: "Të lutem konfirmo sërish identitetin për të vazhduar.",
     VERSION_CONFLICT:

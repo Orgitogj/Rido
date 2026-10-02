@@ -54,16 +54,34 @@ declare interface LocationStore {
   destinationLatitude: number | null;
   destinationLongitude: number | null;
   destinationAddress: string | null;
+  stops: ItineraryStop[];
   locationStatus: LocationStatus;
   setLocationStatus: (status: LocationStatus) => void;
   setUserLocation: (place: SelectedPlace) => void;
   setDestinationLocation: (place: SelectedPlace) => void;
+  setStops: (stops: ItineraryStop[]) => void;
+  addStop: (place: SelectedPlace) => void;
+  removeStop: (index: number) => void;
+  moveStop: (index: number, delta: number) => void;
   reset: () => void;
+}
+
+declare interface ItineraryStop {
+  latitude: number;
+  longitude: number;
+  address: string;
 }
 
 declare interface RideStore {
   quote: RideQuote | null;
   driversNearby: number | null;
+  categoryId: string | null;
+  passengerCount: number;
+  scheduledRideId: string | null;
   setQuote: (quote: RideQuote, driversNearby: number) => void;
+  setCategory: (categoryId: string | null) => void;
+  setPassengerCount: (passengerCount: number) => void;
+  setScheduledRide: (scheduledRideId: string | null) => void;
   clear: () => void;
+  reset: () => void;
 }

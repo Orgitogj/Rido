@@ -8,5 +8,6 @@ export const QUOTE = {
   perUserLimit: 30,
   routingRetryAfterSeconds: 15,
   minTripMeters: MIN_TRIP_METERS,
+  minStopSpacingMeters: 100,
   maxTripMeters: MAX_TRIP_METERS,
 } as const;

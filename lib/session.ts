@@ -15,7 +15,7 @@ export function registerUserReset(reset: () => void) {
 }
 
 export function resetUserState() {
-  useRideStore.getState().clear();
+  useRideStore.getState().reset();
   useLocationStore.getState().reset();
   for (const reset of resetters) reset();
 }

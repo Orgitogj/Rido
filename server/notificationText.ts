@@ -104,6 +104,31 @@ export const NOTIFY = {
       "Udhëtimi përfundoi para kohe",
       "Shoferi e ndërpreu udhëtimin para kohe. Bllokimi në kartën tënde po lirohet; fatura do ta konfirmojë.",
     ),
+  scheduledConfirm: (clock: string) =>
+    text(
+      "Confirm your scheduled ride",
+      `Your ${clock} pickup is coming up. Open the app to see the current price and confirm payment. A driver is requested only after you confirm.`,
+      "Konfirmo udhëtimin e planifikuar",
+      `Marrja jote e orës ${clock} po afron. Hap aplikacionin për të parë çmimin aktual dhe për të konfirmuar pagesën. Shoferi kërkohet vetëm pasi të konfirmosh.`,
+    ),
+  scheduledExpired: (reason: string) =>
+    text(
+      "Scheduled ride not requested",
+      reason === "not_confirmed" || reason === "missed_window"
+        ? "Your scheduled request wasn't confirmed in time, so no driver was requested. Nothing was charged."
+        : "Your scheduled request can't be served any more, so no driver was requested. Nothing was charged.",
+      "Udhëtimi i planifikuar nuk u kërkua",
+      reason === "not_confirmed" || reason === "missed_window"
+        ? "Kërkesa e planifikuar nuk u konfirmua në kohë, ndaj nuk u kërkua shofer. Nuk u tarifua asgjë."
+        : "Kërkesa e planifikuar nuk mund të shërbehet më, ndaj nuk u kërkua shofer. Nuk u tarifua asgjë.",
+    ),
+  pinWaived: () =>
+    text(
+      "Trip PIN not needed",
+      "Support allowed your driver to start this trip without the PIN. Contact support if you didn't expect this.",
+      "PIN-i i udhëtimit nuk nevojitet",
+      "Ekipi i ndihmës e lejoi shoferin ta fillojë këtë udhëtim pa PIN. Kontakto ndihmën nëse nuk e prisje këtë.",
+    ),
   offer: (fareCents: number, distanceMeters: number) =>
     text(
       "New ride request",

@@ -60,9 +60,13 @@ State of the application as of 2026-10-02. This file separates what the code doe
 
 Nothing in the authorised scope is known to be missing. The following are deliberately small in this release and listed so they are not mistaken for finished products:
 
-- Support has no file attachments and no driver-initiated support request (drivers use safety reports).
+- Support attachments are images only (JPEG, PNG), with no malware scanning and no authenticity check.
 - The operator console is English only.
-- The inbox has no quiet hours.
+- Quiet hours are one daily range per account.
+- Vehicle categories carry no commercial definitions; the only category created automatically is the default one for vehicles approved earlier.
+- Stops are limited to two, fixed at request time, with no waiting fees.
+- Scheduled requests are not reservations and never authorize a card without the passenger confirming.
+- The dashboard is UTC only, with no charts or export.
 - Deletion of a driver's stored documents runs through the existing deletion worker; there is no operator screen to watch one specific account's deletion beyond the System page counters.
 
 ## Blocked
@@ -70,7 +74,9 @@ Nothing in the authorised scope is known to be missing. The following are delibe
 | Item | Blocker |
 | --- | --- |
 | Verification against real providers | Needs the owner's Clerk, Stripe test-mode, Google Cloud and storage credentials, and physical devices |
-| Applying migrations 013–017 to the shared database | Not authorised in this work; run `npm run db:migrate` against the target database when ready |
+| Applying migrations 013–024 to the shared database | Not authorised in this work; run `npm run db:migrate` against the target database when ready, after reading the deployment notes in [operations.md](operations.md) |
+| Driver payouts | No payout provider or operating country has been chosen. Nothing moves money to drivers and no payout records exist. See [payout-readiness.md](payout-readiness.md) |
+| Commercial values | Fare rates per category, commission, cancellation fees, category names and capacities, the scheduling window and attachment retention periods are business or legal decisions. The code ships development placeholders or neutral defaults and labels them |
 | Retention periods for retained records | A policy and legal decision; the code keeps the records and documents what is kept, without inventing a period |
 
 ## Features requiring a separate decision
@@ -79,7 +85,7 @@ These are not implemented and must not be added without an explicit decision. Ea
 
 | Feature | Dependencies before it can be built |
 | --- | --- |
-| Live payouts or Stripe Connect onboarding | Legal entity, Connect account type, KYC flow, payout schedule, tax reporting, reconciliation design. The earnings ledger records amounts only and must keep saying nothing has been paid out |
+| Live payouts or Stripe Connect onboarding | Legal entity, Connect account type, KYC flow, payout schedule, tax reporting, reconciliation design. The earnings ledger records amounts only and must keep saying nothing has been paid out. Details in [payout-readiness.md](payout-readiness.md) |
 | Commercial cancellation fees | Fee amounts and grace periods, disclosure wording, payment capture rules for partial amounts |
 | Surge pricing | Pricing rules, caps, disclosure, regulator expectations |
 | Changed commission rates | A commercial decision; the ledger already versions commission policies |

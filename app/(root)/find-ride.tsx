@@ -6,10 +6,13 @@ import CustomButton from "@/components/CustomButton";
 import GoogleTextInput from "@/components/GoogleTextInput";
 import RideLayout from "@/components/RideLayout";
 import { SavedPlaceChips, SavePlacePrompt } from "@/components/SavedPlaces";
+import StopsEditor from "@/components/StopsEditor";
+import VehicleOptions from "@/components/VehicleOptions";
 import { icons } from "@/constants";
 import { useI18n } from "@/lib/i18n";
+import { repeatedPlace } from "@/lib/itinerary";
 import { type TripProblemCode, tripProblemCode } from "@/shared/geo";
-import { useLocationStore } from "@/store";
+import { useLocationStore, useRideStore } from "@/store";
 
 const FindRide = () => {
   const {
@@ -19,17 +22,19 @@ const FindRide = () => {
     destinationAddress,
     destinationLatitude,
     destinationLongitude,
+    stops,
     setDestinationLocation,
     setUserLocation,
   } = useLocationStore();
+  const setScheduledRide = useRideStore((s) => s.setScheduledRide);
   const { t } = useI18n();
-  const [error, setError] = useState<TripProblemCode | null>(null);
+  const [error, setError] = useState<TripProblemCode | "STOP" | null>(null);
   const [pickupPlaceId, setPickupPlaceId] = useState<string | null>(null);
   const [destinationPlaceId, setDestinationPlaceId] = useState<string | null>(
     null,
   );
 
-  const findNow = () => {
+  const check = () => {
     const problem = tripProblemCode(
       {
         latitude: userLatitude,
@@ -42,8 +47,38 @@ const FindRide = () => {
         address: destinationAddress,
       },
     );
-    setError(problem);
-    if (!problem) router.push(`/(root)/confirm-ride`);
+    if (problem && !(problem === "TOO_CLOSE" && stops.length > 0)) {
+      setError(problem);
+      return false;
+    }
+    if (
+      userLatitude !== null &&
+      userLongitude !== null &&
+      destinationLatitude !== null &&
+      destinationLongitude !== null &&
+      repeatedPlace([
+        { latitude: userLatitude, longitude: userLongitude },
+        ...stops,
+        { latitude: destinationLatitude, longitude: destinationLongitude },
+      ])
+    ) {
+      setError("STOP");
+      return false;
+    }
+    setError(null);
+    return true;
+  };
+
+  const findNow = () => {
+    if (!check()) return;
+    setScheduledRide(null);
+    router.push(`/(root)/confirm-ride`);
+  };
+
+  const scheduleLater = () => {
+    if (!check()) return;
+    setScheduledRide(null);
+    router.push("/(root)/schedule-ride");
   };
 
   return (
@@ -114,12 +149,17 @@ const FindRide = () => {
         />
       </View>
 
+      <StopsEditor />
+      <VehicleOptions />
+
       {error && (
         <Text
           className="text-sm text-red-600 mt-2"
           accessibilityLiveRegion="polite"
         >
-          {t(`booking.find.problem.${error}`)}
+          {error === "STOP"
+            ? t("booking.find.stopProblem")
+            : t(`booking.find.problem.${error}`)}
         </Text>
       )}
 
@@ -127,6 +167,13 @@ const FindRide = () => {
         title={t("booking.find.findNow")}
         onPress={findNow}
         className="mt-5"
+      />
+      <CustomButton
+        title={t("schedule.scheduleLater")}
+        bgVariant="outline"
+        textVariant="primary"
+        onPress={scheduleLater}
+        className="mt-3 mb-10"
       />
     </RideLayout>
   );

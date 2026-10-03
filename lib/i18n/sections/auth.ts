@@ -49,9 +49,20 @@ export default section(
     setPassword: "Set new password",
     resetFailed:
       "We couldn't reset the password. Check the code and try again.",
-    resetDone: "Your password was changed and you're signed in.",
     backToSignIn: "Back to sign in",
     sessionExpired: "Your session ended. Please sign in again.",
+    problem: {
+      passwordIncorrect: "That password isn't right. Try again or reset it.",
+      accountNotFound: "We couldn't find an account with that email.",
+      emailTaken: "An account with that email already exists. Sign in instead.",
+      passwordPwned:
+        "That password has appeared in a data breach. Choose a different one.",
+      passwordWeak: "Choose a stronger password of at least 8 characters.",
+      emailInvalid: "Enter a valid email address.",
+      codeIncorrect: "That code isn't right. Check it and try again.",
+      codeExpired: "That code has expired. Ask for a new one.",
+      tooManyAttempts: "Too many attempts. Wait a few minutes and try again.",
+    },
   },
   {
     skip: "Kapërce",
@@ -101,8 +112,21 @@ export default section(
     setPassword: "Vendos fjalëkalimin e ri",
     resetFailed:
       "Nuk e rivendosëm dot fjalëkalimin. Kontrollo kodin dhe provo përsëri.",
-    resetDone: "Fjalëkalimi u ndryshua dhe je brenda.",
     backToSignIn: "Kthehu te hyrja",
     sessionExpired: "Sesioni yt përfundoi. Të lutem hyr përsëri.",
+    problem: {
+      passwordIncorrect:
+        "Fjalëkalimi nuk është i saktë. Provo sërish ose rivendose.",
+      accountNotFound: "Nuk gjetëm asnjë llogari me këtë email.",
+      emailTaken: "Ekziston tashmë një llogari me këtë email. Hyr në të.",
+      passwordPwned:
+        "Ky fjalëkalim ka dalë në një rrjedhje të dhënash. Zgjidh një tjetër.",
+      passwordWeak:
+        "Zgjidh një fjalëkalim më të fortë me të paktën 8 karaktere.",
+      emailInvalid: "Shkruaj një adresë email të vlefshme.",
+      codeIncorrect: "Ky kod nuk është i saktë. Kontrolloje dhe provo sërish.",
+      codeExpired: "Ky kod ka skaduar. Kërko një të ri.",
+      tooManyAttempts: "Shumë përpjekje. Prit disa minuta dhe provo sërish.",
+    },
   },
 );

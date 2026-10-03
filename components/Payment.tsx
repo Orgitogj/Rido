@@ -55,7 +55,7 @@ const Payment = ({
         returnURL: "myapp://confirm-ride",
       });
       if (init.error) {
-        setError(init.error.message || t("pay.startFailed"));
+        setError(t("pay.startFailed"));
         return;
       }
 
@@ -77,10 +77,11 @@ const Payment = ({
       } else {
         const known = NOT_AUTHORIZED.find((s) => s === ride.paymentStatus);
         setError(
-          sheet.error?.message ||
-            (known
-              ? t(`pay.notAuthorizedState.${known}`)
-              : t("pay.notAuthorized")),
+          known
+            ? t(`pay.notAuthorizedState.${known}`)
+            : sheet.error
+              ? t("pay.declined")
+              : t("pay.notAuthorized"),
         );
       }
     } catch (e) {

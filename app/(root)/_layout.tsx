@@ -44,7 +44,11 @@ const Layout = () => {
         <Stack.Screen name="places" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="support/index" options={{ headerShown: false }} />
+        <Stack.Screen name="support/new" options={{ headerShown: false }} />
         <Stack.Screen name="support/[id]" options={{ headerShown: false }} />
+        <Stack.Screen name="schedule-ride" options={{ headerShown: false }} />
+        <Stack.Screen name="scheduled/index" options={{ headerShown: false }} />
+        <Stack.Screen name="scheduled/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="delete-account" options={{ headerShown: false }} />
       </Stack>
     </>

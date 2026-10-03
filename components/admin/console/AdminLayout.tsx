@@ -19,6 +19,8 @@ const NAV = [
   { href: "/admin/safety", label: "Safety", badge: "safety" },
   { href: "/admin/drivers", label: "Drivers", badge: "drivers" },
   { href: "/admin/areas", label: "Service areas", badge: null },
+  { href: "/admin/categories", label: "Vehicle categories", badge: null },
+  { href: "/admin/dashboard", label: "Dashboard", badge: null },
   { href: "/admin/system", label: "System", badge: null },
 ] as const;
 

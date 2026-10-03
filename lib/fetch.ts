@@ -3,6 +3,7 @@ import Constants from "expo-constants";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
+import { create } from "zustand";
 
 import type { ApiErrorBody } from "@/shared/contracts";
 
@@ -23,6 +24,20 @@ export function apiBaseUrl(): string {
     "EXPO_PUBLIC_SERVER_URL is not configured.",
   );
 }
+
+export const useSessionState = create<{
+  expired: boolean;
+  notice: boolean;
+  markExpired: () => void;
+  handled: () => void;
+  clearNotice: () => void;
+}>((set) => ({
+  expired: false,
+  notice: false,
+  markExpired: () => set({ expired: true }),
+  handled: () => set({ expired: false, notice: true }),
+  clearNotice: () => set({ notice: false }),
+}));
 
 export class ApiRequestError extends Error {
   constructor(
@@ -113,7 +128,14 @@ export function useApi() {
           "UNAUTHENTICATED",
           "Please sign in again.",
         );
-      return apiRequest<T>(path, { ...options, token });
+      try {
+        return await apiRequest<T>(path, { ...options, token });
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.status === 401) {
+          useSessionState.getState().markExpired();
+        }
+        throw error;
+      }
     },
     [getToken],
   );

@@ -22,7 +22,11 @@ Passengers request rides. Approved drivers go online, get offers, accept them, a
 | Driver earnings | **Ledger only, no payouts**: earnings are recorded when Stripe confirms a captured fare or a paid tip. Nothing is transferred to drivers. See [Driver earnings and tips](#driver-earnings-and-tips). |
 | Tips | **Stripe test mode, separate charge**: optional, confirmed by the passenger in the payment sheet. |
 | Profile and saved places | **Real**: name, email and password changes (through Clerk), language, Home, Work and custom places stored on the server. See [Accounts, inbox, support and deletion](#accounts-inbox-support-and-deletion). |
-| Inbox and support | **Real**: an in-app notification inbox with push preferences, and a support conversation per request with operator replies. |
+| Inbox and support | **Real**: an in-app notification inbox with push preferences and quiet hours, and a support conversation per request for passengers and drivers, with operator replies and private photo attachments when storage is configured. |
+| Trip PIN | **Real**: the passenger gets a 4-digit PIN that the driver must enter before the trip can start. See [Trip PIN](#trip-pin). |
+| Vehicle categories and stops | **Operator-managed categories; up to two stops**: passengers choose a category and passenger count, and can add up to two stops before the price is quoted. The only category that exists by default is the one created for vehicles approved earlier. See [Vehicle categories](#vehicle-categories) and [Stops](#stops). |
+| Scheduled requests | **A saved request, not a reservation**: the passenger is asked to confirm the price and payment shortly before the pickup time; no driver is held and nothing is charged before that. See [Scheduled requests](#scheduled-requests). |
+| Operations dashboard | **Real, counts only**: live queues and period figures in the web console, in UTC. See [Operations dashboard](#operations-dashboard). |
 | Account deletion | **Real, with documented retention**: personal data is removed at once; financial, safety and audit records are kept without the name. No retention period is set. |
 | Languages | **English and Albanian** for the passenger and driver app. The operator console is English only. The Albanian text has not been reviewed by a translator. |
 | Demo drivers | The four seeded "demo drivers" from the first version are **simulated**. They are kept only so bookings made with the old demo flow still display, labelled "Demo booking (simulated driver)". They are never matched to new requests. |
@@ -844,19 +848,29 @@ Status of every area, split into implemented, awaiting real-provider verificatio
 - Saved places: one Home, one Work, and up to 20 custom places per user. Each stores an address, coordinates and the provider's place ID.
 - The server checks ownership on every read and write, validates coordinates and lengths, enforces the limits under concurrency, and treats a repeated submission with the same client ID as the same place.
 - Saved places can be chosen as pickup or destination. A saved place outside every service area stays saved; the booking screen explains why it can't be used for this trip.
-- Signing out or switching account clears places, inbox, quote and location state held on the device.
+- Signing out or switching account clears places, inbox, quote, stops, vehicle choice and location state held on the device.
+- **Session expiry.** When the server refuses a request because the session is no longer valid, the app stops location sharing, clears the same per-user state, signs out and opens the sign-in screen with a notice that the session ended. A request is never retried silently under another identity.
+- **Sign-in and payment errors.** Clerk and Stripe error text is never shown as received. Known Clerk error codes map to the app's own English and Albanian messages, with a general message for the rest; payment-sheet failures show the app's own message.
 
 ### Booking consistency
 
 - The confirmation screen counts down the quote. When it expires, or the server answers `QUOTE_EXPIRED`, the request button is replaced by a notice that nothing was charged and a **Get a new price** button.
 - After a refresh the screen says whether the price changed, with both amounts. A price never changes silently.
-- Ride history is paginated (`GET /api/rides/history`), 20 at a time.
+- Ride history is paginated (`GET /api/rides/history`), 20 at a time. Each entry shows the category, passenger count, number of stops and whether it came from a scheduled request; the receipt and the passenger's ride screen show the same, and the driver's trip list shows category, passengers and stops.
+- Starting a new booking from Home clears the stops, vehicle choice and passenger count left over from the previous one.
+- After a restart, Home shows the ride in progress and, when a scheduled request is waiting for confirmation, a banner that opens it.
 - Cancellation is confirmed inline with the consequence computed by the server, including that there is no cancellation fee.
 
 ### Notification inbox
 
 - Every notification is stored for its recipient and listed in the app with read state, newest first, 20 at a time.
 - Preferences switch **push alerts** per category (ride updates, chat, ride requests for drivers, account and support). An item muted for push still appears in the inbox.
+- **Quiet hours** are part of the same preferences, stored on the server, so they apply on every device.
+  - The user sets a start, an end and a time zone (an IANA name, taken from the device by default). A range such as 22:00–07:00 runs overnight. Daylight-saving changes are handled by evaluating the time in that zone when each notification is sent.
+  - During quiet hours, optional pushes are not sent: ride completed, receipts and tips, support replies and status changes, application and safety status notices, and scheduled-request expiry notices.
+  - These are always sent: ride offers to drivers, driver accepted, driver arrived, trip started, cancellations, re-matching, no driver found, trip ended early, PIN waived, chat messages for an active ride, and the request to confirm a scheduled ride.
+  - Every notification still appears in the inbox. A suppressed push is recorded as skipped and is never sent later, so there is no burst when quiet hours end.
+  - Ride offers follow only the "ride requests" preference and the driver's online state. Quiet hours and the other preferences never hide an offer.
 - New kinds: driver application decisions, support replies and status changes, safety report status changes.
 - Notification text is written in the recipient's language at the time it is created.
 - The console shows counts for the review, support, safety and driver queues, limited to what the operator's permissions allow.

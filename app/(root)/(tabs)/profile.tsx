@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import ListState from "@/components/ListState";
+import { clerkErrorKey } from "@/lib/clerkErrors";
 import { useApi, useApiQuery } from "@/lib/fetch";
 import { useI18n, useLanguage } from "@/lib/i18n";
 import { useSignOut } from "@/lib/session";
@@ -56,12 +57,6 @@ const LinkRow = ({
   </TouchableOpacity>
 );
 
-const clerkMessage = (e: unknown) => {
-  const first = (e as { errors?: { longMessage?: string; message?: string }[] })
-    ?.errors?.[0];
-  return first?.longMessage ?? first?.message ?? null;
-};
-
 const Profile = () => {
   const { user } = useUser();
   const { t, error: errorText, language } = useI18n();
@@ -93,9 +88,7 @@ const Profile = () => {
   }, [loadedName]);
 
   const identityError = (e: unknown) =>
-    language === "en"
-      ? (clerkMessage(e) ?? t("account.identityFailed"))
-      : t("account.identityFailed");
+    t(clerkErrorKey(e) ?? "account.identityFailed");
 
   const saveName = async () => {
     const value = name.trim();
@@ -419,6 +412,10 @@ const Profile = () => {
           <LinkRow
             label={t("account.notifications")}
             onPress={() => router.push("/(root)/notifications")}
+          />
+          <LinkRow
+            label={t("schedule.link")}
+            onPress={() => router.push("/(root)/scheduled")}
           />
           <LinkRow
             label={t("account.support")}

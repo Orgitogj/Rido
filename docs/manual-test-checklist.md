@@ -141,3 +141,77 @@ Passenger on phone A, approved driver on phone B.
 - [ ] It shows the status, driver first name, vehicle, plate and destination, and no payment or chat data.
 - [ ] For a ride with stops, the page shows only the final destination, and never the PIN.
 - [ ] Stop sharing: the link stops working at once.
+
+## 13. Trip PIN
+
+Passenger on phone A, driver on phone B.
+
+- [ ] After the driver accepts, A shows a 4-digit PIN with an explanation. B never shows the PIN itself.
+- [ ] At pickup, B can't start the trip without a PIN; a wrong PIN is refused with the attempts left.
+- [ ] The PIN field stays visible above the keyboard on a small phone.
+- [ ] Five wrong PINs lock entry for two minutes with a countdown; the correct PIN works after the lock.
+- [ ] Three locks block entry: B is told to contact support. An operator waives the PIN with a reason; A gets a notification; B can start.
+- [ ] Driver cancels before pickup and a second driver accepts: A shows a different PIN; the first PIN doesn't work.
+- [ ] Tap start twice quickly with the right PIN: the trip starts once.
+- [ ] The PIN is not in any push notification, in the share page, or in the console's ride list.
+- [ ] Capture after completion is for the quoted fare, as before.
+
+## 14. Support for drivers and attachments (storage bucket)
+
+- [ ] As a driver, open a request from the driver screen (no trip) and from a completed trip; both appear under Help and support with their status.
+- [ ] As a passenger, open a general request from Help and support and one from a receipt.
+- [ ] The operator queue shows who opened each request and can filter by role.
+- [ ] Attach a JPEG and a PNG: progress is shown, then the photo is listed; remove one before sending.
+- [ ] Turn on airplane mode during an upload: the failure is shown with "Try again", and retrying works.
+- [ ] A PDF, a HEIC photo and a file over 5 MB are refused before upload.
+- [ ] The requester and the assigned operator can open a sent photo; the link stops working after a minute.
+- [ ] Another user, signed in, can't open the photo by its address.
+- [ ] Confirm in the provider's console that the files are private.
+- [ ] Remove the storage settings and restart: the app says attachments aren't available and a text-only request still sends.
+- [ ] With the keyboard open on a small phone, the message field and the send button stay visible.
+
+## 15. Vehicle categories and passenger count
+
+- [ ] On the booking screen, the categories offered at the pickup are listed with their capacity and a nearby-driver estimate.
+- [ ] Raise the passenger count above a category's capacity: that category disappears; above every capacity, the screen says none fits.
+- [ ] Request with a category the test driver isn't linked to: the driver gets no offer and the request ends as no driver found, with the hold released.
+- [ ] Request 5 passengers with a driver whose vehicle has 4 seats: no offer.
+- [ ] The driver's offer shows the category, passenger count and number of stops.
+- [ ] The driver screen lists the driver's categories and offers no way to change them.
+- [ ] Deactivate the category after a ride was requested: that ride finishes; a new price for the category is refused.
+- [ ] The receipt shows the category and passenger count.
+
+## 16. Stops
+
+- [ ] Add two stops, reorder them, remove one, add it back. A third can't be added.
+- [ ] The confirmation shows the itinerary in order, one price, distance and time before the card sheet opens.
+- [ ] Compare the quoted distance with a maps app for the same route through the stops, in the same order.
+- [ ] A stop outside the service area is refused with a clear message.
+- [ ] After starting the trip, the driver's navigation button opens the first stop; "Arrived at the stop" moves to the next; the passenger's screen follows.
+- [ ] "Complete trip" is not offered while a stop remains.
+- [ ] The receipt lists the stops; a trip ended early marks the stops that weren't reached.
+- [ ] The amount captured equals the quoted fare.
+
+## 17. Scheduled requests
+
+- [ ] "Schedule for later" explains that it isn't a reservation and that no price is shown yet.
+- [ ] The allowed window and time zone shown match the service area's zone, not the phone's.
+- [ ] A time in the past, less than the minimum ahead, and beyond the maximum are each refused with a reason.
+- [ ] On a clock-change date in the area's zone, the skipped time is refused and the repeated time asks which one.
+- [ ] Schedule a request about 35 minutes ahead. Stripe shows no PaymentIntent for it.
+- [ ] About 20 minutes before the time, a push arrives (even in quiet hours) and the request shows "Waiting for your confirmation".
+- [ ] Confirm: a fresh price is shown, the card sheet authorizes it, and only then does the search start.
+- [ ] Schedule another and don't confirm: it expires 10 minutes after the time, an inbox item says so, and Stripe shows no charge.
+- [ ] Schedule another with notifications denied and the app closed: opening the app inside the window shows a banner on Home that opens the request, and confirming works.
+- [ ] After confirming, the ride screen, the history entry and the receipt each say the ride came from a scheduled request.
+- [ ] Stop the scheduler across the whole window: the request expires without a charge once the sweep runs again.
+- [ ] With a ride in progress, confirming a scheduled request is refused until the ride ends.
+- [ ] Cancel an upcoming request; it moves to the earlier list.
+- [ ] Confirm with no driver online: the ride ends as no driver found and the hold is released.
+
+## 18. Combined scenarios
+
+- [ ] Driver opens a support request about a completed trip with a photo; the operator replies; the driver gets the reply.
+- [ ] A ride with two stops and a larger category: PIN at pickup, both stops reached, completion, one capture for the quoted fare, receipt with stops and category.
+- [ ] A scheduled request with a stop: confirm, ride, complete.
+- [ ] Suspend the driver before pickup on a ride with a PIN: the passenger is re-matched and gets a new PIN.

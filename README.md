@@ -1254,6 +1254,9 @@ Coverage by area:
 - Console helpers: dollar-to-cents parsing for refunds, date filters as UTC day bounds, query building, and the sign-in return to `/admin`.
 - Earnings: period ranges, commission rate formatting, and tip state wording that never calls an unpaid tip paid.
 - Localization (`i18n.test.ts`): identical keys and placeholders in English and Albanian, plural pairs, error codes mapped without leaking English into Albanian, money and distance formatting, ride, payment and cancellation wording in both languages, quote-expiry countdown, trip problem codes, and the inbox, support and safety notification routes.
+- Itinerary helpers (`itinerary.test.ts`): stop reordering, repeated places, the next stop, local schedule times across midnight, and scheduled-request notification routes.
+- Upload helpers (`upload.test.ts`): image type and size checks before upload, failure wording, and the request body for POST and PUT targets.
+- Time zones (`zoned-time.test.ts`): local time parsing, offsets, and skipped and repeated local times.
 - Chat: optimistic messages reconciled with server copies without duplicates, retries keeping their ID, out-of-order pages merged by sequence, the chat cursor never moving backwards, chat deep links opening only after server authorization, and rating summary wording.
 
 PGlite runs every connection on one backend session, so locally the tests use one connection. Requests still interleave at every query and transaction boundary. The CI job `postgres` reruns the server tests on PostgreSQL 16 with four connections, so concurrency tests also contend on real row locks. To run that locally against a disposable database:
@@ -1309,7 +1312,7 @@ TEST_DATABASE_URL=postgresql://... TEST_DATABASE_ALLOW_RESET=1 TEST_DB_POOL_MAX=
 | `POST /api/admin/support/:id/assign`, `/notes`, `/resolve`, `/reopen` | operator (support) | Support actions, versioned |
 | `GET /api/driver/trips` | approved driver (own) | Completed trips without payment details |
 | `POST /api/rides/:id/cancel` | passenger or assigned driver | Passenger: cancel and release the hold. Driver: re-match (or end after the limit) |
-| `POST /api/rides/:id/status` | assigned driver | `arriving` → `arrived` → `in_progress` → `completed` |
+| `POST /api/rides/:id/status` | assigned driver | `arriving` → `arrived` → `in_progress` (with the passenger's `pin`) → `completed` |
 | `GET/POST /api/driver/profile` | signed in | Read / create or edit a draft driver application (vehicle details) |
 | `POST /api/driver/profile/submit`, `/reopen` | driver (own) | Submit for review; start an update after approval or rejection |
 | `POST /api/driver/documents` | driver (own, editable) | Get a 5-minute presigned POST form (or PUT) for one document's upload key |
@@ -1327,8 +1330,20 @@ TEST_DATABASE_URL=postgresql://... TEST_DATABASE_ALLOW_RESET=1 TEST_DB_POOL_MAX=
 | `PATCH /api/places/:id`, `DELETE /api/places/:id` | signed in (own) | Rename or move a place; delete it |
 | `GET /api/rides/history` | passenger | Paginated ride history (`cursor`, `limit`) |
 | `GET /api/notifications`, `POST /api/notifications/read` | signed in (own) | Inbox page with unread count; mark some or all read |
-| `GET /api/notifications/preferences`, `PUT /api/notifications/preferences` | signed in (own) | Push preferences per category |
-| `GET /api/support`, `GET /api/support/:id`, `POST /api/support/:id/messages` | passenger (own requests) | Requests with unread state; one conversation; reply while open |
+| `GET /api/notifications/preferences`, `PUT /api/notifications/preferences` | signed in (own) | Push preferences per category and quiet hours |
+| `GET /api/support`, `POST /api/support` | signed in (own requests) | Requests with unread state; open a request as a passenger or a driver, with or without a ride (`clientRequestId` makes retries safe) |
+| `GET /api/support/:id`, `POST /api/support/:id/messages` | requester | One conversation; reply while open, with up to 3 attachments |
+| `POST /api/support/attachments`, `POST /api/support/attachments/:id/complete`, `DELETE /api/support/attachments/:id` | signed in (own) | Upload ticket for one JPEG or PNG; confirm the upload; remove an attachment that hasn't been sent |
+| `POST /api/support/:id/attachments/:attachmentId/access` | requester | 60-second view link |
+| `POST /api/admin/support/:id/attachments/:attachmentId/access` | operator (support) | 60-second view link (audited) |
+| `POST /api/admin/rides/:id/pin-waiver` | operator (support) | Waive the trip PIN for an arrived ride (reason required, audited) |
+| `GET /api/categories` | signed in | Vehicle categories offered at a pickup for a passenger count, with nearby driver estimates |
+| `GET /api/admin/vehicle-categories`, `POST /api/admin/vehicle-categories`, `PATCH /api/admin/vehicle-categories/:id` | operator (configure; list also for verify) | List, create and change categories (version and reason required) |
+| `POST /api/admin/drivers/:id/categories` | operator (verify) | Replace a driver's categories (reason and version required) |
+| `POST /api/rides/:id/stops` | assigned driver | Mark the next stop as reached (`index`) |
+| `GET /api/scheduled-rides`, `POST /api/scheduled-rides`, `GET /api/scheduled-rides/window` | passenger | Upcoming and past scheduled requests; create one; the allowed window in the pickup area's time zone |
+| `GET /api/scheduled-rides/:id`, `POST /api/scheduled-rides/:id/cancel`, `POST /api/scheduled-rides/:id/quote` | passenger (own) | One request; cancel it; get a fresh price once confirmation is open |
+| `GET /api/admin/dashboard` | operator (view) | Live and period figures (`from`, `to`, UTC) |
 | `GET /api/admin/support/:id/messages`, `POST /api/admin/support/:id/messages` | operator (view / support, assignee) | Conversation; reply to the passenger |
 | `GET /api/admin/badges` | operator (view) | Queue counts allowed by the operator's permissions |
 | `GET /api/admin/system` | operator (view) | Configuration checklist, job status, queue counters |
@@ -1367,6 +1382,7 @@ app/                 screens (Expo Router); app/api/* thin route files
   (root)/safety/[id] safety screen
   share/[token]      public trip-share page
   (root)/places, notifications, support, delete-account   saved places, inbox, support conversations, account deletion
+  (root)/schedule-ride, scheduled   schedule a request; upcoming and past scheduled requests
 server/              auth, db, pricing, lifecycle (state machine), matching, rides (payments ↔ rides),
                      location (validation), live + routing (ETA), notifications (outbox), routes
 shared/              request/response contracts, money formatting, geo validation

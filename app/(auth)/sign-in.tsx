@@ -6,14 +6,17 @@ import { Image, ScrollView, Text, View } from "react-native";
 import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons, images } from "@/constants";
+import { clerkErrorKey } from "@/lib/clerkErrors";
+import { useSessionState } from "@/lib/fetch";
 import { useI18n } from "@/lib/i18n";
 import { chatRideId, usePendingRoute } from "@/lib/notificationRouting";
 
 const SignIn = () => {
   const { signIn, fetchStatus } = useSignIn();
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
+  const sessionEnded = useSessionState((s) => s.notice);
 
   const onSignInPress = useCallback(async () => {
     if (!signIn || fetchStatus === "fetching") return;
@@ -22,18 +25,19 @@ const SignIn = () => {
       return;
     }
     setError(null);
-    const failed = (message?: string | null) =>
-      setError(language === "en" && message ? message : t("auth.signInFailed"));
+    const failed = (problem?: unknown) =>
+      setError(t(clerkErrorKey(problem) ?? "auth.signInFailed"));
     try {
       await signIn.create({ identifier: form.email.trim() });
       const { error: failure } = await signIn.password({
         password: form.password,
       });
       if (failure) {
-        failed(failure.message);
+        failed(failure);
         return;
       }
       if (signIn.status === "complete") {
+        useSessionState.getState().clearNotice();
         const pending = usePendingRoute.getState().take();
         const deferred = pending !== null && chatRideId(pending) !== null;
         if (deferred) usePendingRoute.getState().remember(pending);
@@ -47,12 +51,9 @@ const SignIn = () => {
       }
       failed();
     } catch (err) {
-      failed(
-        (err as { errors?: { longMessage?: string }[] })?.errors?.[0]
-          ?.longMessage,
-      );
+      failed(err);
     }
-  }, [signIn, fetchStatus, form.email, form.password, t, language]);
+  }, [signIn, fetchStatus, form.email, form.password, t]);
 
   return (
     <ScrollView className="flex-1 bg-white" keyboardShouldPersistTaps="handled">
@@ -68,6 +69,16 @@ const SignIn = () => {
         </View>
 
         <View className="p-5">
+          {sessionEnded && (
+            <View
+              className="bg-orange-100 rounded-xl p-3 mb-2"
+              accessibilityRole="alert"
+            >
+              <Text className="text-sm text-orange-800">
+                {t("auth.sessionExpired")}
+              </Text>
+            </View>
+          )}
           <InputField
             label={t("auth.email")}
             placeholder={t("auth.emailPlaceholder")}

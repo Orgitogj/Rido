@@ -53,7 +53,7 @@ const TipPayButton = ({
         returnURL: `myapp://receipt/${rideId}`,
       });
       if (init.error) {
-        setError(init.error.message || t("pay.startFailed"));
+        setError(t("pay.startFailed"));
         return;
       }
       const sheet = await presentPaymentSheet();
@@ -66,7 +66,7 @@ const TipPayButton = ({
       );
       onDone(state);
       if (sheet.error && sheet.error.code !== PaymentSheetError.Canceled) {
-        setError(sheet.error.message || t("pay.declined"));
+        setError(t("pay.declined"));
       }
     } catch (e) {
       setError(errorText(e));

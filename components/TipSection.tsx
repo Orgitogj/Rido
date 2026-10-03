@@ -105,8 +105,10 @@ const TipSection = ({ rideId }: { rideId: string }) => {
               status: t(`pay.tip.status.${tip.status}`),
             })}
           </Text>
-          {tip.lastError && language === "en" && (
-            <Text className="text-xs text-red-600 mt-1">{tip.lastError}</Text>
+          {tip.status === "failed" && (
+            <Text className="text-xs text-red-600 mt-1">
+              {t("ride.payment.failed")}
+            </Text>
           )}
           {s.eligible && (
             <TipPay

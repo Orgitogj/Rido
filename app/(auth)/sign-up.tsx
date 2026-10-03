@@ -7,16 +7,14 @@ import { ReactNativeModal } from "react-native-modal";
 import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons, images } from "@/constants";
+import { clerkErrorKey } from "@/lib/clerkErrors";
 import { apiRequest } from "@/lib/fetch";
-import { useI18n } from "@/lib/i18n";
-
-const clerkMessage = (err: unknown) =>
-  (err as { errors?: { longMessage?: string }[] })?.errors?.[0]?.longMessage;
+import { type TKey, useI18n } from "@/lib/i18n";
 
 const SignUp = () => {
   const { signUp, fetchStatus } = useSignUp();
   const { getToken } = useAuth();
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [formError, setFormError] = useState<string | null>(null);
@@ -27,8 +25,8 @@ const SignUp = () => {
   });
   const busy = fetchStatus === "fetching";
 
-  const text = (message: string | null | undefined, fallback: string) =>
-    language === "en" && message ? message : fallback;
+  const text = (problem: unknown, fallback: TKey) =>
+    t(clerkErrorKey(problem) ?? fallback);
 
   const onSignUpPress = async () => {
     if (!signUp || busy) return;
@@ -43,22 +41,22 @@ const SignUp = () => {
         password: form.password,
       });
       if (error) {
-        setFormError(text(error.message, t("auth.signUpFailed")));
+        setFormError(text(error, "auth.signUpFailed"));
         return;
       }
       await signUp.verifications.sendEmailCode();
       setVerification({ ...verification, state: "pending", error: "" });
     } catch (err) {
-      setFormError(text(clerkMessage(err), t("auth.signUpFailed")));
+      setFormError(text(err, "auth.signUpFailed"));
     }
   };
 
   const onPressVerify = async () => {
     if (!signUp || busy) return;
-    const fail = (message?: string | null) =>
+    const fail = (problem?: unknown) =>
       setVerification({
         ...verification,
-        error: text(message, t("auth.verificationFailed")),
+        error: text(problem, "auth.verificationFailed"),
         state: "failed",
       });
     try {
@@ -66,7 +64,7 @@ const SignUp = () => {
         code: verification.code.trim(),
       });
       if (error) {
-        fail(error.message);
+        fail(error);
         return;
       }
       if (signUp.status !== "complete") {
@@ -89,7 +87,7 @@ const SignUp = () => {
           .catch(() => {});
       }
     } catch (err) {
-      fail(clerkMessage(err));
+      fail(err);
     }
   };
 

@@ -7,13 +7,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import CustomButton from "@/components/CustomButton";
 import InputField from "@/components/InputField";
 import { icons } from "@/constants";
+import { clerkErrorKey } from "@/lib/clerkErrors";
 import { useI18n } from "@/lib/i18n";
 
 type Step = "email" | "code";
 
 const ResetPassword = () => {
   const { signIn, fetchStatus } = useSignIn();
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -21,14 +22,11 @@ const ResetPassword = () => {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const busy = fetchStatus === "fetching";
 
-  const failure = (message?: string | null) =>
+  const failure = (problem?: unknown) =>
     setNote({
       ok: false,
-      text: language === "en" && message ? message : t("auth.resetFailed"),
+      text: t(clerkErrorKey(problem) ?? "auth.resetFailed"),
     });
-
-  const clerkMessage = (err: unknown) =>
-    (err as { errors?: { longMessage?: string }[] })?.errors?.[0]?.longMessage;
 
   const sendCode = async () => {
     const address = email.trim().toLowerCase();
@@ -64,7 +62,7 @@ const ResetPassword = () => {
         code: code.trim(),
       });
       if (verified.error) {
-        failure(verified.error.message);
+        failure(verified.error);
         return;
       }
       const changed = await signIn.resetPasswordEmailCode.submitPassword({
@@ -72,7 +70,7 @@ const ResetPassword = () => {
         signOutOfOtherSessions: true,
       });
       if (changed.error) {
-        failure(changed.error.message);
+        failure(changed.error);
         return;
       }
       if (signIn.status === "complete") {
@@ -83,7 +81,7 @@ const ResetPassword = () => {
       }
       failure();
     } catch (err) {
-      failure(clerkMessage(err));
+      failure(err);
     }
   };
 

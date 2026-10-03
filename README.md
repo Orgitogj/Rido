@@ -1427,17 +1427,23 @@ __tests__/, jest/    tests and the PostgreSQL test database
   - Unsent messages are kept in memory, not on disk, so a failed message is lost if the app is closed before retrying.
   - Operators can't read chat; they see only a message a participant reported.
   - Rating averages are computed on each request, with no caching or decay.
-- **Notifications.** Delivery is at-least-once: a send that crashes mid-flight can repeat once after 60 s. Preferences are per category with no quiet hours, and there are no Live Activities or ongoing notifications. Inbox items are kept until the account is deleted; there is no automatic expiry.
+- **Notifications.** Delivery is at-least-once: a send that crashes mid-flight can repeat once after 60 s. Quiet hours are one daily range per account, not per day of the week. There are no Live Activities or ongoing notifications. Inbox items are kept until the account is deleted; there is no automatic expiry.
 - **Matching.** One offer at a time; at most 2 re-matches with a 120 s deadline each.
 - **Payments.**
   - Not built, and each needs a separate decision: cancellation fees, surge pricing, fare adjustments, driver payouts, another currency, re-authorization of long trips, and live-mode refunds (the console is test-mode only).
   - An interrupted trip is never charged, even if most of it was driven; support can review it, but charging part of the fare is not implemented.
 - **Operations.**
   - Operators are provisioned from the CLI only; there is no invitation flow, SSO, or MFA requirement beyond what Clerk enforces.
-  - Support conversations are text only, opened by passengers from a receipt; drivers have safety reports but no support requests.
+  - Support attachments are JPEG and PNG images only, need the storage bucket, and are not scanned for malware.
+  - The dashboard is UTC only and has no charts or export.
   - The console is English only.
   - The console is a web page in the same build; it has no separate hosting or IP restriction.
 - **Account deletion.** No retention period is set for retained financial, safety and audit records, and backups are outside the application's control. Deletion of the Clerk identity and Stripe customer has only been tested against stand-ins.
 - **Localization.** Albanian text was written during implementation and not reviewed by a translator. Text written by people (support replies, review notes) and Stripe's own payment-sheet messages are not translated by the app.
-- **Not planned without a decision.** Scheduled rides, multiple stops, pooled rides, vehicle classes, emergency dispatch, phone masking, in-app calling, automated identity verification, and country-specific transport or insurance rules. See [docs/implementation-checklist.md](docs/implementation-checklist.md#features-requiring-a-separate-decision).
+- **Trip PIN.** A driver and passenger who both ignore the app can still drive without starting the trip; the PIN only guarantees that a trip can't be marked started without the passenger's code or an audited waiver.
+- **Vehicle categories.** One category per request; no upgrades, no per-category commission, and no check that a vehicle physically matches a category beyond the operator's review.
+- **Stops.** At most two, fixed at request time, with no waiting fees and no editing during the trip. Reaching a stop is the driver's tap; it is not checked against GPS.
+- **Scheduled requests.** Not a reservation. They depend on the sweep running every minute and on the passenger confirming; there is no automatic booking, no recurring schedule and no advance driver assignment. An area's time zone must be set by an operator; it is `UTC` until then.
+- **Payouts.** Blocked until a provider and country are chosen. See [docs/payout-readiness.md](docs/payout-readiness.md).
+- **Not planned without a decision.** Pooled rides, emergency dispatch, phone masking, in-app calling, automated identity verification, and country-specific transport or insurance rules. See [docs/implementation-checklist.md](docs/implementation-checklist.md#features-requiring-a-separate-decision).
 - **Web.** Web is limited to building the API server; maps and payments are native-only.

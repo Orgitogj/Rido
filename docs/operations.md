@@ -16,7 +16,9 @@ How to configure, deploy, monitor and recover the service. Nothing here has been
 | Stripe | `STRIPE_WEBHOOK_SECRET` | required in production | Only the sweep recovers payment state |
 | Scheduler | `CRON_SECRET` (16+ characters) | required | The sweep endpoint refuses every call |
 | Google Routes | `GOOGLE_ROUTES_API_KEY` | required | Quotes are refused, never guessed |
-| Document storage | `DOCUMENT_STORAGE_BUCKET`, `DOCUMENT_STORAGE_ACCESS_KEY_ID`, `DOCUMENT_STORAGE_SECRET_ACCESS_KEY` | recommended | Driver document uploads answer 503 |
+| Trip PIN | `RIDE_PIN_SECRET` (32+ characters) | required in production, recommended in development | No trip PIN is issued in development; production readiness fails |
+| Scheduled requests | `SCHEDULED_RIDE_MIN_LEAD_MINUTES` (25–1440, default 30), `SCHEDULED_RIDE_MAX_DAYS` (1–30, default 7) | optional | Defaults are used; a value outside the range is ignored |
+| Document storage | `DOCUMENT_STORAGE_BUCKET`, `DOCUMENT_STORAGE_ACCESS_KEY_ID`, `DOCUMENT_STORAGE_SECRET_ACCESS_KEY` | recommended | Driver document uploads and support attachments answer 503; support still works as text |
 | Push | `PUSH_NOTIFICATIONS` | optional | `off` disables push; the in-app inbox still works |
 | Public URL | `EXPO_PUBLIC_SERVER_URL` | required in production (https) | App builds cannot reach the API; share links point at a development address |
 
@@ -32,6 +34,9 @@ Client-side values (`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PUB
 | Stripe | Test keys | Live keys only after legal and payout decisions; console refunds stay disabled on a live key |
 | Driver approval | CLI waiver available | Review real documents in the console |
 | Clerk | Development instance | Production instance and authorised parties |
+| Vehicle categories | The migrated **Standard** category and one seeded development example | Define the real categories, capacities and their fare policies; a commercial decision |
+| Service-area time zone | `UTC` for areas created before scheduling existed | Set each area's IANA time zone in the console before offering scheduled requests |
+| Trip PIN secret | Placeholder in `.env.example` | A random value of 32 or more characters, kept with the other server secrets |
 
 ## Health and readiness
 
@@ -40,6 +45,7 @@ Client-side values (`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PUB
 | `GET /api/health` | none | `200 {"status":"ok"}` when the process is serving requests. It does not touch the database |
 | `GET /api/ready` | none | `200` when the database answers, the schema is at least at migration 017, and every required setting is present; otherwise `503` with `checks: { database, schema, configuration }` as booleans |
 | `GET /api/admin/system` | operator (`view`) | Configuration checklist, background job status, queue and usage counters |
+| `GET /api/admin/dashboard` | operator (`view`) | Live and period figures, counts only, in UTC |
 
 Use `/api/health` for liveness and `/api/ready` for load-balancer readiness.
 

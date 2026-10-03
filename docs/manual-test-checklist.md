@@ -89,6 +89,11 @@ Passenger on phone A, approved driver on phone B.
 - [ ] Refund part of a fare in test mode; the receipt and the driver's earnings reflect it after Stripe confirms.
 - [ ] Approve, request changes on, and suspend a driver; the driver gets an inbox item each time.
 - [ ] System page: stop the scheduler and confirm the last sweep time stops advancing.
+- [ ] Dashboard: the counts match what you can see in the queues; changing the date range changes the period figures; the page states UTC and when the figures were generated; a view-only operator sees "Not shown for your role" for safety and driver applications; no names, addresses or emails appear anywhere on the page.
+- [ ] Dashboard after a completed, tipped and partly refunded test ride: fares captured, tips captured, refunded and ledger earnings each change by the expected amount, and "Paid out to drivers" still reads "Not available".
+- [ ] Vehicle categories: create a development example, change its capacity, deactivate and reactivate it; each change needs a reason and appears in its history; a view-only operator can't open the page.
+- [ ] Service area: set the time zone; schedule a fare policy for a second category.
+- [ ] Driver page: approval is disabled until a category is selected; "Update categories" changes them for an approved driver.
 
 ## 8. Notifications and inbox (Expo push, development build)
 
@@ -98,6 +103,11 @@ Passenger on phone A, approved driver on phone B.
 - [ ] Switch a category off: no push for it, but the item is still in the inbox.
 - [ ] Deny notification permission: the inbox explains that push is off and still lists items.
 - [ ] Push text follows the account's language.
+- [ ] Quiet hours: set a range that includes the current time. A support reply produces an inbox item and no push. A driver-arrived update and a chat message during an active ride still push.
+- [ ] Quiet hours overnight (for example 22:00–07:00) with the phone in another time zone than the one saved: the saved zone is the one applied.
+- [ ] When quiet hours end, no pushes arrive for what was suppressed.
+- [ ] Quiet hours set on one phone appear on a second phone signed in to the same account.
+- [ ] A driver with quiet hours on and "ride requests" on still receives offer pushes.
 
 ## 9. Location (GPS)
 
@@ -129,4 +139,5 @@ Passenger on phone A, approved driver on phone B.
 
 - [ ] Create a link during a ride and open it in a browser without signing in.
 - [ ] It shows the status, driver first name, vehicle, plate and destination, and no payment or chat data.
+- [ ] For a ride with stops, the page shows only the final destination, and never the PIN.
 - [ ] Stop sharing: the link stops working at once.

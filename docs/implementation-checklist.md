@@ -1,6 +1,6 @@
 # Implementation checklist
 
-State of the application as of 2026-10-01, on top of commit `0c7f776`. This file separates what the code does from what has been checked against real providers and real devices.
+State of the application as of 2026-10-02. This file separates what the code does from what has been checked against real providers and real devices.
 
 "Tested" below means automated tests that run the real route handlers against an isolated in-process PostgreSQL (PGlite) with in-memory stand-ins for Stripe, Google Routes, object storage, Expo push and the Clerk admin API. Those stand-ins prove the application's own logic. They are **not** verification of Google, Stripe, S3-compatible storage, Expo push, real Clerk sessions, GPS or device behaviour.
 
@@ -8,7 +8,7 @@ State of the application as of 2026-10-01, on top of commit `0c7f776`. This file
 
 | Area | What works |
 | --- | --- |
-| Accounts | Server-verified Clerk sessions, user sync, account switching clears per-user state on the device |
+| Accounts | Server-verified Clerk sessions, user sync, account switching clears per-user state on the device; an expired session signs the app out with a notice; provider error text is replaced by the app's own messages in both languages |
 | Profile | Edit display name; language preference (English, Albanian) stored on the server and the device |
 | Saved places | Home, Work and up to 20 custom places; ownership, validation, limits, duplicate-submission protection; usable as pickup or destination |
 | Booking | Service-area check, road-based quote, fixed fare, card hold, quote expiry handled explicitly, one active ride per passenger |
@@ -25,6 +25,14 @@ State of the application as of 2026-10-01, on top of commit `0c7f776`. This file
 | Operations | Rate limits on abuse-prone writes, health and readiness endpoints, configuration checklist, sweep lease so concurrent sweeps do not overlap, job status, queue counters |
 | Operator console | Web only; review, support, rides, feedback, safety, drivers, service areas, system status; queue badges |
 | Localization | English and Albanian for every passenger and driver screen, with identical key sets checked by a test |
+| Support for drivers | Requests record the requester's role and optional ride; drivers open them from the driver screen, a trip or the safety screen; operators filter by role |
+| Support attachments | Private JPEG and PNG attachments with a ticket, direct upload, server-side checks and promotion, short-lived view links, audit, limits and retention; a clear "not available" state without storage |
+| Trip PIN | Per-assignment PIN shown only to the passenger, verified in the start transaction, attempt limits with lock and block, rotation on re-match, audited operator waiver, rides without a PIN unaffected |
+| Quiet hours | Server-stored range with a time zone, overnight ranges, daylight-saving handling, optional pushes skipped and never sent later, critical pushes always sent, inbox unaffected |
+| Vehicle categories | Operator-managed categories with history; fare policies per area and category; drivers linked through verification; passenger chooses category and passenger count; capacity and category matching; snapshots; deactivation rules; existing drivers and policies migrated to a default category |
+| Stops | Up to two stops, validated and routed in order, one fare, snapshot on the ride, ordered progress, completion blocked while a stop remains, hidden from the public share page |
+| Scheduled requests | Saved request with the area's time zone, sweep-driven confirmation window, fresh quote and authorization only on confirmation, expiry without a charge, cancellation, upcoming and past lists |
+| Operations dashboard | Live and period counts with stated definitions, UTC, range limit, permissions, cache with freshness, per-section unavailable state, drill-down links, no personal data |
 
 ## Implemented, awaiting external verification
 
@@ -39,7 +47,14 @@ State of the application as of 2026-10-01, on top of commit `0c7f776`. This file
 | GPS | Foreground and background tracking, stale position handling, force-quit | Manual checklist, section 9 |
 | Accessibility | Screen-reader order and labels, text scaling, contrast on real devices | Manual checklist, section 11 |
 | Albanian wording | Written during implementation; not reviewed by a native-speaking translator | Native-speaker review |
-| PostgreSQL | Concurrency tests run on PGlite with one connection locally; real row-lock contention needs the CI job on PostgreSQL 16 | `TEST_DATABASE_URL` run described in the README |
+| PostgreSQL | The server suite passed twice on a disposable local PostgreSQL 18.4 instance with four connections (471 tests), so concurrency tests contended on real row locks. Not yet run on the PostgreSQL 16 CI job or against the production database | `TEST_DATABASE_URL` run described in the README; the CI `postgres` job |
+| Support attachments | Upload, confirmation and view links against a real private bucket; progress and retry on a real connection | Manual checklist, section 14 |
+| Trip PIN | Two-device behaviour, lock countdown, waiver notification | Manual checklist, section 13 |
+| Quiet hours | Real push suppression and delivery on devices, across a real clock change | Manual checklist, section 8 |
+| Vehicle categories and stops | Real routes through stops (Google Routes with intermediates), navigation hand-off, two-device matching by category and seats | Manual checklist, sections 15 and 16 |
+| Scheduled requests | A real scheduler calling the sweep every minute, real push, real authorization at confirmation | Manual checklist, section 17 |
+| New screens | Screen-reader order, text scaling and keyboard behaviour on the support, booking, schedule and driver PIN screens | Manual checklist, sections 11 and 13–17 |
+| Session expiry | The sign-out on a refused session and the Clerk error-code mapping against real Clerk responses | Manual checklist, section 1 |
 
 ## Missing
 

@@ -56,7 +56,8 @@ Use `/api/health` for liveness and `/api/ready` for load-balancer readiness.
 - A database lease (`mobility.job_status`, 120 seconds) lets only one sweep run at a time. A second caller gets `200` with `skipped: "already_running"`.
 - Each maintenance step is recorded separately with its last success and last error, visible on the System page.
 - Driver heartbeats also run maintenance, throttled to once every 20 seconds, so a missing scheduler degrades the service rather than stopping it. Do not rely on that in production.
-- Steps: advance searches and offers, retry settlements, deliver and check notifications, delete stored documents that are due, purge expired chat, process account deletions, prune rate-limit counters.
+- Steps: advance searches and offers, retry settlements, open or expire scheduled requests, deliver and check notifications, delete stored documents and support attachments that are due, purge expired chat, process account deletions, prune rate-limit counters.
+- Scheduled requests depend on this job. Confirmation opens 20 minutes before the pickup time and closes 10 minutes after it. If the sweep doesn't run in that window, the request expires without a charge and the passenger is told. Nothing is dispatched late.
 
 ## Rate limits
 
@@ -70,6 +71,7 @@ Counted per user (or per token for public share views) in `mobility.rate_limits`
 | Safety reports | 10 per hour |
 | Support requests | 10 per hour |
 | Share-link creation | 20 per hour |
+| Scheduled-request writes | 20 per hour |
 | Public share-link views | 120 per minute |
 | Account deletion attempts | 5 per hour |
 
@@ -88,6 +90,16 @@ Redis and WebSockets are not used. Long polling plus PostgreSQL is adequate at t
 7. Create service areas and fare policies. Nothing can be quoted until one area is active with a policy in effect.
 
 Roll back by redeploying the previous build. Migrations 013–017 only add tables, columns and indexes, so the previous build keeps working against the newer schema.
+
+Migrations 018–024 are additive except for three changes to existing objects: `support_requests.ride_id` becomes nullable, the support category check accepts the driver categories, and `fare_policies_effective_idx` is rebuilt to include the vehicle category. A build from before 018 keeps working against the newer schema, with two cautions: it does not know about trip PINs, stops or categories, so rides created by the newer build with stops or a PIN must be finished on the newer build; and it must not be used to create fare policies, because it would put every policy in the default category.
+
+### Deploying the trip PIN, categories, stops and scheduling
+
+1. Set `RIDE_PIN_SECRET` before deploying. Changing it later invalidates the PINs of rides that are between acceptance and pickup; those passengers would need a waiver. Rotate it only when no rides are in that state.
+2. Run `npm run db:migrate`. Migration 021 places every approved or suspended driver in the **Standard** category and assigns existing fare policies to it. Check the category list and the driver pages afterwards.
+3. Rides that were active during the deployment have no PIN, no stops and no category. They finish under the old rules.
+4. Set each service area's time zone before telling passengers about scheduled requests.
+5. Confirm the sweep is running every minute; scheduled requests depend on it.
 
 ## Backup
 

@@ -25,9 +25,11 @@ import { useInbox } from "@/lib/inbox";
 import { useCurrentLocation } from "@/lib/location";
 import { rideHeadline } from "@/lib/rideText";
 import { useSignOut } from "@/lib/session";
-import { useLocationStore } from "@/store";
+import { formatInZone } from "@/shared/zonedTime";
+import { useLocationStore, useRideStore } from "@/store";
 
 import type { RideView } from "@/shared/contracts";
+import type { ScheduledRideList } from "@/shared/schedule";
 
 const Home = () => {
   const { t, tn, language, queryError } = useI18n();
@@ -53,6 +55,12 @@ const Home = () => {
     refetchOnFocus: true,
   });
   const activeRide = active.data;
+  const scheduled = useApiQuery<ScheduledRideList>("/api/scheduled-rides", {
+    refetchOnFocus: true,
+  });
+  const pending = scheduled.data?.upcoming.find((s) => s.canConfirm) ?? null;
+  const pendingTime = (iso: string, zone: string) =>
+    (formatInZone(new Date(iso), zone) ?? iso).slice(11, 16);
   const { refetch } = rides;
 
   useEffect(() => {
@@ -64,6 +72,8 @@ const Home = () => {
     longitude: number;
     address: string;
   }) => {
+    useLocationStore.getState().setStops([]);
+    useRideStore.getState().reset();
     setDestinationLocation(location);
     router.push("/(root)/find-ride");
   };
@@ -173,6 +183,31 @@ const Home = () => {
               </TouchableOpacity>
             )}
 
+            {pending && !activeRide && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`${t("schedule.pendingTitle")}. ${t("schedule.confirmNow")}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(root)/scheduled/[id]",
+                    params: { id: pending.id },
+                  })
+                }
+                className="bg-orange-100 rounded-2xl p-4 mb-4"
+              >
+                <Text className="text-base font-JakartaBold text-orange-900">
+                  {t("schedule.pendingTitle")}
+                </Text>
+                <Text className="text-sm text-orange-900 mt-1">
+                  {t("schedule.pendingBody", {
+                    time: pending.localTime.replace("T", " "),
+                    timezone: pending.timezone,
+                    deadline: pendingTime(pending.confirmBy, pending.timezone),
+                  })}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <GoogleTextInput
               icon={icons.search}
               containerStyle="bg-white shadow-md shadow-neutral-300"
@@ -217,6 +252,14 @@ const Home = () => {
                 <Map />
               </View>
             </>
+
+            <CustomButton
+              title={t("schedule.link")}
+              bgVariant="outline"
+              textVariant="primary"
+              className="mt-5"
+              onPress={() => router.push("/(root)/scheduled")}
+            />
 
             <CustomButton
               title={t("booking.home.drive")}

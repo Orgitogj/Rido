@@ -121,15 +121,29 @@ The database is the system of record: rides, payment state, the earnings ledger,
 | Account deletion stuck | System page shows failing deletions. The usual cause is a missing `CLERK_SECRET_KEY` or a Stripe outage. The job retries with backoff from 1 minute up to 6 hours; application data was already removed when the user confirmed |
 | Document deletion failing | System page counter; the worker retries. The file is never served once its row is deleted |
 | Google Routes outage or quota | Quotes are refused with a clear message; matching falls back to straight-line order; ETAs are labelled estimates |
+| Driver can't start a trip because of the PIN | The driver's screen shows attempts left and the lock. After three locks the driver is told to contact support. An operator with `support` opens the ride in the console and waives the PIN with a reason; the passenger is notified. Cancelling so the passenger is re-matched also clears it |
+| Scheduled request not opened | Check the sweep's `scheduled_rides` step on the System page. Requests whose window has passed expire without a charge; the passenger can request a ride now |
+| Support attachment won't open | Links last 60 seconds; open it again. If storage is unreachable, the System page shows failing deletions and uploads answer 503 |
+| Dashboard section unavailable | The page shows which group failed instead of zeros. Refresh; if it persists, check the database and the server log line `dashboard_section_failed` |
 
 ## Account deletion and retained records
 
 Deletion requires a password re-verification within the last 10 minutes and is refused while the user has an active ride, is online as a driver, has a payment still settling, or holds an operator role.
 
-Removed immediately, in one transaction: display name, language, saved places, notification preferences, push tokens, inbox items, the user's chat messages, rating comments written by the user, unused quotes, the passenger name on past rides, driver vehicle plate and display name, driver location. Trip share links are revoked. Driver documents are scheduled for deletion by the storage worker. The driver profile is closed.
+Removed immediately, in one transaction: display name, language, saved places, notification preferences (including quiet hours), push tokens, inbox items, upcoming scheduled requests, the user's chat messages, rating comments written by the user, unused quotes, the passenger name on past rides, driver vehicle plate and display name, driver location. Trip share links are revoked. Driver documents and support attachments are scheduled for deletion by the storage worker. The driver profile is closed and its vehicle categories are removed.
 
 Then, with retries: the Stripe customer and the Clerk identity. Until both succeed the deletion shows as pending; the account cannot be used in the meantime, and a new sign-in with the same identity is refused.
 
 Retained without the person's name: rides, payment and refund records, disputes, receipts, the earnings ledger, safety reports, support requests and their messages, operator audit history, and the record that a deletion happened (with a one-way hash of the identity so it cannot be reused to reopen the account).
+
+### Support attachments
+
+| Case | When the file is deleted |
+| --- | --- |
+| Uploaded but never sent | 24 hours after upload |
+| Sent on a request | 90 days after the request is resolved; reopening the request cancels the timer |
+| Account deleted | Scheduled at once |
+
+These periods are implementation defaults in `SUPPORT_RULES`, chosen so files don't accumulate. They are separate from driver-document retention and are not legal advice; change them to match your policy. The message text of a support request is retained as described above.
 
 **No retention period is implemented for the retained records.** How long financial, safety and audit records must or may be kept depends on the operating country and is a legal decision for the service owner. Until that decision is made the records are kept indefinitely, and this must be disclosed to users.

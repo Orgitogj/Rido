@@ -2,6 +2,8 @@ import * as Crypto from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -272,155 +274,156 @@ const SafetyScreen = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-general-500">
-      <ScrollView
-        className="px-5"
-        contentContainerStyle={{ paddingBottom: 60 }}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScreenHeader title={t("safety.title")} onBack={back} />
+        <ScrollView
+          className="px-5"
+          contentContainerStyle={{ paddingBottom: 60 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <ScreenHeader title={t("safety.title")} onBack={back} />
 
-        <View className="bg-red-50 rounded-2xl p-4" accessibilityRole="alert">
-          <Text className="text-sm text-red-700 font-JakartaSemiBold">
-            {t("safety.emergency")}
-          </Text>
-        </View>
+          <View className="bg-red-50 rounded-2xl p-4" accessibilityRole="alert">
+            <Text className="text-sm text-red-700 font-JakartaSemiBold">
+              {t("safety.emergency")}
+            </Text>
+          </View>
 
-        {!v && query.status === "loading" && (
-          <ListState kind="loading" message={t("common.loading")} />
-        )}
-        {!v && query.status === "error" && (
-          <ListState
-            kind="error"
-            message={queryError(query)}
-            onRetry={query.refetch}
-          />
-        )}
+          {!v && query.status === "loading" && (
+            <ListState kind="loading" message={t("common.loading")} />
+          )}
+          {!v && query.status === "error" && (
+            <ListState
+              kind="error"
+              message={queryError(query)}
+              onRetry={query.refetch}
+            />
+          )}
 
-        {v && (
-          <>
-            <View className="bg-white rounded-2xl px-5 py-3 mt-4">
-              <Row label={t("safety.rideId")} value={v.rideId} />
-              <View className="flex flex-row justify-between items-center py-2 border-b border-general-700">
-                <Text className="text-sm text-general-200">
-                  {t("safety.rideStatus")}
-                </Text>
-                <StatusBadge status={v.status} />
-              </View>
-              {v.driver && (
-                <>
-                  <Row label={t("safety.driver")} value={v.driver.name} />
-                  <Row label={t("safety.vehicle")} value={v.driver.vehicle} />
-                  <Row label={t("safety.plate")} value={v.driver.plate} />
-                </>
-              )}
-              {v.passengerName && (
-                <Row label={t("safety.passenger")} value={v.passengerName} />
-              )}
-              {!v.currentParticipant && (
-                <Text className="text-xs text-general-200 py-2">
-                  {t("safety.notAssigned")}
-                </Text>
-              )}
-            </View>
-
-            {sent && (
-              <View className="bg-green-50 rounded-2xl p-4 mt-4">
-                <Text
-                  className="text-sm text-green-700"
-                  accessibilityLiveRegion="polite"
-                >
-                  {t("safety.sent")}
-                </Text>
-              </View>
-            )}
-
-            {form ? (
-              <ReportForm
-                rideId={rideId}
-                initialCategory={form}
-                onCancel={() => setForm(null)}
-                onSent={() => {
-                  setForm(null);
-                  setSent(true);
-                  query.refetch();
-                }}
-              />
-            ) : v.canReport ? (
-              <View className="mt-4">
-                <CustomButton
-                  title={t("safety.report")}
-                  bgVariant="danger"
-                  onPress={() => {
-                    setSent(false);
-                    setForm("unsafe_driving");
-                  }}
-                />
-                <CustomButton
-                  title={t("safety.contactSupport")}
-                  bgVariant="outline"
-                  textVariant="primary"
-                  className="mt-3"
-                  onPress={() => {
-                    if (v.role === "passenger" && v.currentParticipant) {
-                      router.push({
-                        pathname: "/(root)/receipt/[id]",
-                        params: { id: rideId },
-                      });
-                      return;
-                    }
-                    setSent(false);
-                    setForm("other");
-                  }}
-                />
-                {v.reportBy && (
-                  <Text className="text-xs text-general-200 mt-2">
-                    {t("safety.reportUntil", { date: dateTime(v.reportBy) })}
+          {v && (
+            <>
+              <View className="bg-white rounded-2xl px-5 py-3 mt-4">
+                <Row label={t("safety.rideId")} value={v.rideId} />
+                <View className="flex flex-row justify-between items-center py-2 border-b border-general-700">
+                  <Text className="text-sm text-general-200">
+                    {t("safety.rideStatus")}
+                  </Text>
+                  <StatusBadge status={v.status} />
+                </View>
+                {v.driver && (
+                  <>
+                    <Row label={t("safety.driver")} value={v.driver.name} />
+                    <Row label={t("safety.vehicle")} value={v.driver.vehicle} />
+                    <Row label={t("safety.plate")} value={v.driver.plate} />
+                  </>
+                )}
+                {v.passengerName && (
+                  <Row label={t("safety.passenger")} value={v.passengerName} />
+                )}
+                {!v.currentParticipant && (
+                  <Text className="text-xs text-general-200 py-2">
+                    {t("safety.notAssigned")}
                   </Text>
                 )}
               </View>
-            ) : (
-              <Text className="text-sm text-general-200 mt-4">
-                {t("safety.reportEnded")}
-              </Text>
-            )}
 
-            {v.role === "passenger" && (
-              <ShareSection view={v} onChanged={query.refetch} />
-            )}
-
-            <View className="bg-white rounded-2xl px-5 py-3 mt-4">
-              <Text
-                className="text-base font-JakartaBold py-2"
-                accessibilityRole="header"
-              >
-                {t("safety.yourReports")}
-              </Text>
-              {v.reports.length === 0 && (
-                <Text className="text-sm text-general-200 pb-2">
-                  {t("safety.noReports")}
-                </Text>
-              )}
-              {v.reports.map((r) => (
-                <View key={r.id} className="py-2 border-t border-general-700">
-                  <View className="flex flex-row justify-between">
-                    <Text className="text-sm font-JakartaSemiBold">
-                      {t(`safety.category.${r.category}`)}
-                    </Text>
-                    <Text className="text-sm text-general-200">
-                      {t(`safety.status.${r.status}`)}
-                    </Text>
-                  </View>
-                  <Text className="text-xs text-general-200 mt-1">
-                    {t("safety.sentOn", { date: dateTime(r.createdAt) })}
-                    {r.reportedMessages > 0
-                      ? ` · ${tn("safety.attached", r.reportedMessages)}`
-                      : ""}
+              {sent && (
+                <View className="bg-green-50 rounded-2xl p-4 mt-4">
+                  <Text
+                    className="text-sm text-green-700"
+                    accessibilityLiveRegion="polite"
+                  >
+                    {t("safety.sent")}
                   </Text>
                 </View>
-              ))}
-            </View>
-          </>
-        )}
-      </ScrollView>
+              )}
+
+              {form ? (
+                <ReportForm
+                  rideId={rideId}
+                  initialCategory={form}
+                  onCancel={() => setForm(null)}
+                  onSent={() => {
+                    setForm(null);
+                    setSent(true);
+                    query.refetch();
+                  }}
+                />
+              ) : v.canReport ? (
+                <View className="mt-4">
+                  <CustomButton
+                    title={t("safety.report")}
+                    bgVariant="danger"
+                    onPress={() => {
+                      setSent(false);
+                      setForm("unsafe_driving");
+                    }}
+                  />
+                  <CustomButton
+                    title={t("safety.contactSupport")}
+                    bgVariant="outline"
+                    textVariant="primary"
+                    className="mt-3"
+                    onPress={() => {
+                      router.push({
+                        pathname: "/(root)/support/new",
+                        params: { rideId, role: v.role },
+                      });
+                    }}
+                  />
+                  {v.reportBy && (
+                    <Text className="text-xs text-general-200 mt-2">
+                      {t("safety.reportUntil", { date: dateTime(v.reportBy) })}
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text className="text-sm text-general-200 mt-4">
+                  {t("safety.reportEnded")}
+                </Text>
+              )}
+
+              {v.role === "passenger" && (
+                <ShareSection view={v} onChanged={query.refetch} />
+              )}
+
+              <View className="bg-white rounded-2xl px-5 py-3 mt-4">
+                <Text
+                  className="text-base font-JakartaBold py-2"
+                  accessibilityRole="header"
+                >
+                  {t("safety.yourReports")}
+                </Text>
+                {v.reports.length === 0 && (
+                  <Text className="text-sm text-general-200 pb-2">
+                    {t("safety.noReports")}
+                  </Text>
+                )}
+                {v.reports.map((r) => (
+                  <View key={r.id} className="py-2 border-t border-general-700">
+                    <View className="flex flex-row justify-between">
+                      <Text className="text-sm font-JakartaSemiBold">
+                        {t(`safety.category.${r.category}`)}
+                      </Text>
+                      <Text className="text-sm text-general-200">
+                        {t(`safety.status.${r.status}`)}
+                      </Text>
+                    </View>
+                    <Text className="text-xs text-general-200 mt-1">
+                      {t("safety.sentOn", { date: dateTime(r.createdAt) })}
+                      {r.reportedMessages > 0
+                        ? ` · ${tn("safety.attached", r.reportedMessages)}`
+                        : ""}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

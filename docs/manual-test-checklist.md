@@ -2,6 +2,8 @@
 
 Automated tests use in-memory stand-ins for every external service. This checklist is the verification that still has to be done by hand, with real test-mode credentials and real devices. Nothing here has been run as part of the implementation work.
 
+Setup steps, the current configuration state and the order to test in are in [manual-test-setup.md](manual-test-setup.md). Start with one ordinary two-device ride before anything else.
+
 ## Before you start
 
 - Two physical phones (or one phone and one emulator with a mock location) with a **development build**; Expo Go cannot do background location or Android push.
@@ -9,7 +11,9 @@ Automated tests use in-memory stand-ins for every external service. This checkli
 - An isolated database with all migrations applied (`npm run db:setup`). Do not use a shared database for destructive steps.
 - Clerk development instance, Stripe **test** keys and a webhook endpoint (or `stripe listen`), a Google Cloud key restricted to the Routes API, a Places key for address search, a private S3-compatible bucket.
 - One operator granted from the CLI with `view,support,refund,verify,configure`.
-- An active service area with a fare policy that covers where the two phones are.
+- An active service area with a fare policy that covers where the two phones are, with the area's time zone set to the local zone.
+- `RIDE_PIN_SECRET` set on the server.
+- At least two active vehicle categories with a fare policy in the area (for example the migrated **Standard** one and one with a higher capacity), and the test driver linked to them from the console.
 - `GET /api/ready` returns `200`, and the console's **System** page shows no "Missing" line.
 
 Record the build, date, device models and OS versions with the results.
@@ -23,6 +27,8 @@ Record the build, date, device models and OS versions with the results.
 - [ ] Change the email in Profile; the code goes to the new address; the new address signs in.
 - [ ] Change the password in Profile.
 - [ ] Switch the language to Albanian on the welcome screen and in Profile; restart the app; the choice is kept.
+- [ ] Sign in with a wrong password, an unknown email and, on sign-up, an email that is already used: each shows the app's own message in the selected language, not provider text.
+- [ ] Revoke the session in the Clerk dashboard while the app is open, then pull to refresh: the app returns to sign-in with "Your session ended", and no data from the account remains on screen after signing in as someone else.
 
 ## 2. Saved places and address search (Google Places)
 

@@ -46,6 +46,8 @@ Record the build, date, device models and OS versions with the results.
 - [ ] Pay with a 3-D Secure test card and complete the challenge.
 - [ ] Pay with a declined test card: no ride is created in searching state, and the message says nothing was charged.
 - [ ] Close the app during the search and reopen: Home shows the ride in progress and opens it.
+- [ ] Decline the card in the payment sheet: the message under the button is the app's own text in the selected language.
+- [ ] Book a ride with stops, then start a new booking from Home: the stops, category and passenger count start empty.
 
 ## 4. Two-device ride
 
@@ -53,7 +55,7 @@ Passenger on phone A, approved driver on phone B.
 
 - [ ] Driver goes online; passenger requests; the offer appears on B with a countdown.
 - [ ] Accept: A shows the driver, vehicle, plate and a live position with its age.
-- [ ] Driver taps through to pickup, arrived, start, complete; A follows within about a second.
+- [ ] Driver taps through to pickup, arrived, start (entering the passenger's PIN, see section 13), complete; A follows within about a second.
 - [ ] "Navigate to pickup" opens the maps app before pickup and "Navigate to destination" after the trip starts.
 - [ ] Chat in both directions; unread counts; the Messages tab shows the conversation for the current ride.
 - [ ] Complete: Stripe shows the capture; A sees the receipt; both can rate; A can tip.
@@ -71,6 +73,7 @@ Passenger on phone A, approved driver on phone B.
 ## 6. Driver documents (storage bucket)
 
 - [ ] Upload a JPEG, a PNG and a PDF; each appears as waiting for review.
+- [ ] Support attachments use the same bucket: see section 14.
 - [ ] Try a file over 10 MB and a renamed non-image: both are refused.
 - [ ] The operator opens each file from the console; the link stops working after a minute.
 - [ ] Confirm in the provider's console that the bucket is private and that no public URL serves a document.

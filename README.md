@@ -877,10 +877,92 @@ Status of every area, split into implemented, awaiting real-provider verificatio
 
 ### Support
 
-- A passenger opens a request from a receipt, then follows its status and conversation under **Help and support**.
-- The passenger can reply while the request is open, within length and rate limits. Each participant sees only their own requests.
+- A passenger opens a request from a receipt or from **Help and support** (for a question that isn't about one ride), then follows its status and conversation there.
+- A driver opens a request from the driver screen, from a completed trip, or from the safety screen. The server checks that the account has a driver profile and, for a trip, that the driver was assigned to it. Driver categories cover earnings, the application, a passenger and the account.
+- A request stores who opened it (passenger or driver) and, when given, the ride. Operators can filter the queue by role.
+- The requester can reply while the request is open, within length and rate limits. Each participant sees only their own requests. Passenger routes never return driver requests and the reverse.
+- **Attachments.** JPEG and PNG only, 5 MB each, up to 3 per message and 10 per request.
+  - The app asks for an upload ticket, uploads straight to private storage with a 5-minute link, then asks the server to confirm. The server checks size, type and file signature and copies the file to a key no client can write, as driver documents do.
+  - The app shows progress, failure with **Try again**, and removal before sending. A file that was sent can't be removed by the user.
+  - Files are opened through 60-second links issued only to the requester and to operators with the `support` permission. Each operator view is recorded.
+  - Without storage configured, the app says attachments aren't available and requests can still be sent as text.
+  - Checks cover type, size and signature only. There is no malware scanning and no claim that an image is authentic.
+  - Retention: an upload that was never sent is deleted after 24 hours. Sent attachments are deleted 90 days after the request is resolved (reopening cancels the timer) and when the account is deleted. These periods are implementation defaults, not legal advice.
 - An operator must assign the request to themself before replying. Replies notify the passenger. Internal notes are stored separately and are never returned by passenger routes.
 - Resolving requires a closing message. Support never refunds; refunds are separate, permissioned operator actions.
+
+### Trip PIN
+
+- When a driver accepts, the server derives a 4-digit PIN for that assignment. The passenger sees it on the ride screen from acceptance until the trip starts. The driver must enter it to move from **arrived** to **in progress**.
+- The PIN is not stored. The ride stores a random value, and the PIN is computed from it with `RIDE_PIN_SECRET` (HMAC-SHA256). Comparison is constant-time.
+- It appears only in the passenger's own ride response. It is never in driver responses, share links, notifications, logs, audit entries or operator lists.
+- It is checked inside the same transaction that starts the trip, so two start requests can't both pass, and a repeat of a start that already succeeded returns the started ride without asking again.
+- A new PIN is issued whenever the ride is re-matched. A former driver can't use the old one.
+- Wrong attempts: 5 allowed, then a 120-second lock. After 3 locks, PIN entry is blocked for that pickup until support waives it or the ride is re-matched. The driver sees attempts left and the lock countdown.
+- **Recovery.** An operator with the `support` permission can waive the PIN for a ride whose driver has arrived, with a reason of at least 10 characters. The waiver is audited, the passenger is told, and it is cleared if the ride is re-matched.
+- **Rides already under way when this is deployed** have no PIN and start as before. If `RIDE_PIN_SECRET` is missing in development, no PIN is issued. In production the setting is required and readiness reports it.
+- The PIN doesn't change fares, holds or capture.
+
+### Vehicle categories
+
+- Operators with `configure` manage categories in the console: name, description, passenger capacity, active or inactive, and whether it is a labelled development example. Every change needs a reason and is kept in the category's history.
+- Prices stay in fare policies. A policy belongs to one service area and one category, and policies are versioned as before. A category is offered at a pickup only when an active area there has a policy in effect for it.
+- Drivers are linked to categories by an operator with `verify` when the vehicle is reviewed, or from the CLI with `--categories`. Approval needs at least one category. Drivers can't add themselves; the driver screen shows their categories read-only.
+- The passenger chooses a category and the number of passengers before asking for a price. The list shows how many suitable drivers are online nearby at that moment, labelled as an estimate.
+- Matching offers a request only to drivers linked to the category whose vehicle has at least as many seats as the passengers.
+- The category name and passenger count are copied onto the quote and the ride, so later renames don't change history.
+- Deactivating a category refuses new quotes and requests for it. Rides already requested continue.
+- **Existing data.** The migration creates one category, **Standard** (code `general`, capacity 4). Every approved or suspended driver is placed in it with the source recorded as the migration, and existing fare policies are assigned to it. Rides and quotes created before the migration have no category and match any eligible driver, as they did before.
+- No commercial product names, capacities or prices are built in. The seed adds one category labelled as a development example.
+
+### Stops
+
+- A passenger can add up to two stops between pickup and destination, and reorder or remove them, before asking for a price.
+- The server validates every stop, applies the service-area rule to each one, and refuses neighbouring points that are the same place.
+- The route is requested through the stops in the passenger's order. Stops are not reordered to save time. The price is one fare for the whole route, shown with the itinerary, distance and time before the card is authorized.
+- If any leg has no drivable route, the quote is refused with `NO_ROUTE`. If the routing provider fails, the quote is refused as it is for a trip without stops. Nothing is priced by straight line.
+- The itinerary is copied onto the ride. It can't be edited after the request.
+- During the trip the driver marks each stop as reached, in order. The trip can't be completed while a stop remains. Navigation, the ETA and the live map target the next stop, then the destination.
+- Stops appear on the ride screen, receipts, history and the driver's view. The public share page shows only the final destination.
+- There are no waiting fees or per-stop charges. Completion and capture are unchanged and stay idempotent.
+
+### Scheduled requests
+
+A scheduled request is a saved request. It is **not** a reservation: no driver is held, and the app says so wherever it is shown.
+
+- The passenger picks a date and time between 30 minutes and 7 days ahead. Both limits are configurable (`SCHEDULED_RIDE_MIN_LEAD_MINUTES`, `SCHEDULED_RIDE_MAX_DAYS`). Times are in the pickup service area's time zone, which an operator sets on the area. Existing areas are `UTC` until changed.
+- Past times and times outside the window are refused. A local time skipped by a clock change is refused. A local time that happens twice is refused until the passenger chooses the earlier or the later one.
+- At most 5 upcoming requests per passenger, and not two within the same period.
+- No price is quoted and no card is authorized when scheduling. The 10-minute quote is never reused across the wait.
+- **Workflow.**
+  1. *Scheduled.* Saved in the database.
+  2. *Awaiting confirmation.* 20 minutes before the pickup time, the sweep re-checks the area and category, opens confirmation and notifies the passenger. This notification is not affected by quiet hours.
+  3. The passenger opens the request, gets a fresh price, and authorizes the card for it as for any ride.
+  4. *Searching.* Matching starts only after the authorization succeeds. From here it is an ordinary ride.
+  5. *Expired.* If the passenger hasn't confirmed by 10 minutes after the pickup time, or the area or category is no longer available, the request ends. Nothing is charged, and any unconfirmed hold is released.
+- The sweep is the dispatcher. Each step is idempotent, and the states are stored in the database, so a restart or a missed run doesn't lose or duplicate a request. If the scheduler misses the whole window, the request expires without a charge.
+- If notifications are denied or the app is closed, the request still opens for confirmation; the passenger confirms from **Scheduled rides**. If nobody confirms, it expires without a charge.
+- A passenger with a ride in progress can't confirm until it ends. A second active ride is never created.
+- The passenger can cancel any time before confirming. Upcoming and past requests are listed under **Scheduled rides**.
+- If no driver accepts after confirmation, the ride ends as "no driver found" and the hold is released, as for any ride.
+
+### Operations dashboard
+
+The console's **Dashboard** page (`view` permission) shows counts only: no names, addresses, contact details or account identifiers.
+
+- **Right now:** active rides by status; requests searching, with the oldest and average wait; approved drivers online, and how many are available to match; captures and releases waiting on Stripe and how many are being retried; open support, safety, driver-application and review queues; open card disputes; scheduled requests upcoming and awaiting confirmation.
+- **Selected period** (by the time the request was placed): requests, completed, cancelled by passenger, driver and system, no driver found, ended early, still active, average time to accept.
+- **Rates** always show their numerator and denominator: cancellation rate = cancelled ÷ requests, no-driver rate = no driver ÷ requests.
+- **Money** is shown as separate figures that are not added together: fares captured, tips captured, refunds that succeeded, driver earnings in the ledger, commission in the ledger. "Paid out to drivers" reads **Not available** because no payout provider exists.
+- Dates are UTC and the page says so. The default range is today (UTC); ranges are limited to 92 days.
+- Safety and driver-application counts are shown only to operators with the matching permission.
+- Each tile that has a queue links to its list. Figures are cached for up to 15 seconds, and the page shows when they were generated.
+- If a group of queries fails, that group shows as unavailable instead of zeros.
+- Queries are bounded by the date range and use indexes added in migration `024`.
+
+### Driver payouts
+
+Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.
 
 ### Account deletion
 
@@ -893,7 +975,7 @@ Status of every area, split into implemented, awaiting real-provider verificatio
 
 - `GET /api/health` (liveness) and `GET /api/ready` (database, schema version, required configuration).
 - The sweep takes a database lease, so overlapping schedulers don't run it twice.
-- Per-user rate limits on saved places, profile writes, upload tickets, safety reports, support requests, share links and deletion attempts.
+- Per-user rate limits on saved places, profile writes, upload tickets, safety reports, support requests, share links, scheduled requests and deletion attempts.
 - The console's **System** page lists the configuration checklist (presence only, never values), job status and queue counters.
 
 ### Localization and accessibility
@@ -917,7 +999,10 @@ Status of every area, split into implemented, awaiting real-provider verificatio
 | Quotes, rides, drivers | `DATABASE_URL` (migrated) |
 | Requesting a ride | Stripe publishable + secret key |
 | Webhook settlement | `STRIPE_WEBHOOK_SECRET` + Stripe CLI (local) or a public URL |
-| Scheduled sweep (production) | `CRON_SECRET` + a scheduler |
+| Scheduled sweep (production), scheduled requests (any environment) | `CRON_SECRET` + a scheduler calling the sweep every minute |
+| Trip PIN | `RIDE_PIN_SECRET` (32+ characters). Required in production; without it in development no PIN is issued |
+| Scheduling window (optional) | `SCHEDULED_RIDE_MIN_LEAD_MINUTES` (default 30), `SCHEDULED_RIDE_MAX_DAYS` (default 7) |
+| Driver documents, support attachments | `DOCUMENT_STORAGE_*` and a private bucket; without them uploads answer 503 and support works as text |
 | Address search, pre-booking route preview | `EXPO_PUBLIC_GOOGLE_API_KEY` |
 | Quotes (required), driver ranking, routed ETA | `GOOGLE_ROUTES_API_KEY` (server-only). Without it, quotes answer `503 ROUTING_NOT_CONFIGURED`; the ETA uses a labelled estimate |
 | Routing quota controls (optional) | `ROUTES_MAX_REQUESTS_PER_MINUTE` (default 120), `ROUTES_MAX_MATRIX_ELEMENTS_PER_MINUTE` (default 300) |

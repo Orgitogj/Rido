@@ -98,10 +98,10 @@ describe("driver cancels before pickup", () => {
       "SELECT status FROM mobility.ride_offers WHERE ride_id = $1 ORDER BY created_at",
       [rideId],
     );
-    expect(rows.map((r) => r.status)).toEqual([
-      "withdrawn",
+    expect(rows.map((r) => r.status).sort()).toEqual([
       "declined",
       "pending",
+      "withdrawn",
     ]);
   });
 

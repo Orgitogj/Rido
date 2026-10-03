@@ -9,10 +9,12 @@ import { LogBox } from "react-native";
 import { tokenCache } from "@/lib/auth";
 import { useLanguage } from "@/lib/i18n";
 import { useNotificationRouting } from "@/lib/notifications";
+import { useSessionExpiry } from "@/lib/session";
 import "@/lib/tracking";
 
 const NotificationRouter = () => {
   useNotificationRouting();
+  useSessionExpiry();
   return null;
 };
 

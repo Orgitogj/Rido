@@ -2,7 +2,7 @@ import { useAuth } from "@clerk/expo";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef } from "react";
 
-import { useApi } from "@/lib/fetch";
+import { useApi, useSessionState } from "@/lib/fetch";
 import { useLanguage } from "@/lib/i18n";
 import { unregisterPush } from "@/lib/notifications";
 import { stopBackgroundTracking } from "@/lib/tracking";
@@ -30,6 +30,25 @@ export function useSignOut() {
     await signOut();
     router.replace("/(auth)/sign-in");
   }, [request, signOut]);
+}
+
+export function useSessionExpiry() {
+  const { signOut, isSignedIn } = useAuth();
+  const expired = useSessionState((s) => s.expired);
+  const running = useRef(false);
+
+  useEffect(() => {
+    if (!expired || running.current) return;
+    running.current = true;
+    (async () => {
+      await stopBackgroundTracking().catch(() => {});
+      resetUserState();
+      if (isSignedIn) await signOut().catch(() => {});
+      useSessionState.getState().handled();
+      running.current = false;
+      router.replace("/(auth)/sign-in");
+    })();
+  }, [expired, isSignedIn, signOut]);
 }
 
 export function useAccountBoundary() {

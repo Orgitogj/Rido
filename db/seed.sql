@@ -36,3 +36,40 @@ SELECT a.id, 'system', 'seeded_development_example',
   FROM mobility.service_areas a
  WHERE a.code = 'dev-example-sf'
    AND NOT EXISTS (SELECT 1 FROM mobility.service_area_events e WHERE e.service_area_id = a.id);
+
+UPDATE mobility.service_areas
+   SET timezone = 'America/Los_Angeles'
+ WHERE code = 'dev-example-sf' AND timezone = 'UTC';
+
+INSERT INTO mobility.vehicle_categories
+  (code, name, description, capacity, status, is_development, is_default, created_at, updated_at)
+VALUES
+  ('dev-example-large', 'Larger vehicle (development example)',
+   'Development example only. Not a commercial product or a launch decision.',
+   6, 'active', true, false, now(), now())
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO mobility.vehicle_category_events
+  (vehicle_category_id, actor, action, reason, snapshot, created_at)
+SELECT c.id, 'system', 'seeded_development_example', 'Development seed only',
+       jsonb_build_object('code', c.code), now()
+  FROM mobility.vehicle_categories c
+ WHERE c.code = 'dev-example-large'
+   AND NOT EXISTS (SELECT 1 FROM mobility.vehicle_category_events e
+                    WHERE e.vehicle_category_id = c.id);
+
+INSERT INTO mobility.fare_policies
+  (service_area_id, vehicle_category_id, version, label, is_development, base_cents,
+   per_km_cents, per_minute_cents, minimum_fare_cents, effective_from, reason, created_at)
+SELECT a.id, c.id,
+       (SELECT COALESCE(MAX(p.version), 0) + 1 FROM mobility.fare_policies p
+         WHERE p.service_area_id = a.id),
+       'Development policy, larger vehicle (placeholder rates)',
+       true, 350, 160, 40, 700, '2020-01-01T00:00:00Z',
+       'Seeded development example. Replace with your own categories and rates in the operations console.',
+       now()
+  FROM mobility.service_areas a
+  JOIN mobility.vehicle_categories c ON c.code = 'dev-example-large'
+ WHERE a.code = 'dev-example-sf'
+   AND NOT EXISTS (SELECT 1 FROM mobility.fare_policies p
+                    WHERE p.service_area_id = a.id AND p.vehicle_category_id = c.id);

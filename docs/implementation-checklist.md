@@ -90,10 +90,10 @@ These are not implemented and must not be added without an explicit decision. Ea
 | Surge pricing | Pricing rules, caps, disclosure, regulator expectations |
 | Changed commission rates | A commercial decision; the ledger already versions commission policies |
 | A new payment currency | Stripe account capabilities, price formatting, fare policies per currency |
-| Scheduled rides | Dispatch window, hold timing (card holds expire), cancellation rules |
-| Multiple stops | Routing and pricing rules, driver flow |
+| Guaranteed reservations with a driver assigned in advance | Driver commitment rules, compensation, cancellation fees, hold timing (card holds expire). Today's scheduled requests are deliberately not reservations |
+| Editing stops during a trip, waiting fees, more than two stops | Pricing rules for changes, driver consent, re-authorization of the card |
 | Pooled rides | Matching, pricing split, safety rules |
-| Vehicle service classes | Classes, eligibility, per-class fare policies |
+| Commercial vehicle classes and per-class commission | Class definitions, eligibility rules and prices; the category mechanism exists but carries no commercial values |
 | Emergency dispatch | A contracted emergency-services integration; the app currently states that it does not contact emergency services |
 | Phone-number masking or in-app calling | Telephony provider, cost, consent and recording rules |
 | Automated identity verification or document authenticity claims | A verification provider and its legal basis; today a person reviews documents and nothing claims authenticity |

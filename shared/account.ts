@@ -171,6 +171,12 @@ export const SUPPORT_RULES = {
   attachmentRetentionDays: 90,
 } as const;
 
+export const supportAttachmentTypes = ["image/jpeg", "image/png"] as const;
+export type SupportAttachmentType = (typeof supportAttachmentTypes)[number];
+
+export const supportRoles = ["passenger", "driver"] as const;
+export type SupportRole = (typeof supportRoles)[number];
+
 export const supportMessageSchema = z.strictObject({
   body: z.string().trim().min(1).max(SUPPORT_RULES.messageMax),
   clientMessageId: z.uuid(),

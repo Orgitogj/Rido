@@ -157,3 +157,6 @@ These periods are implementation defaults in `SUPPORT_RULES`, chosen so files do
 
 ## Payment in the vehicle and driver transfers
 
+- Passengers pay the driver on the business's card terminal or in cash. The app charges nothing and stores what the driver or an operator records.
+- **Daily routine.** Check the review queue for "Reported unpaid" and "Payment not recorded". Compare the day's terminal statement from the bank with the dashboard's "Collected on terminals" figure for the same UTC period; the app can't do this comparison.
+- **Paying drivers.** On **Driver balances**, a positive balance is owed to the driver. Make the bank transfer outside the app, then record it with the bank reference. A negative balance means the driver owes commission on cash trips; record it when received.

@@ -173,6 +173,7 @@ describe("notification inbox", () => {
       chatMessages: true,
       rideOffers: true,
       accountUpdates: true,
+      quietHours: null,
     });
     const saved = await call(ctx, putNotificationPreferences, {
       method: "PUT",

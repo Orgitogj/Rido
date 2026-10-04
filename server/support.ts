@@ -16,6 +16,7 @@ import {
 } from "./notifications";
 import { NOTIFY } from "./notificationText";
 import { audit, type OperatorRow } from "./operators";
+import { attachmentsOf, attachToRequest } from "./supportAttachments";
 
 interface RequestRow {
   id: string;
@@ -111,12 +112,17 @@ async function messagesOf(db: SqlClient, requestId: string) {
       WHERE support_request_id = $1 ORDER BY id LIMIT 500`,
     [requestId],
   );
-  return rows.map((m): SupportMessageView => ({
-    id: m.id,
-    author: m.author,
-    body: m.body,
-    createdAt: iso(m.created_at)!,
-  }));
+  const files = await attachmentsOf(db, requestId);
+  return {
+    files,
+    messages: rows.map((m): SupportMessageView => ({
+      id: m.id,
+      author: m.author,
+      body: m.body,
+      createdAt: iso(m.created_at)!,
+      attachments: files.forMessage(m.id),
+    })),
+  };
 }
 
 export async function mySupportConversation(
@@ -135,13 +141,19 @@ export async function mySupportConversation(
     "UPDATE mobility.support_requests SET user_read_at = $2 WHERE id = $1",
     [requestId, now],
   );
+  const { files, messages } = await messagesOf(db, requestId);
   return {
     ...item({ ...r, user_read_at: now }),
     message: r.message,
     resolutionMessage: r.status === "resolved" ? r.resolution_message : null,
     resolvedAt: iso(r.resolved_at),
-    messages: await messagesOf(db, requestId),
+    attachments: files.initial,
+    messages,
     canReply: r.status !== "resolved",
+    attachmentsRemaining: Math.max(
+      0,
+      SUPPORT_RULES.attachmentsPerRequest - files.count,
+    ),
   };
 }
 
@@ -321,5 +333,5 @@ export async function supportMessagesForOperator(
   db: SqlClient,
   requestId: string,
 ) {
-  return messagesOf(db, requestId);
+  return (await messagesOf(db, requestId)).messages;
 }

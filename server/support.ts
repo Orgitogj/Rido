@@ -1,6 +1,7 @@
 import {
   type MySupportRequest,
   SUPPORT_RULES,
+  type SupportCategory,
   type SupportConversation,
   type SupportMessageView,
   type SupportRole,
@@ -155,6 +156,111 @@ export async function mySupportConversation(
       SUPPORT_RULES.attachmentsPerRequest - files.count,
     ),
   };
+}
+
+async function rideAccess(
+  db: SqlClient,
+  userId: string,
+  rideId: string,
+  role: SupportRole,
+): Promise<{ driverProfileId: string | null }> {
+  if (role === "passenger") {
+    const { rows } = await db.query(
+      `SELECT 1 FROM mobility.rides r
+        WHERE r.id = $1 AND r.user_id = $2
+          AND (r.requested_at IS NOT NULL OR r.status = 'legacy')`,
+      [rideId, userId],
+    );
+    if (!rows.length) throw notFound("Ride");
+    return { driverProfileId: null };
+  }
+  const { rows } = await db.query<{ id: string }>(
+    `SELECT dp.id FROM mobility.driver_profiles dp
+      WHERE dp.user_id = $2
+        AND (EXISTS (SELECT 1 FROM mobility.rides r
+                      WHERE r.id = $1 AND r.driver_profile_id = dp.id)
+          OR EXISTS (SELECT 1 FROM mobility.ride_offers o
+                      WHERE o.ride_id = $1 AND o.driver_profile_id = dp.id
+                        AND o.status IN ('accepted', 'withdrawn')))`,
+    [rideId, userId],
+  );
+  if (!rows[0]) throw notFound("Ride");
+  return { driverProfileId: rows[0].id };
+}
+
+export async function createSupportRequest(
+  deps: { db: Database; now: () => Date },
+  userId: string,
+  input: {
+    role: SupportRole;
+    rideId?: string | null;
+    category: SupportCategory;
+    message: string;
+    clientRequestId?: string | null;
+    attachmentIds?: string[];
+  },
+): Promise<{ id: string; created: boolean }> {
+  const now = deps.now();
+  return transaction(deps.db, async (tx) => {
+    await tx.query("SELECT 1 FROM mobility.users WHERE id = $1 FOR UPDATE", [
+      userId,
+    ]);
+    if (input.clientRequestId) {
+      const { rows: existing } = await tx.query<{ id: string }>(
+        `SELECT id FROM mobility.support_requests
+          WHERE user_id = $1 AND client_request_id = $2`,
+        [userId, input.clientRequestId],
+      );
+      if (existing[0]) return { id: existing[0].id, created: false };
+    }
+    let driverProfileId: string | null = null;
+    if (input.rideId) {
+      driverProfileId = (await rideAccess(tx, userId, input.rideId, input.role))
+        .driverProfileId;
+    } else if (input.role === "driver") {
+      const { rows } = await tx.query<{ id: string }>(
+        "SELECT id FROM mobility.driver_profiles WHERE user_id = $1 AND deleted_at IS NULL",
+        [userId],
+      );
+      if (!rows[0]) {
+        throw new ApiError(
+          403,
+          "NOT_A_DRIVER",
+          "Start a driver application before contacting driver support.",
+        );
+      }
+      driverProfileId = rows[0].id;
+    }
+    const { rows } = await tx.query<{ id: string }>(
+      `INSERT INTO mobility.support_requests
+         (ride_id, user_id, category, message, requester_role, driver_profile_id,
+          client_request_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING id`,
+      [
+        input.rideId ?? null,
+        userId,
+        input.category,
+        input.message,
+        input.role,
+        driverProfileId,
+        input.clientRequestId ?? null,
+        now,
+      ],
+    );
+    await tx.query(
+      `INSERT INTO mobility.support_events (support_request_id, action, to_status, created_at)
+       VALUES ($1, 'created', 'open', $2)`,
+      [rows[0].id, now],
+    );
+    await attachToRequest(
+      tx,
+      userId,
+      rows[0].id,
+      null,
+      input.attachmentIds ?? [],
+    );
+    return { id: rows[0].id, created: true };
+  });
 }
 
 export async function userSupportMessage(

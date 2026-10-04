@@ -16,7 +16,59 @@ import { useOperator } from "@/lib/adminApi";
 import { ApiRequestError, useApi, useApiQuery } from "@/lib/fetch";
 
 import type { SupportMessageView } from "@/shared/account";
-import type { AdminSupportDetail } from "@/shared/contracts";
+import type {
+  AdminSupportAttachment,
+  AdminSupportDetail,
+} from "@/shared/contracts";
+
+const AttachmentButtons = ({
+  requestId,
+  attachments,
+  canOpen,
+}: {
+  requestId: string;
+  attachments: AdminSupportAttachment[];
+  canOpen: boolean;
+}) => {
+  const request = useApi();
+  const [error, setError] = useState<string | null>(null);
+  if (!attachments.length) return null;
+  const open = async (attachmentId: string) => {
+    setError(null);
+    try {
+      const access = await request<{ url: string }>(
+        `/api/admin/support/${requestId}/attachments/${attachmentId}/access`,
+        { method: "POST" },
+      );
+      window.open(access.url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(
+        e instanceof ApiRequestError ? e.message : "Couldn't open the image.",
+      );
+    }
+  };
+  return (
+    <View className="mt-2">
+      <View className="flex flex-row flex-wrap">
+        {attachments.map((a, i) => (
+          <ActionButton
+            key={a.id}
+            tone="neutral"
+            disabled={!canOpen}
+            title={`Open image ${i + 1} (${Math.max(1, Math.round(a.sizeBytes / 1024))} KB)`}
+            onPress={() => open(a.id)}
+          />
+        ))}
+      </View>
+      <Text className="text-xs text-general-200">
+        {canOpen
+          ? "Opening an image creates a 60-second link and is recorded in the audit log. The file type was checked; the content was not scanned or verified."
+          : "Opening attachments needs the support permission."}
+      </Text>
+      {error && <Notice tone="error" text={error} />}
+    </View>
+  );
+};
 
 const SupportDetailPage = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -67,7 +119,7 @@ const SupportDetailPage = () => {
       });
       setReply("");
       setReplyId(Crypto.randomUUID());
-      setMessage({ tone: "success", text: "Reply sent to the passenger." });
+      setMessage({ tone: "success", text: "Reply sent." });
     } catch (e) {
       setMessage({
         tone: "error",
@@ -137,10 +189,15 @@ const SupportDetailPage = () => {
         <Text className="text-sm mt-1" selectable>
           {s.message}
         </Text>
+        <AttachmentButtons
+          requestId={s.id}
+          attachments={s.attachments.filter((a) => a.messageId === null)}
+          canOpen={canAct}
+        />
         {s.resolutionMessage && (
           <>
             <Text className="text-sm mt-4 font-JakartaSemiBold">
-              Closing message shown to the passenger
+              Closing message shown to the requester
             </Text>
             <Text className="text-sm mt-1">{s.resolutionMessage}</Text>
           </>
@@ -148,7 +205,7 @@ const SupportDetailPage = () => {
         {message && <Notice tone={message.tone} text={message.text} />}
       </Section>
 
-      <Section title="Conversation (visible to the passenger)">
+      <Section title="Conversation (visible to the requester)">
         {thread.status === "error" && (
           <Notice tone="error" text={thread.error} />
         )}
@@ -160,18 +217,23 @@ const SupportDetailPage = () => {
         {(thread.data ?? []).map((m) => (
           <View key={m.id} className="py-2 border-b border-neutral-100">
             <Text className="text-xs text-general-200">
-              {m.author === "operator" ? "Support" : "Passenger"} ·{" "}
+              {m.author === "operator" ? "Support" : "Requester"} ·{" "}
               {when(m.createdAt)}
             </Text>
             <Text className="text-sm mt-1" selectable>
               {m.body}
             </Text>
+            <AttachmentButtons
+              requestId={s.id}
+              attachments={s.attachments.filter((a) => a.messageId === m.id)}
+              canOpen={canAct}
+            />
           </View>
         ))}
         {canAct && s.status !== "resolved" && s.assignedToMe && (
           <View className="mt-3">
             <Field
-              label="Reply to the passenger (they will see this and be notified)"
+              label="Reply to the requester (they will see this and be notified)"
               value={reply}
               onChangeText={setReply}
               multiline
@@ -210,7 +272,7 @@ const SupportDetailPage = () => {
           {s.status !== "resolved" && s.assignedToMe && (
             <>
               <Field
-                label="Closing message to the passenger (they will see this)"
+                label="Closing message to the requester (they will see this)"
                 value={resolution}
                 onChangeText={setResolution}
                 multiline
@@ -261,7 +323,7 @@ const SupportDetailPage = () => {
         />
       )}
 
-      <Section title="Internal notes (never shown to the passenger)">
+      <Section title="Internal notes (never shown to the requester)">
         {s.notes.length === 0 && (
           <Text className="text-sm text-general-200">No notes yet.</Text>
         )}
@@ -297,7 +359,7 @@ const SupportDetailPage = () => {
           <Text key={i} className="text-sm py-1">
             {when(h.createdAt)} · {h.action.replace("_", " ")}
             {h.toStatus ? ` → ${h.toStatus.replace("_", " ")}` : ""}
-            {h.operator ? ` · ${h.operator}` : " · passenger"}
+            {h.operator ? ` · ${h.operator}` : " · requester"}
           </Text>
         ))}
       </Section>

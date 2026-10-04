@@ -302,10 +302,11 @@ export type SupportStatus = "open" | "in_progress" | "resolved";
 
 export interface MySupportRequest {
   id: string;
-  rideId: string;
+  rideId: string | null;
+  role: SupportRole;
   category: string;
   status: SupportStatus;
-  destination: string;
+  destination: string | null;
   createdAt: string;
   updatedAt: string;
   unread: boolean;

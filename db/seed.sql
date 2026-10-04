@@ -22,10 +22,10 @@ WITH area AS (
   RETURNING id
 )
 INSERT INTO mobility.fare_policies
-  (service_area_id, version, label, is_development, base_cents, per_km_cents,
+  (service_area_id, version, label, is_development, currency, base_cents, per_km_cents,
    per_minute_cents, minimum_fare_cents, effective_from, reason, created_at)
-SELECT id, 1, 'Development policy (placeholder rates, not commercial prices)', true,
-       250, 120, 30, 500, '2020-01-01T00:00:00Z',
+SELECT id, 1, 'Development policy (placeholder rates in lek, not commercial prices)', true,
+       'all', 15000, 6000, 1500, 30000, '2020-01-01T00:00:00Z',
        'Seeded development example. Replace with your own area and rates in the operations console.',
        now()
   FROM area;
@@ -59,13 +59,13 @@ SELECT c.id, 'system', 'seeded_development_example', 'Development seed only',
                     WHERE e.vehicle_category_id = c.id);
 
 INSERT INTO mobility.fare_policies
-  (service_area_id, vehicle_category_id, version, label, is_development, base_cents,
+  (service_area_id, vehicle_category_id, version, label, is_development, currency, base_cents,
    per_km_cents, per_minute_cents, minimum_fare_cents, effective_from, reason, created_at)
 SELECT a.id, c.id,
        (SELECT COALESCE(MAX(p.version), 0) + 1 FROM mobility.fare_policies p
          WHERE p.service_area_id = a.id),
        'Development policy, larger vehicle (placeholder rates)',
-       true, 350, 160, 40, 700, '2020-01-01T00:00:00Z',
+       true, 'all', 20000, 8000, 2000, 40000, '2020-01-01T00:00:00Z',
        'Seeded development example. Replace with your own categories and rates in the operations console.',
        now()
   FROM mobility.service_areas a

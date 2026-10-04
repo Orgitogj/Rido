@@ -167,10 +167,19 @@ export const notificationPreferencesSchema = z.strictObject({
   chatMessages: z.boolean(),
   rideOffers: z.boolean(),
   accountUpdates: z.boolean(),
+  quietHours: quietHoursSchema.nullable().optional(),
 });
-export type NotificationPreferences = z.infer<
+export type NotificationPreferencesInput = z.infer<
   typeof notificationPreferencesSchema
 >;
+
+export interface NotificationPreferences {
+  rideUpdates: boolean;
+  chatMessages: boolean;
+  rideOffers: boolean;
+  accountUpdates: boolean;
+  quietHours: QuietHours | null;
+}
 
 export const SUPPORT_RULES = {
   messageMax: 1000,

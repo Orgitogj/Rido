@@ -11,6 +11,11 @@ import { useI18n } from "@/lib/i18n";
 import { useInbox } from "@/lib/inbox";
 import { safeInternalRoute } from "@/lib/notificationRouting";
 import { usePushStatus } from "@/lib/notifications";
+import {
+  isValidTimeZone,
+  parseClock,
+  QUIET_HOURS_DEFAULT,
+} from "@/shared/quietHours";
 
 import type { InboxItem, NotificationPreferences } from "@/shared/account";
 
@@ -21,6 +26,15 @@ const PREFERENCE_KEYS = [
   "accountUpdates",
 ] as const;
 
+const deviceTimeZone = () => {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return zone && isValidTimeZone(zone) ? zone : "UTC";
+  } catch {
+    return "UTC";
+  }
+};
+
 const Notifications = () => {
   const { t, tn, error: errorText, dateTime } = useI18n();
   const request = useApi();
@@ -30,6 +44,60 @@ const Notifications = () => {
     useState<NotificationPreferences | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const { reload } = inbox;
+  const [quietEnabled, setQuietEnabled] = useState(false);
+  const [quietStart, setQuietStart] = useState<string>(
+    QUIET_HOURS_DEFAULT.start,
+  );
+  const [quietEnd, setQuietEnd] = useState<string>(QUIET_HOURS_DEFAULT.end);
+  const [quietZone, setQuietZone] = useState(deviceTimeZone);
+  const [savingQuiet, setSavingQuiet] = useState(false);
+  const device = deviceTimeZone();
+  const startMinute = parseClock(quietStart);
+  const endMinute = parseClock(quietEnd);
+  const quietValid =
+    startMinute !== null && endMinute !== null && startMinute !== endMinute;
+
+  const applyQuiet = (p: NotificationPreferences) => {
+    setQuietEnabled(p.quietHours?.enabled ?? false);
+    if (p.quietHours) {
+      setQuietStart(p.quietHours.start);
+      setQuietEnd(p.quietHours.end);
+      setQuietZone(p.quietHours.timezone);
+    }
+  };
+
+  const saveQuiet = async (enabled: boolean, zone = quietZone) => {
+    if (!preferences || !quietValid) return;
+    setSavingQuiet(true);
+    setNote(null);
+    try {
+      const next = await request<NotificationPreferences>(
+        "/api/notifications/preferences",
+        {
+          method: "PUT",
+          body: {
+            rideUpdates: preferences.rideUpdates,
+            chatMessages: preferences.chatMessages,
+            rideOffers: preferences.rideOffers,
+            accountUpdates: preferences.accountUpdates,
+            quietHours: {
+              enabled,
+              start: quietStart.trim(),
+              end: quietEnd.trim(),
+              timezone: zone,
+            },
+          },
+        },
+      );
+      setPreferences(next);
+      applyQuiet(next);
+      setNote({ ok: true, text: t("inbox.saved") });
+    } catch (e) {
+      setNote({ ok: false, text: errorText(e) });
+    } finally {
+      setSavingQuiet(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -41,7 +109,14 @@ const Notifications = () => {
     let cancelled = false;
     request<NotificationPreferences>("/api/notifications/preferences")
       .then((p) => {
-        if (!cancelled) setPreferences(p);
+        if (cancelled) return;
+        setPreferences(p);
+        setQuietEnabled(p.quietHours?.enabled ?? false);
+        if (p.quietHours) {
+          setQuietStart(p.quietHours.start);
+          setQuietEnd(p.quietHours.end);
+          setQuietZone(p.quietHours.timezone);
+        }
       })
       .catch(() => {});
     return () => {
@@ -58,7 +133,15 @@ const Notifications = () => {
       setPreferences(
         await request<NotificationPreferences>(
           "/api/notifications/preferences",
-          { method: "PUT", body: next },
+          {
+            method: "PUT",
+            body: {
+              rideUpdates: next.rideUpdates,
+              chatMessages: next.chatMessages,
+              rideOffers: next.rideOffers,
+              accountUpdates: next.accountUpdates,
+            },
+          },
         ),
       );
       setNote({ ok: true, text: t("inbox.saved") });

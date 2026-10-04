@@ -31,7 +31,10 @@
         "globalTeardown": "<rootDir>/jest/pg-teardown.mjs",
         "moduleNameMapper": {
           "^@/(.*)$": "<rootDir>/$1"
-        }
+        },
+        "setupFiles": [
+          "<rootDir>/jest/env.js"
+        ]
       },
       {
         "displayName": "app",
@@ -41,7 +44,10 @@
         ],
         "moduleNameMapper": {
           "^@/(.*)$": "<rootDir>/$1"
-        }
+        },
+        "setupFiles": [
+          "<rootDir>/jest/env.js"
+        ]
       }
     ]
   },

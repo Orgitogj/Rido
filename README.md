@@ -1068,6 +1068,7 @@ npm run db:setup     # = db:migrate (db/migrations/*.sql) + db:seed (db/seed.sql
 - Migration `002` keeps rides from the old demo flow and marks them `legacy`.
 - Migrations `013`–`017` add saved places and the language preference, the notification inbox and preferences, support conversations, account deletion, and rate limits with job status. They only add tables, columns and indexes.
 - Migrations `018`–`024` add driver support requests and attachments, the trip PIN columns, quiet hours, vehicle categories, ride stops, scheduled requests with the area time zone, and dashboard indexes. They are additive, with three changes to existing objects: `support_requests.ride_id` becomes nullable, the support category check gains the driver categories, and one fare-policy index is rebuilt to include the category. `021` also writes data: the default category, a category link for every approved or suspended driver, and a history entry for each.
+- Migration `025` adds payment in the vehicle: it allows lek on quotes, rides, fare policies and ledger rows, adds the payment method and collection columns to rides, lets a ride earning exist without a Stripe payment, marks who holds the money on each ledger row, and adds the table of recorded driver transfers. Existing rides keep the card method and their currency.
 - The seed only restores the four simulated demo drivers those legacy rides reference. It creates no users, drivers, rides, or payments.
 
 ### 4. Run

@@ -123,6 +123,11 @@ export default section(
       "It's too early to confirm this scheduled request. We'll remind you when it opens.",
     DELETION_BLOCKED: "Your account can't be deleted yet.",
     REAUTH_REQUIRED: "Please confirm your identity again to continue.",
+    UNPAID_RIDE:
+      "A previous trip is recorded as unpaid. Contact support to settle it before requesting another ride.",
+    COLLECTION_NOT_ALLOWED:
+      "The payment can only be recorded after the trip is completed.",
+    COLLECTION_RECORDED: "The payment for this trip has already been recorded.",
     VERSION_CONFLICT: "This changed since you opened it. Reload and try again.",
   },
   {
@@ -250,6 +255,11 @@ export default section(
       "Është herët për ta konfirmuar këtë kërkesë. Do të të kujtojmë kur të hapet.",
     DELETION_BLOCKED: "Llogaria jote nuk mund të fshihet ende.",
     REAUTH_REQUIRED: "Të lutem konfirmo sërish identitetin për të vazhduar.",
+    UNPAID_RIDE:
+      "Një udhëtim i mëparshëm është regjistruar si i papaguar. Kontakto ndihmën për ta zgjidhur para se të kërkosh udhëtim tjetër.",
+    COLLECTION_NOT_ALLOWED:
+      "Pagesa mund të regjistrohet vetëm pasi udhëtimi të ketë përfunduar.",
+    COLLECTION_RECORDED: "Pagesa për këtë udhëtim është regjistruar tashmë.",
     VERSION_CONFLICT:
       "Kjo ka ndryshuar që kur e hape. Ringarkoje dhe provo përsëri.",
   },

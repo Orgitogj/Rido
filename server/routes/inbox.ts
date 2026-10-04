@@ -5,6 +5,7 @@ import {
   notificationPreferencesSchema,
   supportListQuerySchema,
   supportMessageSchema,
+  supportUserMessageSchema,
 } from "../../shared/account";
 import { rideIdSchema } from "../../shared/contracts";
 import { type Deps, parseInput, readJson } from "../http";
@@ -104,7 +105,7 @@ export async function postSupportMessage(
 ) {
   const user = await me(request, deps);
   const id = parseInput(rideIdSchema, params.id);
-  const input = await readJson(request, supportMessageSchema);
+  const input = await readJson(request, supportUserMessageSchema);
   return Response.json(
     { data: await userSupportMessage(deps, user.id, id, input) },
     { status: 201 },

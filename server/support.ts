@@ -267,7 +267,7 @@ export async function userSupportMessage(
   deps: { db: Database; now: () => Date },
   userId: string,
   requestId: string,
-  input: { body: string; clientMessageId: string },
+  input: { body: string; clientMessageId: string; attachmentIds?: string[] },
 ) {
   const now = deps.now();
   await transaction(deps.db, async (tx) => {
@@ -285,7 +285,7 @@ export async function userSupportMessage(
       throw new ApiError(
         409,
         "SUPPORT_CLOSED",
-        "This request is resolved. Open a new request from the trip's receipt if you still need help.",
+        "This request is resolved. Open a new request if you still need help.",
       );
     }
     const { rows: counts } = await tx.query<{ total: number; recent: number }>(
@@ -310,11 +310,18 @@ export async function userSupportMessage(
         SUPPORT_RULES.burstWindowSeconds,
       );
     }
-    await tx.query(
+    const inserted = await tx.query<{ id: string }>(
       `INSERT INTO mobility.support_messages
          (support_request_id, author, user_id, body, client_message_id, created_at)
-       VALUES ($1, 'user', $2, $3, $4, $5)`,
+       VALUES ($1, 'user', $2, $3, $4, $5) RETURNING id::text`,
       [requestId, userId, input.body, input.clientMessageId, now],
+    );
+    await attachToRequest(
+      tx,
+      userId,
+      requestId,
+      inserted.rows[0].id,
+      input.attachmentIds ?? [],
     );
     await tx.query(
       `UPDATE mobility.support_requests

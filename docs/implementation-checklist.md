@@ -32,6 +32,7 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | Vehicle categories | Operator-managed categories with history; fare policies per area and category; drivers linked through verification; passenger chooses category and passenger count; capacity and category matching; snapshots; deactivation rules; existing drivers and policies migrated to a default category |
 | Stops | Up to two stops, validated and routed in order, one fare, snapshot on the ride, ordered progress, completion blocked while a stop remains, hidden from the public share page |
 | Scheduled requests | Saved request with the area's time zone, sweep-driven confirmation window, fresh quote and authorization only on confirmation, expiry without a charge, cancellation, upcoming and past lists |
+| Payment in the vehicle | Requests without a card; lek fares rounded to a whole lek; the driver records terminal, cash or unpaid; unpaid trips flagged and the passenger blocked until support settles or waives; earnings written on collection; driver balance; operator-recorded transfers with idempotency and audit; card mode kept behind a setting |
 | Operations dashboard | Live and period counts with stated definitions, UTC, range limit, permissions, cache with freshness, per-section unavailable state, drill-down links, no personal data |
 
 ## Implemented, awaiting external verification
@@ -39,7 +40,8 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | Area | What has not been verified | How to verify |
 | --- | --- | --- |
 | Clerk | Real sign-up, sign-in, password reset, email change, password re-verification before deletion, identity deletion through the Clerk API | Manual checklist, sections 1 and 10 |
-| Stripe | Real test-mode PaymentSheet, 3-D Secure, capture, release, refunds, disputes, webhooks, customer deletion | Manual checklist, sections 3 and 7 |
+| Payment in the vehicle | A real terminal and cash trip on two phones; the unpaid flow; balances and transfers against real bank transfers; lek amounts on small screens | Manual checklist, section 18 |
+| Stripe (card mode only, switched off) | Real test-mode PaymentSheet, 3-D Secure, capture, release, refunds, disputes, webhooks, customer deletion | Manual checklist, sections 3 and 7 |
 | Google Routes | Real quotes, route matrix ranking, quota behaviour | Manual checklist, section 5 |
 | Google Places | Address search in both languages | Manual checklist, section 2 |
 | Object storage | Presigned POST or PUT against a real private bucket, ETag preconditions, deletion | Manual checklist, section 6 |
@@ -53,7 +55,7 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | Quiet hours | Real push suppression and delivery on devices, across a real clock change | Manual checklist, section 8 |
 | Vehicle categories and stops | Real routes through stops (Google Routes with intermediates), navigation hand-off, two-device matching by category and seats | Manual checklist, sections 15 and 16 |
 | Scheduled requests | A real scheduler calling the sweep every minute, real push, real authorization at confirmation | Manual checklist, section 17 |
-| New screens | Screen-reader order, text scaling and keyboard behaviour on the support, booking, schedule and driver PIN screens | Manual checklist, sections 11 and 13–17 |
+| New screens | Screen-reader order, text scaling and keyboard behaviour on the support, booking, schedule and driver PIN screens | Manual checklist, sections 11 and 13–18 |
 | Session expiry | The sign-out on a refused session and the Clerk error-code mapping against real Clerk responses | Manual checklist, section 1 |
 
 ## Missing
@@ -75,7 +77,8 @@ Nothing in the authorised scope is known to be missing. The following are delibe
 | --- | --- |
 | Verification against real providers | Needs the owner's Clerk, Stripe test-mode, Google Cloud and storage credentials, and physical devices |
 | Applying migrations 013–024 to the shared database | Not authorised in this work; run `npm run db:migrate` against the target database when ready, after reading the deployment notes in [operations.md](operations.md) |
-| Driver payouts | No payout provider or operating country has been chosen. Nothing moves money to drivers and no payout records exist. See [payout-readiness.md](payout-readiness.md) |
+| Automatic driver payouts | No payout provider can serve a business in Albania through Stripe; drivers are paid by bank transfer outside the app and operators record it. See [payout-readiness.md](payout-readiness.md) |
+| Card payments in the app | Switched off by default. A bank's online payment gateway for Albania would be a new integration and needs a bank, a merchant contract and its documentation |
 | Commercial values | Fare rates per category, commission, cancellation fees, category names and capacities, the scheduling window and attachment retention periods are business or legal decisions. The code ships development placeholders or neutral defaults and labels them |
 | Retention periods for retained records | A policy and legal decision; the code keeps the records and documents what is kept, without inventing a period |
 

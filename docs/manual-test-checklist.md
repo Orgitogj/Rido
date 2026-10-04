@@ -38,7 +38,9 @@ Record the build, date, device models and OS versions with the results.
 - [ ] Save a place outside every service area and try to book from it: the booking screen explains that the saved place is outside coverage and the place stays saved.
 - [ ] Sign in as a second user on the same phone: the first user's places are not shown.
 
-## 3. Booking and payment (Stripe test mode)
+## 3. Booking and payment (card mode only)
+
+This section applies only with `PAYMENT_MODE=card_online`. In the default mode, use section 18 instead.
 
 - [ ] Get a price; the confirmation shows price, distance, time and how long the price is held.
 - [ ] Wait for the price to expire on the confirmation screen: the request button is replaced by an expiry notice; getting a new price shows whether it changed.
@@ -209,7 +211,30 @@ Passenger on phone A, driver on phone B.
 - [ ] Cancel an upcoming request; it moves to the earlier list.
 - [ ] Confirm with no driver online: the ride ends as no driver found and the hold is released.
 
-## 18. Combined scenarios
+## 18. Payment in the vehicle (lek)
+
+Default payment mode. No Stripe keys are needed.
+
+- [ ] The price on the confirmation screen is in whole lek, with the note that the driver is paid by card or cash at the end.
+- [ ] **Request ride** asks for no card and starts the search at once.
+- [ ] Tap **Request ride** twice quickly: one ride is created.
+- [ ] Cancel while searching: the screen says there is nothing to pay.
+- [ ] After **Complete trip**, the driver's screen asks how the passenger paid. Record **Card on the terminal**: the passenger's ride screen and receipt show it within a few seconds.
+- [ ] Repeat with **Cash**.
+- [ ] Close the driver app before recording: the driver screen shows "Payments to record" with a button that opens the trip.
+- [ ] Record **The passenger didn't pay** (with the confirmation): the trip appears in the console's review queue as "Reported unpaid", and the passenger is refused a new price with a message to contact support.
+- [ ] In the console, record that trip as paid in cash with a note: the passenger can request again, and the review item is gone.
+- [ ] Record another unpaid trip and close it without a payment: no earning is recorded for the driver.
+- [ ] Leave a completed trip unrecorded for two hours with the sweep running: it appears in the review queue as "Payment not recorded".
+- [ ] Earnings screen: a terminal payment raises "the business owes you"; a cash payment doesn't.
+- [ ] Console **Driver balances** (needs the `refund` permission): record a bank transfer with a reference. The driver's balance drops by that amount, and the driver sees the transfer without the operator's name.
+- [ ] An amount with a fraction of a lek is refused. Submitting the same form twice records one transfer.
+- [ ] A view-only operator can't open Driver balances or record a payment.
+- [ ] The receipt of a trip paid in the vehicle offers no in-app tip.
+- [ ] Compare the dashboard's "Collected on terminals" for the day with the bank's terminal statement.
+- [ ] Amounts read correctly in lek in both languages, including on a small phone with large text.
+
+## 19. Combined scenarios
 
 - [ ] Driver opens a support request about a completed trip with a photo; the operator replies; the driver gets the reply.
 - [ ] A ride with two stops and a larger category: PIN at pickup, both stops reached, completion, one capture for the quoted fare, receipt with stops and category.

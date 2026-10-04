@@ -106,7 +106,7 @@ export default section(
       oneFare:
         "One price covers the whole trip, including the stops. There are no waiting fees, and stops can't be changed after you request.",
       scheduledIntro:
-        "This is the current price for your scheduled request. A driver is requested only after you confirm payment below.",
+        "This is the current price for your scheduled request. A driver is requested only after you confirm below.",
       backToScheduled: "Back to scheduled request",
       title: "Confirm your ride",
       loading: "Getting a price for your trip…",
@@ -119,6 +119,10 @@ export default section(
       willOffer: "We'll offer your ride to the nearest available driver.",
       noDrivers:
         "No drivers are online near you right now. You can still request: we'll search for a short time and release the hold if nobody accepts.",
+      noDriversVehicle:
+        "No drivers are online near you right now. You can still request: we'll search for a short time, and there is nothing to pay if nobody accepts.",
+      priceNoteVehicle:
+        "This is the price you'll pay. You pay the driver by card on the driver's terminal or in cash at the end of the trip. Nothing is charged in the app.",
       priceNote:
         "This is the price you'll pay. Your card is authorized for exactly this amount when you request and charged only when the trip is completed.",
       heldFor_one: "This price is held for about {count} more minute.",
@@ -268,7 +272,7 @@ export default section(
       oneFare:
         "Një çmim mbulon gjithë udhëtimin, përfshirë ndalesat. Nuk ka tarifa pritjeje dhe ndalesat nuk mund të ndryshohen pasi ta kërkosh.",
       scheduledIntro:
-        "Ky është çmimi aktual për kërkesën tënde të planifikuar. Shoferi kërkohet vetëm pasi të konfirmosh pagesën më poshtë.",
+        "Ky është çmimi aktual për kërkesën tënde të planifikuar. Shoferi kërkohet vetëm pasi të konfirmosh më poshtë.",
       backToScheduled: "Kthehu te kërkesa e planifikuar",
       title: "Konfirmo udhëtimin",
       loading: "Po marrim çmimin për udhëtimin…",
@@ -281,6 +285,10 @@ export default section(
       willOffer: "Do t'ia ofrojmë udhëtimin shoferit më të afërt të lirë.",
       noDrivers:
         "Nuk ka shoferë në linjë pranë teje tani. Mund ta kërkosh gjithsesi: do të kërkojmë për pak kohë dhe do ta lirojmë bllokimin nëse askush nuk pranon.",
+      noDriversVehicle:
+        "Nuk ka shoferë në linjë pranë teje tani. Mund ta kërkosh gjithsesi: do të kërkojmë për pak kohë dhe nuk ka asgjë për të paguar nëse askush nuk pranon.",
+      priceNoteVehicle:
+        "Ky është çmimi që do të paguash. I paguan shoferit me kartë në pajisjen e tij ose me para në dorë në fund të udhëtimit. Në aplikacion nuk tarifohet asgjë.",
       priceNote:
         "Ky është çmimi që do të paguash. Karta autorizohet pikërisht për këtë shumë kur e kërkon dhe tarifohet vetëm kur udhëtimi përfundon.",
       heldFor_one: "Ky çmim mbahet edhe rreth {count} minutë.",

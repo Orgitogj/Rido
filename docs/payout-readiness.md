@@ -1,6 +1,20 @@
 # Driver payout readiness
 
-Status: **blocked**. This build has no payout provider and no operating country, so it does not move money to drivers. Nothing in the code creates payout records, transfers, connected accounts or payout schedules, and nothing on the driver or operator screens claims that money has been paid out. The operator dashboard reports "Paid out to drivers: Not available" for this reason.
+Status: **manual transfers only**. The owner decided on 2026-10-04 that the business operates in Albania, takes payment in the vehicle (the business's card terminal, or cash) in Albanian lek, and pays drivers by bank transfer outside the app. The app records earnings, each driver's balance with the business, and the transfers an operator states were made. It moves no money, and an automatic payout integration remains blocked.
+
+Decisions made:
+
+| Decision | Outcome |
+| --- | --- |
+| Platform business country | Albania |
+| Supported driver countries | Albania only |
+| Currency | Albanian lek, whole lek |
+| How passengers pay | In the vehicle: the business's card terminal, or cash. No card payment in the app |
+| Payout provider | None. Stripe Connect was the first choice but is not available: Stripe does not open accounts for businesses in Albania, and its cross-border payouts cover only the US, UK, EEA, Canada and Switzerland (checked on Stripe's site on 2026-10-04) |
+| How drivers are paid | Bank transfer made by the business outside the app, then recorded by an operator |
+| Refunds and unpaid trips | Nothing is charged in the app, so there are no card refunds or disputes in this mode. An unpaid trip earns nothing until support records it as paid |
+
+Still open: how often drivers are paid, any minimum amount, the commission rate (the default is 0%), how terminal payments are reconciled with the bank's statement, limits on cash a driver may hold, and tax and record-keeping duties in Albania.
 
 This document lists what has to be decided before payouts can be built, where a provider would connect to the existing code, and the accounting rules any implementation must keep.
 
@@ -15,7 +29,7 @@ There is no payable balance, payout table, payout state machine or bank-account 
 
 ## Decisions required (business, legal and finance)
 
-None of these can be decided in code, and none were assumed. The first six block any payout code; the rest shape it.
+The table below is what an automatic payout integration would need. The "current state" column describes the code; the owner's decisions so far are listed at the top of this page. None of these can be decided in code.
 
 | # | Decision | Why it blocks | Current state in the code |
 | --- | --- | --- | --- |

@@ -12,8 +12,10 @@ How to configure, deploy, monitor and recover the service. Nothing here has been
 | Clerk | `CLERK_SECRET_KEY` or `CLERK_JWT_KEY` | required | No session can be verified |
 | Clerk | `CLERK_SECRET_KEY` | recommended | Account deletions cannot delete the sign-in identity and stay pending |
 | Clerk | `CLERK_AUTHORIZED_PARTIES` | required in production | Tokens from any origin are accepted |
-| Stripe | `STRIPE_SECRET_KEY` | required | No bookings |
-| Stripe | `STRIPE_WEBHOOK_SECRET` | required in production | Only the sweep recovers payment state |
+| Payments | `PAYMENT_MODE` | optional | Defaults to `in_vehicle`: passengers pay the driver by terminal or cash and Stripe is not used. `card_online` restores the Stripe flow |
+| Payments | `APP_CURRENCY` | optional | Defaults to `all` (lek) for new fare policies; `usd` for card mode |
+| Stripe | `STRIPE_SECRET_KEY` | required only with `PAYMENT_MODE=card_online` | No card bookings |
+| Stripe | `STRIPE_WEBHOOK_SECRET` | required in production only with `PAYMENT_MODE=card_online` | Only the sweep recovers payment state |
 | Scheduler | `CRON_SECRET` (16+ characters) | required | The sweep endpoint refuses every call |
 | Google Routes | `GOOGLE_ROUTES_API_KEY` | required | Quotes are refused, never guessed |
 | Trip PIN | `RIDE_PIN_SECRET` (32+ characters) | required in production, recommended in development | No trip PIN is issued in development; production readiness fails |
@@ -31,7 +33,9 @@ Client-side values (`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PUB
 | Fare rates and currency | Placeholder USD rates in the seeded example area | Set by the operator in the console; a commercial decision |
 | Commission policy | 0% default | A commercial decision |
 | Service areas | One small labelled example | Draw the real areas |
-| Stripe | Test keys | Live keys only after legal and payout decisions; console refunds stay disabled on a live key |
+| Payments | Paid in the vehicle, recorded by the driver | Agree how terminal payments are reconciled with the bank's terminal statement, and how often drivers are paid |
+| Fare rates | Placeholder lek rates in the seeded example area | Set by the operator in the console; a commercial decision |
+| Stripe (card mode only) | Test keys | Live keys only after legal and payout decisions; console refunds stay disabled on a live key |
 | Driver approval | CLI waiver available | Review real documents in the console |
 | Clerk | Development instance | Production instance and authorised parties |
 | Vehicle categories | The migrated **Standard** category and one seeded development example | Define the real categories, capacities and their fare policies; a commercial decision |
@@ -124,6 +128,9 @@ The database is the system of record: rides, payment state, the earnings ledger,
 | Driver can't start a trip because of the PIN | The driver's screen shows attempts left and the lock. After three locks the driver is told to contact support. An operator with `support` opens the ride in the console and waives the PIN with a reason; the passenger is notified. Cancelling so the passenger is re-matched also clears it |
 | Scheduled request not opened | Check the sweep's `scheduled_rides` step on the System page. Requests whose window has passed expire without a charge; the passenger can request a ride now |
 | Support attachment won't open | Links last 60 seconds; open it again. If storage is unreachable, the System page shows failing deletions and uploads answer 503 |
+| Driver didn't record the payment | After two hours the trip appears in the review queue as "Payment not recorded". Ask the driver, then record it on the ride page with a note |
+| Trip reported unpaid | The passenger is blocked from new requests. On the ride page, record it as paid (terminal or cash) or close it without a payment, with a note |
+| Transfer recorded by mistake | Records can't be edited. Record a transfer in the other direction for the same amount, with a note explaining it |
 | Dashboard section unavailable | The page shows which group failed instead of zeros. Refresh; if it persists, check the database and the server log line `dashboard_section_failed` |
 
 ## Account deletion and retained records
@@ -147,3 +154,11 @@ Retained without the person's name: rides, payment and refund records, disputes,
 These periods are implementation defaults in `SUPPORT_RULES`, chosen so files don't accumulate. They are separate from driver-document retention and are not legal advice; change them to match your policy. The message text of a support request is retained as described above.
 
 **No retention period is implemented for the retained records.** How long financial, safety and audit records must or may be kept depends on the operating country and is a legal decision for the service owner. Until that decision is made the records are kept indefinitely, and this must be disclosed to users.
+
+## Payment in the vehicle and driver transfers
+
+- Passengers pay the driver on the business's card terminal or in cash. The app charges nothing and stores what the driver or an operator records.
+- **Daily routine.** Check the review queue for "Reported unpaid" and "Payment not recorded". Compare the day's terminal statement from the bank with the dashboard's "Collected on terminals" figure for the same UTC period; the app can't do this comparison.
+- **Paying drivers.** On **Driver balances**, a positive balance is owed to the driver. Make the bank transfer outside the app, then record it with the bank reference. A negative balance means the driver owes commission on cash trips; record it when received.
+- **Permissions.** Recording or waiving a trip's payment needs `support`. Viewing balances and recording transfers needs `refund`.
+- **Deploying migration 025.** It is additive apart from widening five currency checks to allow lek. Rides created before it keep the card method. Set `PAYMENT_MODE` and `APP_CURRENCY` before starting the new build, and create lek fare policies for each area and category: policies made earlier stay in USD and keep pricing new quotes in USD until a lek policy takes effect.

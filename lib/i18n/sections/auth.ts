@@ -9,7 +9,7 @@ export default section(
     slide1Body: "Choose where you're going and see nearby drivers.",
     slide2Title: "See the price before you confirm",
     slide2Body:
-      "Your card is only authorized when you request and charged after the trip.",
+      "The price is fixed before you request. You pay the driver by card or cash at the end of the trip.",
     slide3Title: "Follow your driver on the way",
     slide3Body:
       "Live updates from pickup to drop-off, with chat and safety tools.",
@@ -72,7 +72,7 @@ export default section(
     slide1Body: "Zgjidh ku do të shkosh dhe shiko shoferët pranë.",
     slide2Title: "Shiko çmimin para se të konfirmosh",
     slide2Body:
-      "Karta autorizohet vetëm kur bën kërkesën dhe tarifohet pas udhëtimit.",
+      "Çmimi fiksohet para se të bësh kërkesën. I paguan shoferit me kartë ose para në dorë në fund të udhëtimit.",
     slide3Title: "Ndiq shoferin gjatë rrugës",
     slide3Body:
       "Përditësime të drejtpërdrejta nga nisja deri në mbërritje, me bisedë dhe mjete sigurie.",

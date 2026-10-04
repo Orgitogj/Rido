@@ -17,10 +17,10 @@ Passengers request rides. Approved drivers go online, get offers, accept them, a
 | Service areas | **Operator-managed, off by default**: quotes are refused unless the pickup is inside an active area with a fare policy in effect. The seed has one small, clearly labelled development example. |
 | Matching | **Real, deterministic, road-ranked**: a straight-line prefilter, then up to 10 drivers compared by road time to the pickup with the Google Route Matrix; straight-line order is the fallback during provider problems. See [Matching rule](#matching-rule). |
 | Pricing | **Road-based quote with a versioned fare policy**: the server gets the driving distance and time from the Google Routes API and prices them with the fare policy of the pickup's service area, in integer cents. There is no straight-line fallback for prices. **Rates and currency are development placeholders (USD)** until you set real ones. See [Service areas and road-based quotes](#service-areas-and-road-based-quotes). |
-| Payments | **Stripe test mode, authorize then capture**: a card hold is placed at request time and charged only when the trip completes. See [Payment lifecycle](#payment-lifecycle). |
+| Payments | **Paid in the vehicle, in Albanian lek (default)**: the passenger pays the driver on the business's card terminal or in cash at the end of the trip, and the driver records which. The app charges no card. The earlier Stripe flow (card hold, then capture) is kept but switched off; `PAYMENT_MODE=card_online` turns it back on. See [Payment in the vehicle](#payment-in-the-vehicle). |
 | Updates | **Long polling**: about 1 s latency for ride status and driver position, with version cursors, reconnect recovery, and a 3 s polling fallback. See [Live updates](#live-updates). |
-| Driver earnings | **Ledger only, no payouts**: earnings are recorded when Stripe confirms a captured fare or a paid tip. Nothing is transferred to drivers. See [Driver earnings and tips](#driver-earnings-and-tips). |
-| Tips | **Stripe test mode, separate charge**: optional, confirmed by the passenger in the payment sheet. |
+| Driver earnings | **Ledger and balance, no automatic payouts**: earnings are recorded when a payment is recorded as collected (or, in card mode, when Stripe confirms a capture). Each driver has a balance with the business, and operators record the bank transfers they make outside the app. Nothing is transferred by the app. See [Driver earnings and tips](#driver-earnings-and-tips). |
+| Tips | **Card mode only**: in-app tips are a separate Stripe charge, so they are not offered for trips paid in the vehicle. |
 | Profile and saved places | **Real**: name, email and password changes (through Clerk), language, Home, Work and custom places stored on the server. See [Accounts, inbox, support and deletion](#accounts-inbox-support-and-deletion). |
 | Inbox and support | **Real**: an in-app notification inbox with push preferences and quiet hours, and a support conversation per request for passengers and drivers, with operator replies and private photo attachments when storage is configured. |
 | Trip PIN | **Real**: the passenger gets a 4-digit PIN that the driver must enter before the trip can start. See [Trip PIN](#trip-pin). |
@@ -960,6 +960,23 @@ The console's **Dashboard** page (`view` permission) shows counts only: no names
 - If a group of queries fails, that group shows as unavailable instead of zeros.
 - Queries are bounded by the date range and use indexes added in migration `024`.
 
+### Payment in the vehicle
+
+The default payment mode. The business is in Albania, where Stripe is not available to merchants, so the app does not take card payments itself.
+
+- **Currency.** New fare policies are in Albanian lek (`APP_CURRENCY=all`, the default). Amounts are stored in hundredths, and every fare is rounded up to a whole lek. The currency follows the fare policy onto the quote, the ride, the receipt and the ledger. Policies created earlier stay in USD.
+- **Requesting.** The passenger sees the price and taps **Request ride**. No card is asked for and no payment provider is called; the search for a driver starts at once. A repeated or concurrent request returns the same ride.
+- **Paying.** At the end of the trip the passenger pays the driver on the business's card terminal (POS) or in cash.
+- **Recording.** After completing the trip, the driver records how it was paid: terminal, cash, or not paid. This can be recorded once; a different second answer is refused. If the driver records nothing for two hours, the trip goes to the review queue.
+- **Unpaid trips.** A trip recorded as unpaid goes to the review queue, and the passenger can't get a new price or request another ride until support settles it. An operator with the `support` permission records it as paid (terminal or cash) or closes it without a payment, with a note. Every such action is audited.
+- **Cancelled, unmatched and interrupted trips** have nothing to pay.
+- **Earnings.** When a payment is recorded as collected, the ride's earning is written to the ledger once, split by the commission policy. Unpaid and waived trips write nothing.
+- **Driver balance.** Terminal payments reach the business, which owes the driver their share. Cash stays with the driver, who owes the business its commission. The balance is: driver's share of terminal payments, minus commission on cash trips, minus transfers to the driver, plus transfers from the driver. The driver sees it on the Earnings screen.
+- **Transfers.** Operators with the `refund` permission record bank or cash transfers on the console's **Driver balances** page. A record states a transfer that was already made outside the app; the app moves no money. Records can't be edited, each submission is idempotent, and each is audited. Drivers see the amount, date, method and reference, not the operator's name or note.
+- **What is switched off in this mode.** Card holds, captures, in-app tips, console refunds and Stripe webhooks are not used. Stripe keys are optional.
+- **Trust.** The app can't verify a terminal or cash payment. It records what the driver or the operator states. Reconciling terminal payments against the bank's terminal statement is done outside the app.
+- **Switching back.** `PAYMENT_MODE=card_online` with `APP_CURRENCY=usd` restores the Stripe flow for new rides. Rides keep the method they were created with. The app's screens format amounts without an explicit currency as lek, so card mode in USD would need a screen pass before real use.
+
 ### Driver payouts
 
 Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.
@@ -997,8 +1014,9 @@ Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the deci
 | --- | --- |
 | Sign in, API access | Clerk publishable key + `CLERK_SECRET_KEY` |
 | Quotes, rides, drivers | `DATABASE_URL` (migrated) |
-| Requesting a ride | Stripe publishable + secret key |
-| Webhook settlement | `STRIPE_WEBHOOK_SECRET` + Stripe CLI (local) or a public URL |
+| Requesting a ride | Nothing extra in the default mode (paid in the vehicle). Stripe publishable + secret key only with `PAYMENT_MODE=card_online` |
+| Payment mode and currency (optional) | `PAYMENT_MODE` (`in_vehicle` default, or `card_online`), `APP_CURRENCY` (`all` default, or `usd`) |
+| Webhook settlement (card mode only) | `STRIPE_WEBHOOK_SECRET` + Stripe CLI (local) or a public URL |
 | Scheduled sweep (production), scheduled requests (any environment) | `CRON_SECRET` + a scheduler calling the sweep every minute |
 | Trip PIN | `RIDE_PIN_SECRET` (32+ characters). Required in production; without it in development no PIN is issued |
 | Scheduling window (optional) | `SCHEDULED_RIDE_MIN_LEAD_MINUTES` (default 30), `SCHEDULED_RIDE_MAX_DAYS` (default 7) |
@@ -1050,6 +1068,7 @@ npm run db:setup     # = db:migrate (db/migrations/*.sql) + db:seed (db/seed.sql
 - Migration `002` keeps rides from the old demo flow and marks them `legacy`.
 - Migrations `013`–`017` add saved places and the language preference, the notification inbox and preferences, support conversations, account deletion, and rate limits with job status. They only add tables, columns and indexes.
 - Migrations `018`–`024` add driver support requests and attachments, the trip PIN columns, quiet hours, vehicle categories, ride stops, scheduled requests with the area time zone, and dashboard indexes. They are additive, with three changes to existing objects: `support_requests.ride_id` becomes nullable, the support category check gains the driver categories, and one fare-policy index is rebuilt to include the category. `021` also writes data: the default category, a category link for every approved or suspended driver, and a history entry for each.
+- Migration `025` adds payment in the vehicle: it allows lek on quotes, rides, fare policies and ledger rows, adds the payment method and collection columns to rides, lets a ride earning exist without a Stripe payment, marks who holds the money on each ledger row, and adds the table of recorded driver transfers. Existing rides keep the card method and their currency.
 - The seed only restores the four simulated demo drivers those legacy rides reference. It creates no users, drivers, rides, or payments.
 
 ### 4. Run
@@ -1241,6 +1260,7 @@ Coverage by area:
 - **Quiet hours** (`quiet-hours.test.ts`): overnight ranges, the time zone, both daylight-saving changes, optional pushes skipped and never sent later, critical pushes sent, the inbox unaffected, and offers not hidden by other preferences.
 - **Vehicle categories and stops** (`categories-stops.test.ts`, `verification.test.ts`): operator permissions and history; approval requires a category and drivers can't grant one; capacity and category matching; availability counts; snapshots on quotes and rides; deactivation refusing new requests while a ride finishes; stop limits, order, service-area rules and unreachable legs; stop progress in order; completion refused while a stop remains; stops in receipts and history and absent from the share page; one capture.
 - **Scheduled requests** (`scheduled-rides.test.ts`): the window, past times, skipped and repeated local times, limits, idempotent creation, ownership, cancellation, the sweep opening confirmation once, a fresh quote only inside the window, no authorization before confirmation, matching only after it, expiry without a charge, a missed scheduler, a second active ride refused, and account deletion.
+- **Payment in the vehicle** (`in-vehicle.test.ts`): lek quotes rounded to a whole lek; a request that starts matching with no payment provider call; repeated and concurrent requests returning one ride; nothing to pay after a cancellation; the driver recording terminal or cash once, with concurrent taps and a changed answer; only the assigned driver, only after completion; unpaid trips flagged, the passenger blocked and unblocked by support, with permissions and audit; waiving; an unrecorded payment flagged after two hours; no in-app tips; the driver balance for terminal and cash payments; transfers recorded once, with permissions, validation and idempotency; the operator's name hidden from the driver; and card mode still working when switched back.
 - **Dashboard** (`dashboard.test.ts`): each metric against known data, rates with their denominators, the range limit, permissions, hidden counts for missing permissions, a failing section reported as unavailable, caching, and no personal data in the response.
 - **Notifications.** Recipients per event, no push for GPS, deduplication under duplicate taps and concurrent deliverers, outage retry, expired offers, users without devices, `DeviceNotRegistered` from tickets and receipts, account switching, and sign-out.
 
@@ -1343,6 +1363,9 @@ TEST_DATABASE_URL=postgresql://... TEST_DATABASE_ALLOW_RESET=1 TEST_DB_POOL_MAX=
 | `POST /api/rides/:id/stops` | assigned driver | Mark the next stop as reached (`index`) |
 | `GET /api/scheduled-rides`, `POST /api/scheduled-rides`, `GET /api/scheduled-rides/window` | passenger | Upcoming and past scheduled requests; create one; the allowed window in the pickup area's time zone |
 | `GET /api/scheduled-rides/:id`, `POST /api/scheduled-rides/:id/cancel`, `POST /api/scheduled-rides/:id/quote` | passenger (own) | One request; cancel it; get a fresh price once confirmation is open |
+| `POST /api/rides/:id/collection` | assigned driver | Record how a completed trip was paid: `pos`, `cash` or `unpaid` |
+| `POST /api/admin/rides/:id/collection` | operator (support) | Settle or waive a pending or unpaid trip (`pos`, `cash` or `waived`, with a note) |
+| `GET /api/admin/balances`, `GET /api/admin/balances/:id`, `POST /api/admin/balances/:id` | operator (refund) | Driver balances; one driver's balance and transfers; record a transfer made outside the app |
 | `GET /api/admin/dashboard` | operator (view) | Live and period figures (`from`, `to`, UTC) |
 | `GET /api/admin/support/:id/messages`, `POST /api/admin/support/:id/messages` | operator (view / support, assignee) | Conversation; reply to the passenger |
 | `GET /api/admin/badges` | operator (view) | Queue counts allowed by the operator's permissions |
@@ -1444,6 +1467,7 @@ __tests__/, jest/    tests and the PostgreSQL test database
 - **Vehicle categories.** One category per request; no upgrades, no per-category commission, and no check that a vehicle physically matches a category beyond the operator's review.
 - **Stops.** At most two, fixed at request time, with no waiting fees and no editing during the trip. Reaching a stop is the driver's tap; it is not checked against GPS.
 - **Scheduled requests.** Not a reservation. They depend on the sweep running every minute and on the passenger confirming; there is no automatic booking, no recurring schedule and no advance driver assignment. An area's time zone must be set by an operator; it is `UTC` until then.
-- **Payouts.** Blocked until a provider and country are chosen. See [docs/payout-readiness.md](docs/payout-readiness.md).
+- **Payment in the vehicle.** The app trusts what the driver records and can't check a terminal or cash payment. There is no link to the bank's terminal, no cash-handling limits, and no automatic reminder to a passenger with an unpaid trip beyond the block on new requests.
+- **Payouts.** No automatic payouts. Operators record manual transfers; see [docs/payout-readiness.md](docs/payout-readiness.md) for what an automatic integration would need.
 - **Not planned without a decision.** Pooled rides, emergency dispatch, phone masking, in-app calling, automated identity verification, and country-specific transport or insurance rules. See [docs/implementation-checklist.md](docs/implementation-checklist.md#features-requiring-a-separate-decision).
 - **Web.** Web is limited to building the API server; maps and payments are native-only.

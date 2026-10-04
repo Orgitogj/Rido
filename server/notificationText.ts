@@ -1,4 +1,5 @@
 import { formatCents } from "../shared/contracts";
+import { appCurrency, formatAmount } from "../shared/currency";
 
 export interface NotificationText {
   title: string;
@@ -7,7 +8,9 @@ export interface NotificationText {
 }
 
 const sqMoney = (cents: number) =>
-  `${formatCents(cents).replace("$", "").replace(/,/g, " ").replace(".", ",")} USD`;
+  appCurrency() === "all"
+    ? formatAmount(cents, "all", "sq-AL")
+    : `${formatCents(cents).replace("$", "").replace(/,/g, " ").replace(".", ",")} USD`;
 
 const text = (
   title: string,
@@ -51,19 +54,27 @@ export const NOTIFY = {
       "Udhëtimi filloi",
       "Udhëtim të mbarë.",
     ),
-  rideCompleted: (fareCents: number) =>
+  rideCompleted: (fareCents: number, inVehicle = false) =>
     text(
       "Trip completed",
-      `Thanks for riding. Fare: ${formatCents(fareCents)}.`,
+      inVehicle
+        ? `Thanks for riding. Pay the driver ${formatCents(fareCents)} by card or cash.`
+        : `Thanks for riding. Fare: ${formatCents(fareCents)}.`,
       "Udhëtimi përfundoi",
-      `Faleminderit që udhëtove me ne. Çmimi: ${sqMoney(fareCents)}.`,
+      inVehicle
+        ? `Faleminderit që udhëtove me ne. Paguaji shoferit ${sqMoney(fareCents)} me kartë ose para në dorë.`
+        : `Faleminderit që udhëtove me ne. Çmimi: ${sqMoney(fareCents)}.`,
     ),
-  noDriver: () =>
+  noDriver: (inVehicle = false) =>
     text(
       "No drivers available",
-      "Nobody accepted your request. The hold on your card is being released.",
+      inVehicle
+        ? "Nobody accepted your request. There is nothing to pay."
+        : "Nobody accepted your request. The hold on your card is being released.",
       "Nuk ka shoferë të lirë",
-      "Askush nuk e pranoi kërkesën. Bllokimi në kartën tënde po lirohet.",
+      inVehicle
+        ? "Askush nuk e pranoi kërkesën. Nuk ka asgjë për të paguar."
+        : "Askush nuk e pranoi kërkesën. Bllokimi në kartën tënde po lirohet.",
     ),
   cancelledByPassenger: () =>
     text(
@@ -72,19 +83,27 @@ export const NOTIFY = {
       "Udhëtimi u anulua",
       "Pasagjeri e anuloi këtë udhëtim.",
     ),
-  cancelledByDriver: () =>
+  cancelledByDriver: (inVehicle = false) =>
     text(
       "Ride cancelled",
-      "Your driver cancelled and we couldn't assign another one. The hold on your card is being released.",
+      inVehicle
+        ? "Your driver cancelled and we couldn't assign another one. There is nothing to pay."
+        : "Your driver cancelled and we couldn't assign another one. The hold on your card is being released.",
       "Udhëtimi u anulua",
-      "Shoferi e anuloi dhe nuk gjetëm dot një tjetër. Bllokimi në kartën tënde po lirohet.",
+      inVehicle
+        ? "Shoferi e anuloi dhe nuk gjetëm dot një tjetër. Nuk ka asgjë për të paguar."
+        : "Shoferi e anuloi dhe nuk gjetëm dot një tjetër. Bllokimi në kartën tënde po lirohet.",
     ),
-  cancelledBySystem: () =>
+  cancelledBySystem: (inVehicle = false) =>
     text(
       "Ride cancelled",
-      "Your request ended. The hold on your card is being released.",
+      inVehicle
+        ? "Your request ended. There is nothing to pay."
+        : "Your request ended. The hold on your card is being released.",
       "Udhëtimi u anulua",
-      "Kërkesa jote përfundoi. Bllokimi në kartën tënde po lirohet.",
+      inVehicle
+        ? "Kërkesa jote përfundoi. Nuk ka asgjë për të paguar."
+        : "Kërkesa jote përfundoi. Bllokimi në kartën tënde po lirohet.",
     ),
   rematching: (byDriver: boolean) =>
     text(
@@ -97,12 +116,16 @@ export const NOTIFY = {
         ? "Shoferi e anuloi. Po kërkojmë një shofer tjetër; çmimi yt nuk ka ndryshuar."
         : "Shoferi nuk mund ta kryejë këtë udhëtim. Po kërkojmë një shofer tjetër; çmimi yt nuk ka ndryshuar.",
     ),
-  interrupted: () =>
+  interrupted: (inVehicle = false) =>
     text(
       "Trip ended early",
-      "Your driver ended the trip early. The hold on your card is being released; your receipt will confirm it.",
+      inVehicle
+        ? "Your driver ended the trip early. There is nothing to pay for this trip."
+        : "Your driver ended the trip early. The hold on your card is being released; your receipt will confirm it.",
       "Udhëtimi përfundoi para kohe",
-      "Shoferi e ndërpreu udhëtimin para kohe. Bllokimi në kartën tënde po lirohet; fatura do ta konfirmojë.",
+      inVehicle
+        ? "Shoferi e ndërpreu udhëtimin para kohe. Nuk ka asgjë për të paguar për këtë udhëtim."
+        : "Shoferi e ndërpreu udhëtimin para kohe. Bllokimi në kartën tënde po lirohet; fatura do ta konfirmojë.",
     ),
   scheduledConfirm: (clock: string) =>
     text(

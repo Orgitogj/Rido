@@ -18,6 +18,8 @@ interface EarnableRide {
   currency: string;
   paid_at: Date | null;
   stripe_payment_intent_id: string | null;
+  payment_method: string;
+  collection_method: string | null;
 }
 
 export interface RideEarningRow {
@@ -29,7 +31,7 @@ export interface RideEarningRow {
   commission_rate_bps: number;
   commission_cents: number;
   driver_share_cents: number;
-  stripe_payment_intent_id: string;
+  stripe_payment_intent_id: string | null;
   earned_at: Date;
 }
 
@@ -57,7 +59,9 @@ export const isEarnable = (ride: EarnableRide) =>
   ride.payment_status === "paid" &&
   ride.driver_profile_id !== null &&
   ride.demo_driver_id === null &&
-  ride.stripe_payment_intent_id !== null &&
+  (ride.stripe_payment_intent_id !== null ||
+    (ride.payment_method === "in_vehicle" &&
+      ride.collection_method !== null)) &&
   (ride.captured_cents ?? 0) > 0;
 
 export const entryView = (e: EntryRow): EarningEntryView => ({
@@ -85,14 +89,15 @@ async function insertEntry(
     sourceKey: string;
     stripeObjectId: string | null;
     occurredAt: Date;
+    fundsHeldBy?: "platform" | "driver";
   },
 ) {
   const { rows } = await tx.query<{ id: string }>(
     `INSERT INTO mobility.earning_entries
        (driver_profile_id, ride_id, tip_id, kind, currency, gross_cents,
         commission_cents, driver_amount_cents, policy_version, source_key,
-        stripe_object_id, occurred_at, dispute_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        stripe_object_id, occurred_at, dispute_id, funds_held_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (source_key) DO NOTHING
      RETURNING id`,
     [
@@ -109,6 +114,7 @@ async function insertEntry(
       entry.stripeObjectId,
       entry.occurredAt,
       entry.disputeId ?? null,
+      entry.fundsHeldBy ?? "platform",
     ],
   );
   return rows.length > 0;
@@ -150,7 +156,8 @@ export async function ensureRideEarning(
 ): Promise<RideEarningRow | null> {
   const { rows } = await tx.query<EarnableRide>(
     `SELECT id, status, payment_status, driver_profile_id, demo_driver_id,
-            captured_cents, currency, paid_at, stripe_payment_intent_id
+            captured_cents, currency, paid_at, stripe_payment_intent_id,
+            payment_method, collection_method
        FROM mobility.rides WHERE id = $1`,
     [rideId],
   );
@@ -193,9 +200,13 @@ export async function ensureRideEarning(
     commissionCents: earning.commission_cents,
     driverCents: earning.driver_share_cents,
     policyVersion: earning.commission_policy_version,
-    sourceKey: `capture:${earning.ride_id}`,
+    sourceKey:
+      ride.payment_method === "in_vehicle"
+        ? `collection:${earning.ride_id}`
+        : `capture:${earning.ride_id}`,
     stripeObjectId: earning.stripe_payment_intent_id,
     occurredAt: new Date(earning.earned_at),
+    fundsHeldBy: ride.collection_method === "cash" ? "driver" : "platform",
   });
   return earning;
 }

@@ -1,6 +1,7 @@
 import { TextInputProps, TouchableOpacityProps } from "react-native";
 
 import type { RideQuote } from "@/shared/contracts";
+import type { Currency } from "@/shared/currency";
 
 declare interface SelectedPlace {
   latitude: number;
@@ -39,6 +40,7 @@ declare interface GoogleInputProps {
 declare interface PaymentProps {
   quoteId: string;
   fareCents: number;
+  currency?: Currency;
   onRequested: (rideId: string) => void;
   onExpired?: () => void;
   disabled?: boolean;

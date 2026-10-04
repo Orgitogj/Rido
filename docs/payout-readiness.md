@@ -29,7 +29,7 @@ There is no payable balance, payout table, payout state machine or bank-account 
 
 ## Decisions required (business, legal and finance)
 
-None of these can be decided in code, and none were assumed. The first six block any payout code; the rest shape it.
+The table below is what an automatic payout integration would need. The "current state" column describes the code; the owner's decisions so far are listed at the top of this page. None of these can be decided in code.
 
 | # | Decision | Why it blocks | Current state in the code |
 | --- | --- | --- | --- |

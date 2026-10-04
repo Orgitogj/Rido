@@ -40,7 +40,8 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | Area | What has not been verified | How to verify |
 | --- | --- | --- |
 | Clerk | Real sign-up, sign-in, password reset, email change, password re-verification before deletion, identity deletion through the Clerk API | Manual checklist, sections 1 and 10 |
-| Stripe | Real test-mode PaymentSheet, 3-D Secure, capture, release, refunds, disputes, webhooks, customer deletion | Manual checklist, sections 3 and 7 |
+| Payment in the vehicle | A real terminal and cash trip on two phones; the unpaid flow; balances and transfers against real bank transfers; lek amounts on small screens | Manual checklist, section 18 |
+| Stripe (card mode only, switched off) | Real test-mode PaymentSheet, 3-D Secure, capture, release, refunds, disputes, webhooks, customer deletion | Manual checklist, sections 3 and 7 |
 | Google Routes | Real quotes, route matrix ranking, quota behaviour | Manual checklist, section 5 |
 | Google Places | Address search in both languages | Manual checklist, section 2 |
 | Object storage | Presigned POST or PUT against a real private bucket, ETag preconditions, deletion | Manual checklist, section 6 |

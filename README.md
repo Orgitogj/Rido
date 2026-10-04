@@ -960,6 +960,10 @@ The console's **Dashboard** page (`view` permission) shows counts only: no names
 - If a group of queries fails, that group shows as unavailable instead of zeros.
 - Queries are bounded by the date range and use indexes added in migration `024`.
 
+### Payment in the vehicle
+
+The default payment mode. The business is in Albania, where Stripe is not available to merchants, so the app does not take card payments itself.
+
 ### Driver payouts
 
 Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.

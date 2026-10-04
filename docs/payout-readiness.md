@@ -5,6 +5,11 @@ Status: **manual transfers only**. The owner decided on 2026-10-04 that the busi
 Decisions made:
 
 | Decision | Outcome |
+| --- | --- |
+| Platform business country | Albania |
+| Supported driver countries | Albania only |
+| Currency | Albanian lek, whole lek |
+| How passengers pay | In the vehicle: the business's card terminal, or cash. No card payment in the app |
 
 This document lists what has to be decided before payouts can be built, where a provider would connect to the existing code, and the accounting rules any implementation must keep.
 

@@ -1,3 +1,5 @@
+import { formatClock, parseClock } from "../shared/quietHours";
+
 import type { SqlClient } from "./db";
 import type {
   InboxItem,
@@ -92,8 +94,13 @@ export async function getPreferences(
     chat_messages: boolean;
     ride_offers: boolean;
     account_updates: boolean;
+    quiet_enabled: boolean;
+    quiet_start_minute: number | null;
+    quiet_end_minute: number | null;
+    quiet_timezone: string | null;
   }>(
-    `SELECT ride_updates, chat_messages, ride_offers, account_updates
+    `SELECT ride_updates, chat_messages, ride_offers, account_updates,
+            quiet_enabled, quiet_start_minute, quiet_end_minute, quiet_timezone
        FROM mobility.notification_preferences WHERE user_id = $1`,
     [userId],
   );
@@ -103,6 +110,15 @@ export async function getPreferences(
     chatMessages: r?.chat_messages ?? true,
     rideOffers: r?.ride_offers ?? true,
     accountUpdates: r?.account_updates ?? true,
+    quietHours:
+      r && r.quiet_start_minute !== null && r.quiet_end_minute !== null
+        ? {
+            enabled: r.quiet_enabled,
+            start: formatClock(r.quiet_start_minute),
+            end: formatClock(r.quiet_end_minute),
+            timezone: r.quiet_timezone!,
+          }
+        : null,
   };
 }
 

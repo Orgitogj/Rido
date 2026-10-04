@@ -3,6 +3,7 @@ import {
   inboxQuerySchema,
   inboxReadSchema,
   notificationPreferencesSchema,
+  supportCreateSchema,
   supportListQuerySchema,
   supportMessageSchema,
   supportUserMessageSchema,
@@ -11,7 +12,9 @@ import { rideIdSchema } from "../../shared/contracts";
 import { type Deps, parseInput, readJson } from "../http";
 import { getPreferences, listInbox, markRead, setPreferences } from "../inbox";
 import { permissionsOf, requireOperator } from "../operators";
+import { enforceRateLimit } from "../rateLimit";
 import {
+  createSupportRequest,
   listMySupport,
   mySupportConversation,
   operatorSupportMessage,
@@ -109,6 +112,28 @@ export async function postSupportMessage(
   return Response.json(
     { data: await userSupportMessage(deps, user.id, id, input) },
     { status: 201 },
+  );
+}
+
+export async function createSupport(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const input = await readJson(request, supportCreateSchema);
+  await enforceRateLimit(deps.db, "supportRequests", user.id, deps.now());
+  const created = await createSupportRequest(deps, user.id, input);
+  return Response.json(
+    {
+      data: await mySupportConversation(
+        deps.db,
+        user.id,
+        created.id,
+        deps.now(),
+      ),
+    },
+    { status: created.created ? 201 : 200 },
   );
 }
 

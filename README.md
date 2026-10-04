@@ -976,6 +976,7 @@ The default payment mode. The business is in Albania, where Stripe is not availa
 - **What is switched off in this mode.** Card holds, captures, in-app tips, console refunds and Stripe webhooks are not used. Stripe keys are optional.
 - **Trust.** The app can't verify a terminal or cash payment. It records what the driver or the operator states. Reconciling terminal payments against the bank's terminal statement is done outside the app.
 - **Switching back.** `PAYMENT_MODE=card_online` with `APP_CURRENCY=usd` restores the Stripe flow for new rides. Rides keep the method they were created with. The app's screens format amounts without an explicit currency as lek, so card mode in USD would need a screen pass before real use.
+
 ### Driver payouts
 
 Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.

@@ -1,3 +1,5 @@
+import { appCurrency, formatAmount } from "@/shared/currency";
+
 import type { Language } from "@/shared/account";
 
 export interface Tree {
@@ -54,9 +56,10 @@ export function languageFromLocale(
 export function formatMoney(
   cents: number,
   language: Language,
-  currency = "usd",
+  currency: string = appCurrency(),
 ): string {
   if (!Number.isSafeInteger(cents)) return "--";
+  if (currency === "all") return formatAmount(cents, "all", LOCALES[language]);
   try {
     return new Intl.NumberFormat(LOCALES[language], {
       style: "currency",

@@ -46,6 +46,10 @@ import {
 import { settlementState } from "../rides";
 import { notifySupport } from "../support";
 import {
+  attachmentAccessForOperator,
+  attachmentsOf,
+} from "../supportAttachments";
+import {
   applyTipRefundSnapshot,
   createTipRefund,
   syncTipRefundsForIntent,
@@ -882,6 +886,7 @@ async function supportDetailBody(
       [id],
     ),
   ]);
+  const files = await attachmentsOf(deps.db, id);
   return {
     ...supportItem(s, operator),
     message: s.message,
@@ -889,6 +894,7 @@ async function supportDetailBody(
       name: s.passenger_name,
       account: maskAccount(s.passenger_clerk_id),
     },
+    attachments: files.all,
     resolutionMessage: s.resolution_message,
     resolvedBy: s.resolved_by_name,
     notes: notes.rows.map((n) => ({
@@ -1127,6 +1133,23 @@ export async function addSupportNote(
     { data: await supportDetailBody(deps, id, operator) },
     { status: 201 },
   );
+}
+
+export async function supportAttachmentAccess(
+  request: Request,
+  params: { id?: string; attachmentId?: string },
+  deps: Deps,
+) {
+  const id = parseInput(rideIdSchema, params.id);
+  const attachmentId = parseInput(rideIdSchema, params.attachmentId);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "support_request",
+    id,
+    action: "support_attachment_access",
+  });
+  return Response.json({
+    data: await attachmentAccessForOperator(deps, operator, id, attachmentId),
+  });
 }
 
 interface FeedbackRow {

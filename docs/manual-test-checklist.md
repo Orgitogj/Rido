@@ -231,6 +231,10 @@ Default payment mode. No Stripe keys are needed.
 - [ ] An amount with a fraction of a lek is refused. Submitting the same form twice records one transfer.
 - [ ] A view-only operator can't open Driver balances or record a payment.
 - [ ] The receipt of a trip paid in the vehicle offers no in-app tip.
+- [ ] Compare the dashboard's "Collected on terminals" for the day with the bank's terminal statement.
+- [ ] Amounts read correctly in lek in both languages, including on a small phone with large text.
+
+## 19. Combined scenarios
 
 - [ ] Driver opens a support request about a completed trip with a photo; the operator replies; the driver gets the reply.
 - [ ] A ride with two stops and a larger category: PIN at pickup, both stops reached, completion, one capture for the quoted fare, receipt with stops and category.

@@ -3,6 +3,7 @@ import {
   SUPPORT_RULES,
   type SupportConversation,
   type SupportMessageView,
+  type SupportRole,
   type SupportStatus,
 } from "../shared/account";
 
@@ -18,12 +19,13 @@ import { audit, type OperatorRow } from "./operators";
 
 interface RequestRow {
   id: string;
-  ride_id: string;
+  ride_id: string | null;
   user_id: string;
+  requester_role: SupportRole;
   category: string;
   status: SupportStatus;
   message: string;
-  destination_address: string;
+  destination_address: string | null;
   created_at: Date;
   updated_at: Date;
   resolved_at: Date | null;
@@ -43,12 +45,14 @@ interface MessageRow {
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
 const SELECT = `
-  SELECT s.id, s.ride_id, s.user_id, s.category, s.status, s.message,
-         r.destination_address, s.created_at, s.updated_at, s.resolved_at,
+  SELECT s.id, s.ride_id, s.user_id, s.requester_role, s.category, s.status, s.message,
+         CASE WHEN s.requester_role = 'passenger' THEN r.destination_address END
+           AS destination_address,
+         s.created_at, s.updated_at, s.resolved_at,
          s.resolution_message, s.user_read_at, s.last_operator_message_at,
          s.assigned_operator_id
     FROM mobility.support_requests s
-    JOIN mobility.rides r ON r.id = s.ride_id`;
+    LEFT JOIN mobility.rides r ON r.id = s.ride_id`;
 
 const unread = (r: RequestRow) => {
   const latest = Math.max(
@@ -66,6 +70,7 @@ const unread = (r: RequestRow) => {
 const item = (r: RequestRow): MySupportRequest => ({
   id: r.id,
   rideId: r.ride_id,
+  role: r.requester_role,
   category: r.category,
   status: r.status,
   destination: r.destination_address,
@@ -215,7 +220,7 @@ export async function notifySupport(
   dedupe: string,
   now: Date,
 ) {
-  const { rows } = await tx.query<{ user_id: string; ride_id: string }>(
+  const { rows } = await tx.query<{ user_id: string; ride_id: string | null }>(
     "SELECT user_id, ride_id FROM mobility.support_requests WHERE id = $1",
     [requestId],
   );

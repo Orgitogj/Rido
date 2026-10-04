@@ -1,6 +1,15 @@
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import CustomButton from "@/components/CustomButton";
@@ -159,131 +168,223 @@ const Notifications = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-general-500">
-      <ScrollView
-        className="px-5"
-        contentContainerStyle={{ paddingBottom: 80 }}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScreenHeader title={t("inbox.title")} />
+        <ScrollView
+          className="px-5"
+          contentContainerStyle={{ paddingBottom: 80 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <ScreenHeader title={t("inbox.title")} />
 
-        {pushStatus !== "registered" && pushStatus !== "idle" && (
-          <View className="bg-white rounded-2xl p-4 mb-4">
-            <Text className="text-sm text-general-200">
-              {pushStatus === "denied"
-                ? t("inbox.pushOff")
-                : pushStatus === "needs_dev_build"
-                  ? t("inbox.pushNeedsBuild")
-                  : t("inbox.pushUnavailable")}
-            </Text>
-          </View>
-        )}
-
-        <View className="flex flex-row items-center justify-between mb-3">
-          <Text className="text-sm text-general-200">
-            {tn("inbox.unread", inbox.unread)}
-          </Text>
-          {inbox.unread > 0 && (
-            <TouchableOpacity
-              onPress={inbox.markAllRead}
-              accessibilityRole="button"
-              className="min-h-[44px] justify-center"
-            >
-              <Text className="text-sm text-[#0286FF] font-JakartaSemiBold">
-                {t("inbox.markAllRead")}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {inbox.status === "loading" && inbox.items.length === 0 && (
-          <ListState kind="loading" message={t("common.loading")} />
-        )}
-        {inbox.status === "error" && inbox.items.length === 0 && (
-          <ListState
-            kind="error"
-            message={errorText(inbox.error, t("inbox.loadFailed"))}
-            onRetry={reload}
-          />
-        )}
-        {inbox.status === "ready" && inbox.items.length === 0 && (
-          <ListState kind="empty" message={t("inbox.empty")} />
-        )}
-
-        {inbox.items.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            onPress={() => open(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`${item.title}. ${item.body}`}
-            className={`rounded-2xl p-4 mb-3 ${item.readAt ? "bg-white" : "bg-[#E6F3FF]"}`}
-          >
-            <View className="flex flex-row justify-between">
-              <Text className="text-xs text-general-200">
-                {t(`inbox.category.${item.category}`)}
-              </Text>
-              <Text className="text-xs text-general-200">
-                {dateTime(item.createdAt)}
+          {pushStatus !== "registered" && pushStatus !== "idle" && (
+            <View className="bg-white rounded-2xl p-4 mb-4">
+              <Text className="text-sm text-general-200">
+                {pushStatus === "denied"
+                  ? t("inbox.pushOff")
+                  : pushStatus === "needs_dev_build"
+                    ? t("inbox.pushNeedsBuild")
+                    : t("inbox.pushUnavailable")}
               </Text>
             </View>
-            <Text className="text-base font-JakartaBold mt-1">
-              {item.title}
+          )}
+
+          <View className="flex flex-row items-center justify-between mb-3">
+            <Text className="text-sm text-general-200">
+              {tn("inbox.unread", inbox.unread)}
             </Text>
-            <Text className="text-sm text-neutral-700 mt-1">{item.body}</Text>
-          </TouchableOpacity>
-        ))}
-
-        {inbox.nextCursor && (
-          <CustomButton
-            title={
-              inbox.status === "loading"
-                ? t("common.loading")
-                : t("common.loadMore")
-            }
-            bgVariant="outline"
-            textVariant="primary"
-            disabled={inbox.status === "loading"}
-            onPress={inbox.loadMore}
-          />
-        )}
-
-        <Text
-          className="text-lg font-JakartaBold mt-6 mb-1"
-          accessibilityRole="header"
-        >
-          {t("inbox.preferences")}
-        </Text>
-        <Text className="text-xs text-general-200 mb-3">
-          {t("inbox.preferencesHint")}
-        </Text>
-        {preferences &&
-          PREFERENCE_KEYS.map((key) => (
-            <View
-              key={key}
-              className="bg-white rounded-2xl p-4 mb-3 flex flex-row items-center"
-            >
-              <View className="flex-1 pr-3">
-                <Text className="text-base font-JakartaSemiBold">
-                  {t(`inbox.${key}`)}
+            {inbox.unread > 0 && (
+              <TouchableOpacity
+                onPress={inbox.markAllRead}
+                accessibilityRole="button"
+                className="min-h-[44px] justify-center"
+              >
+                <Text className="text-sm text-[#0286FF] font-JakartaSemiBold">
+                  {t("inbox.markAllRead")}
                 </Text>
-                <Text className="text-xs text-general-200 mt-1">
-                  {t(`inbox.${key}Hint`)}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {inbox.status === "loading" && inbox.items.length === 0 && (
+            <ListState kind="loading" message={t("common.loading")} />
+          )}
+          {inbox.status === "error" && inbox.items.length === 0 && (
+            <ListState
+              kind="error"
+              message={errorText(inbox.error, t("inbox.loadFailed"))}
+              onRetry={reload}
+            />
+          )}
+          {inbox.status === "ready" && inbox.items.length === 0 && (
+            <ListState kind="empty" message={t("inbox.empty")} />
+          )}
+
+          {inbox.items.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              onPress={() => open(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.title}. ${item.body}`}
+              className={`rounded-2xl p-4 mb-3 ${item.readAt ? "bg-white" : "bg-[#E6F3FF]"}`}
+            >
+              <View className="flex flex-row justify-between">
+                <Text className="text-xs text-general-200">
+                  {t(`inbox.category.${item.category}`)}
+                </Text>
+                <Text className="text-xs text-general-200">
+                  {dateTime(item.createdAt)}
                 </Text>
               </View>
-              <Switch
-                value={preferences[key]}
-                onValueChange={() => toggle(key)}
-                accessibilityLabel={t(`inbox.${key}`)}
+              <Text className="text-base font-JakartaBold mt-1">
+                {item.title}
+              </Text>
+              <Text className="text-sm text-neutral-700 mt-1">{item.body}</Text>
+            </TouchableOpacity>
+          ))}
+
+          {inbox.nextCursor && (
+            <CustomButton
+              title={
+                inbox.status === "loading"
+                  ? t("common.loading")
+                  : t("common.loadMore")
+              }
+              bgVariant="outline"
+              textVariant="primary"
+              disabled={inbox.status === "loading"}
+              onPress={inbox.loadMore}
+            />
+          )}
+
+          <Text
+            className="text-lg font-JakartaBold mt-6 mb-1"
+            accessibilityRole="header"
+          >
+            {t("inbox.preferences")}
+          </Text>
+          <Text className="text-xs text-general-200 mb-3">
+            {t("inbox.preferencesHint")}
+          </Text>
+          {preferences &&
+            PREFERENCE_KEYS.map((key) => (
+              <View
+                key={key}
+                className="bg-white rounded-2xl p-4 mb-3 flex flex-row items-center"
+              >
+                <View className="flex-1 pr-3">
+                  <Text className="text-base font-JakartaSemiBold">
+                    {t(`inbox.${key}`)}
+                  </Text>
+                  <Text className="text-xs text-general-200 mt-1">
+                    {t(`inbox.${key}Hint`)}
+                  </Text>
+                </View>
+                <Switch
+                  value={preferences[key]}
+                  onValueChange={() => toggle(key)}
+                  accessibilityLabel={t(`inbox.${key}`)}
+                />
+              </View>
+            ))}
+          {preferences && (
+            <View className="bg-white rounded-2xl p-4 mb-3">
+              <View className="flex flex-row items-center">
+                <View className="flex-1 pr-3">
+                  <Text
+                    className="text-base font-JakartaSemiBold"
+                    accessibilityRole="header"
+                  >
+                    {t("inbox.quiet.title")}
+                  </Text>
+                  <Text className="text-xs text-general-200 mt-1">
+                    {t("inbox.quiet.explain")}
+                  </Text>
+                </View>
+                <Switch
+                  value={quietEnabled}
+                  disabled={savingQuiet || !quietValid}
+                  onValueChange={(value) => {
+                    setQuietEnabled(value);
+                    saveQuiet(value);
+                  }}
+                  accessibilityLabel={t("inbox.quiet.enable")}
+                />
+              </View>
+              <Text className="text-xs text-neutral-700 mt-3">
+                {t("inbox.quiet.critical")}
+              </Text>
+              <View className="flex flex-row mt-3">
+                {(
+                  [
+                    ["start", quietStart, setQuietStart],
+                    ["end", quietEnd, setQuietEnd],
+                  ] as const
+                ).map(([key, value, set]) => (
+                  <View key={key} className="flex-1 mr-3">
+                    <Text className="text-xs text-general-200 mb-1">
+                      {t(`inbox.quiet.${key}`)}
+                    </Text>
+                    <TextInput
+                      value={value}
+                      onChangeText={set}
+                      placeholder="22:00"
+                      placeholderTextColor="#8a8a8a"
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                      accessibilityLabel={`${t(`inbox.quiet.${key}`)}. ${t("inbox.quiet.timeHint")}`}
+                      className="bg-neutral-100 rounded-xl px-3 min-h-[44px] text-base"
+                    />
+                  </View>
+                ))}
+              </View>
+              <Text className="text-xs text-general-200 mt-2">
+                {quietValid
+                  ? startMinute! > endMinute!
+                    ? t("inbox.quiet.overnight")
+                    : t("inbox.quiet.timeHint")
+                  : t("inbox.quiet.invalidTime")}
+              </Text>
+              <Text className="text-xs text-general-200 mt-2">
+                {t("inbox.quiet.timezone", { timezone: quietZone })}
+              </Text>
+              {quietZone !== device && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setQuietZone(device);
+                    saveQuiet(quietEnabled, device);
+                  }}
+                  disabled={savingQuiet || !quietValid}
+                  accessibilityRole="button"
+                  className="min-h-[44px] justify-center"
+                >
+                  <Text className="text-sm text-[#0066CC] font-JakartaSemiBold">
+                    {t("inbox.quiet.useDeviceZone", { timezone: device })}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <CustomButton
+                title={savingQuiet ? t("common.saving") : t("inbox.quiet.save")}
+                bgVariant="outline"
+                textVariant="primary"
+                className="mt-3"
+                disabled={savingQuiet || !quietValid}
+                onPress={() => saveQuiet(quietEnabled)}
               />
             </View>
-          ))}
-        {note && (
-          <Text
-            className={`text-sm ${note.ok ? "text-green-700" : "text-red-500"}`}
-            accessibilityLiveRegion="polite"
-          >
-            {note.text}
-          </Text>
-        )}
-      </ScrollView>
+          )}
+          {note && (
+            <Text
+              className={`text-sm ${note.ok ? "text-green-700" : "text-red-600"}`}
+              accessibilityLiveRegion="polite"
+            >
+              {note.text}
+            </Text>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

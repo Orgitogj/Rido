@@ -964,6 +964,10 @@ The console's **Dashboard** page (`view` permission) shows counts only: no names
 
 The default payment mode. The business is in Albania, where Stripe is not available to merchants, so the app does not take card payments itself.
 
+- **Currency.** New fare policies are in Albanian lek (`APP_CURRENCY=all`, the default). Amounts are stored in hundredths, and every fare is rounded up to a whole lek. The currency follows the fare policy onto the quote, the ride, the receipt and the ledger. Policies created earlier stay in USD.
+- **Requesting.** The passenger sees the price and taps **Request ride**. No card is asked for and no payment provider is called; the search for a driver starts at once. A repeated or concurrent request returns the same ride.
+- **Paying.** At the end of the trip the passenger pays the driver on the business's card terminal (POS) or in cash.
+- **Recording.** After completing the trip, the driver records how it was paid: terminal, cash, or not paid. This can be recorded once; a different second answer is refused. If the driver records nothing for two hours, the trip goes to the review queue.
 ### Driver payouts
 
 Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.

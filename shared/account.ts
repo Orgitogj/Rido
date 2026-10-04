@@ -264,6 +264,35 @@ export const supportAttachmentUploadSchema = z.strictObject({
     .max(SUPPORT_RULES.attachmentMaxBytes),
 });
 
+export interface SupportAttachmentView {
+  id: string;
+  contentType: SupportAttachmentType;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface SupportAttachmentTicket {
+  attachment: SupportAttachmentView & { status: "pending_upload" | "ready" };
+  upload:
+    | {
+        method: "POST";
+        url: string;
+        fields: Record<string, string>;
+        expiresAt: string;
+      }
+    | {
+        method: "PUT";
+        url: string;
+        headers: Record<string, string>;
+        expiresAt: string;
+      };
+}
+
+export interface SupportAttachmentAccess {
+  url: string;
+  expiresAt: string;
+}
+
 export const supportListQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),

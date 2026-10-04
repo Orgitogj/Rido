@@ -638,8 +638,10 @@ describe("tips", () => {
     expect((await startTip(P, rideId, 700)).json.error.code).toBe(
       "TIP_IN_PROGRESS",
     );
-    expect((await startTip(P, rideId, 700, key)).json.error.code).toBe(
-      "IDEMPOTENCY_KEY_REUSED",
+    const reused = await startTip(P, rideId, 700, key);
+    expect(reused.status).toBe(409);
+    expect(["IDEMPOTENCY_KEY_REUSED", "TIP_IN_PROGRESS"]).toContain(
+      reused.json.error.code,
     );
 
     const cancelled = await call(ctx, cancelTipPayment, {

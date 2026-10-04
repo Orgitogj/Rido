@@ -3,6 +3,7 @@ import {
   inboxQuerySchema,
   inboxReadSchema,
   notificationPreferencesSchema,
+  supportAttachmentUploadSchema,
   supportCreateSchema,
   supportListQuerySchema,
   supportMessageSchema,
@@ -21,6 +22,12 @@ import {
   supportMessagesForOperator,
   userSupportMessage,
 } from "../support";
+import {
+  attachmentAccessForUser,
+  completeAttachmentUpload,
+  removeAttachment,
+  requestAttachmentUpload,
+} from "../supportAttachments";
 import { ensureUser } from "../users";
 
 import { decodeCursor, encodeCursor } from "./admin";
@@ -135,6 +142,56 @@ export async function createSupport(
     },
     { status: created.created ? 201 : 200 },
   );
+}
+
+export async function createSupportAttachment(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const input = await readJson(request, supportAttachmentUploadSchema);
+  await enforceRateLimit(deps.db, "uploadTickets", user.id, deps.now());
+  return Response.json(
+    { data: await requestAttachmentUpload(deps, user.id, input) },
+    { status: 201 },
+  );
+}
+
+export async function completeSupportAttachment(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const id = parseInput(rideIdSchema, params.id);
+  return Response.json({
+    data: await completeAttachmentUpload(deps, user.id, id),
+  });
+}
+
+export async function deleteSupportAttachment(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const id = parseInput(rideIdSchema, params.id);
+  await removeAttachment(deps, user.id, id);
+  return Response.json({ data: { removed: true } });
+}
+
+export async function supportAttachmentAccess(
+  request: Request,
+  params: { id?: string; attachmentId?: string },
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const id = parseInput(rideIdSchema, params.id);
+  const attachmentId = parseInput(rideIdSchema, params.attachmentId);
+  return Response.json({
+    data: await attachmentAccessForUser(deps, user.id, id, attachmentId),
+  });
 }
 
 export async function adminSupportMessages(

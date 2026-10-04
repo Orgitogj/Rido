@@ -158,6 +158,17 @@ export const SUPPORT_RULES = {
   userMessagesPerRequest: 50,
   burstWindowSeconds: 60,
   burstLimit: 5,
+  attachmentMinBytes: 100,
+  attachmentMaxBytes: 5 * 1024 * 1024,
+  attachmentsPerMessage: 3,
+  attachmentsPerRequest: 10,
+  pendingAttachmentsPerUser: 6,
+  attachmentUploadUrlSeconds: 300,
+  attachmentUploadKeyGraceSeconds: 600,
+  attachmentReservationSeconds: 3600,
+  attachmentViewUrlSeconds: 60,
+  abandonedAttachmentHours: 24,
+  attachmentRetentionDays: 90,
 } as const;
 
 export const supportMessageSchema = z.strictObject({

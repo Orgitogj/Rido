@@ -68,6 +68,16 @@ export default section(
       processing: "Your bank is processing the payment.",
       pending: "No payment has been taken.",
       slow: "Our payment provider is responding slowly; we'll keep retrying automatically.",
+      payInVehicle:
+        "You pay the driver by card or cash at the end of the trip.",
+      collectionPending:
+        "Pay the driver by card or cash. This updates when the driver records the payment.",
+      paidPos: "Paid by card on the driver's terminal.",
+      paidCash: "Paid in cash to the driver.",
+      unpaid:
+        "The driver reported this trip as unpaid. Contact support to settle it; you can't request another ride until then.",
+      waived: "Support closed this trip without a payment.",
+      nothingDue: "There is nothing to pay for this request.",
       notCharged: "not charged",
       cardHold: "card hold",
     },
@@ -90,6 +100,18 @@ export default section(
       driver_interrupt_title: "End trip early?",
       driver_interrupt_body:
         "Only do this if the trip can't continue, for example for safety or a vehicle problem. The trip ends as interrupted: the passenger is not charged, their hold is released, and the trip is flagged for review.",
+      passenger_unpaid_body_vehicle:
+        "No driver has been requested yet. There is nothing to pay and no cancellation fee.",
+      passenger_searching_body_vehicle:
+        "We'll stop looking for a driver. There is nothing to pay and no cancellation fee.",
+      passenger_assigned_body_vehicle:
+        "Your driver will be told. There is nothing to pay and no cancellation fee.",
+      driver_rematch_body_vehicle:
+        "We'll look for another driver for this passenger. You won't be offered this ride again.",
+      driver_final_body_vehicle:
+        "This passenger has already been re-matched the maximum number of times, so their request will end.",
+      driver_interrupt_body_vehicle:
+        "Only do this if the trip can't continue, for example for safety or a vehicle problem. The trip ends as interrupted: the passenger pays nothing, and the trip is flagged for review.",
       keepRide: "Keep ride",
       keepDriving: "Keep driving",
       confirmCancel: "Yes, cancel ride",
@@ -157,6 +179,23 @@ export default section(
       retrying: "Retrying automatically.",
       mapWeb: "The map is available in the iOS and Android app.",
       goBack: "Go back",
+    },
+    collection: {
+      title: "Record the payment",
+      prompt: "How did the passenger pay {fare}?",
+      pos: "Card on the terminal",
+      cash: "Cash",
+      unpaid: "The passenger didn't pay",
+      unpaidConfirm:
+        "Report this trip as unpaid? Support will review it and the passenger can't request another ride until it is settled.",
+      unpaidYes: "Yes, report as unpaid",
+      back: "Go back",
+      saving: "Saving…",
+      recorded_pos: "Recorded: paid by card on the terminal.",
+      recorded_cash: "Recorded: paid in cash.",
+      recorded_unpaid: "Reported as unpaid. Support will review it.",
+      recorded_waived: "Support closed this trip without a payment.",
+      passengerDue: "To pay the driver: {fare}",
     },
     pin: {
       title: "Trip PIN",
@@ -313,6 +352,16 @@ export default section(
       processing: "Banka jote po e përpunon pagesën.",
       pending: "Nuk është marrë asnjë pagesë.",
       slow: "Ofruesi i pagesave po përgjigjet ngadalë; do të vazhdojmë të provojmë automatikisht.",
+      payInVehicle:
+        "I paguan shoferit me kartë ose para në dorë në fund të udhëtimit.",
+      collectionPending:
+        "Paguaji shoferit me kartë ose para në dorë. Kjo përditësohet kur shoferi ta regjistrojë pagesën.",
+      paidPos: "U pagua me kartë në pajisjen e shoferit.",
+      paidCash: "U pagua me para në dorë te shoferi.",
+      unpaid:
+        "Shoferi e raportoi këtë udhëtim si të papaguar. Kontakto ndihmën për ta zgjidhur; deri atëherë nuk mund të kërkosh udhëtim tjetër.",
+      waived: "Ekipi i ndihmës e mbylli këtë udhëtim pa pagesë.",
+      nothingDue: "Nuk ka asgjë për të paguar për këtë kërkesë.",
       notCharged: "pa tarifim",
       cardHold: "bllokim në kartë",
     },
@@ -335,6 +384,18 @@ export default section(
       driver_interrupt_title: "Ta përfundosh udhëtimin para kohe?",
       driver_interrupt_body:
         "Bëje këtë vetëm nëse udhëtimi nuk mund të vazhdojë, për shembull për siguri ose problem me automjetin. Udhëtimi mbyllet si i ndërprerë: pasagjeri nuk tarifohet, bllokimi lirohet dhe udhëtimi shënohet për shqyrtim.",
+      passenger_unpaid_body_vehicle:
+        "Ende nuk është kërkuar asnjë shofer. Nuk ka asgjë për të paguar dhe nuk ka tarifë anulimi.",
+      passenger_searching_body_vehicle:
+        "Do të ndalojmë kërkimin e shoferit. Nuk ka asgjë për të paguar dhe nuk ka tarifë anulimi.",
+      passenger_assigned_body_vehicle:
+        "Shoferi do të njoftohet. Nuk ka asgjë për të paguar dhe nuk ka tarifë anulimi.",
+      driver_rematch_body_vehicle:
+        "Do të kërkojmë një shofer tjetër për këtë pasagjer. Ky udhëtim nuk do të të ofrohet më.",
+      driver_final_body_vehicle:
+        "Ky pasagjer është ricaktuar tashmë numrin maksimal të herëve, ndaj kërkesa e tij do të përfundojë.",
+      driver_interrupt_body_vehicle:
+        "Bëje këtë vetëm nëse udhëtimi nuk mund të vazhdojë, për shembull për siguri ose problem me automjetin. Udhëtimi mbyllet si i ndërprerë: pasagjeri nuk paguan asgjë dhe udhëtimi shënohet për shqyrtim.",
       keepRide: "Mbaje udhëtimin",
       keepDriving: "Vazhdo udhëtimin",
       confirmCancel: "Po, anuloje",
@@ -403,6 +464,24 @@ export default section(
       retrying: "Po provojmë sërish automatikisht.",
       mapWeb: "Harta ofrohet në aplikacionin për iOS dhe Android.",
       goBack: "Kthehu",
+    },
+    collection: {
+      title: "Regjistro pagesën",
+      prompt: "Si i pagoi pasagjeri {fare}?",
+      pos: "Me kartë në pajisje",
+      cash: "Para në dorë",
+      unpaid: "Pasagjeri nuk pagoi",
+      unpaidConfirm:
+        "Ta raportosh këtë udhëtim si të papaguar? Ekipi i ndihmës do ta shqyrtojë dhe pasagjeri nuk mund të kërkojë udhëtim tjetër derisa të zgjidhet.",
+      unpaidYes: "Po, raportoje si të papaguar",
+      back: "Kthehu",
+      saving: "Duke ruajtur…",
+      recorded_pos: "U regjistrua: pagesë me kartë në pajisje.",
+      recorded_cash: "U regjistrua: pagesë me para në dorë.",
+      recorded_unpaid:
+        "U raportua si i papaguar. Ekipi i ndihmës do ta shqyrtojë.",
+      recorded_waived: "Ekipi i ndihmës e mbylli këtë udhëtim pa pagesë.",
+      passengerDue: "Për t'i paguar shoferit: {fare}",
     },
     pin: {
       title: "PIN-i i udhëtimit",

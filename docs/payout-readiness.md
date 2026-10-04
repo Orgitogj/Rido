@@ -10,6 +10,11 @@ Decisions made:
 | Supported driver countries | Albania only |
 | Currency | Albanian lek, whole lek |
 | How passengers pay | In the vehicle: the business's card terminal, or cash. No card payment in the app |
+| Payout provider | None. Stripe Connect was the first choice but is not available: Stripe does not open accounts for businesses in Albania, and its cross-border payouts cover only the US, UK, EEA, Canada and Switzerland (checked on Stripe's site on 2026-10-04) |
+| How drivers are paid | Bank transfer made by the business outside the app, then recorded by an operator |
+| Refunds and unpaid trips | Nothing is charged in the app, so there are no card refunds or disputes in this mode. An unpaid trip earns nothing until support records it as paid |
+
+Still open: how often drivers are paid, any minimum amount, the commission rate (the default is 0%), how terminal payments are reconciled with the bank's statement, limits on cash a driver may hold, and tax and record-keeping duties in Albania.
 
 This document lists what has to be decided before payouts can be built, where a provider would connect to the existing code, and the accounting rules any implementation must keep.
 

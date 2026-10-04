@@ -55,7 +55,7 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | Quiet hours | Real push suppression and delivery on devices, across a real clock change | Manual checklist, section 8 |
 | Vehicle categories and stops | Real routes through stops (Google Routes with intermediates), navigation hand-off, two-device matching by category and seats | Manual checklist, sections 15 and 16 |
 | Scheduled requests | A real scheduler calling the sweep every minute, real push, real authorization at confirmation | Manual checklist, section 17 |
-| New screens | Screen-reader order, text scaling and keyboard behaviour on the support, booking, schedule and driver PIN screens | Manual checklist, sections 11 and 13–17 |
+| New screens | Screen-reader order, text scaling and keyboard behaviour on the support, booking, schedule and driver PIN screens | Manual checklist, sections 11 and 13–18 |
 | Session expiry | The sign-out on a refused session and the Clerk error-code mapping against real Clerk responses | Manual checklist, section 1 |
 
 ## Missing

@@ -216,6 +216,11 @@ Passenger on phone A, driver on phone B.
 Default payment mode. No Stripe keys are needed.
 
 - [ ] The price on the confirmation screen is in whole lek, with the note that the driver is paid by card or cash at the end.
+- [ ] **Request ride** asks for no card and starts the search at once.
+- [ ] Tap **Request ride** twice quickly: one ride is created.
+- [ ] Cancel while searching: the screen says there is nothing to pay.
+- [ ] After **Complete trip**, the driver's screen asks how the passenger paid. Record **Card on the terminal**: the passenger's ride screen and receipt show it within a few seconds.
+- [ ] Repeat with **Cash**.
 
 - [ ] Driver opens a support request about a completed trip with a photo; the operator replies; the driver gets the reply.
 - [ ] A ride with two stops and a larger category: PIN at pickup, both stops reached, completion, one capture for the quoted fare, receipt with stops and category.

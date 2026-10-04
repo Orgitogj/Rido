@@ -79,9 +79,9 @@ Counted per user (or per token for public share views) in `mobility.rate_limits`
 | Public share-link views | 120 per minute |
 | Account deletion attempts | 5 per hour |
 
-Quotes, chat messages and support replies have their own limits described in the README. These limits protect the database and third-party quotas; they are not a replacement for network-level protection.
+Quotes, chat messages and support replies have their own limits described in [reference.md](reference.md). These limits protect the database and third-party quotas; they are not a replacement for network-level protection.
 
-Redis and WebSockets are not used. Long polling plus PostgreSQL is adequate at the scale this project has been tested at; the README's Realtime limitation describes when to change that.
+Redis and WebSockets are not used. Long polling plus PostgreSQL is adequate at the scale this project has been tested at; the Realtime limitation in [reference.md](reference.md) describes when to change that.
 
 ## Deployment
 
@@ -89,7 +89,7 @@ Redis and WebSockets are not used. Long polling plus PostgreSQL is adequate at t
 2. Database: `npm run db:migrate` against the target database. Migrations are additive and tracked in `public.mobility_schema_migrations`. Take a backup first.
 3. Host `dist/` on a Node host that supports Expo Router API routes. Set the server-only variables there.
 4. Check `GET /api/ready` returns `200`.
-5. Register the Stripe webhook and schedule the sweep (see the README's deployment section).
+5. Register the Stripe webhook and schedule the sweep (see the deployment section of [reference.md](reference.md)).
 6. Grant the first operator from the CLI, sign in to `/admin`, open **System**, and clear every "Missing" line.
 7. Create service areas and fare policies. Nothing can be quoted until one area is active with a policy in effect.
 

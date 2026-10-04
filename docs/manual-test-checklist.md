@@ -221,6 +221,11 @@ Default payment mode. No Stripe keys are needed.
 - [ ] Cancel while searching: the screen says there is nothing to pay.
 - [ ] After **Complete trip**, the driver's screen asks how the passenger paid. Record **Card on the terminal**: the passenger's ride screen and receipt show it within a few seconds.
 - [ ] Repeat with **Cash**.
+- [ ] Close the driver app before recording: the driver screen shows "Payments to record" with a button that opens the trip.
+- [ ] Record **The passenger didn't pay** (with the confirmation): the trip appears in the console's review queue as "Reported unpaid", and the passenger is refused a new price with a message to contact support.
+- [ ] In the console, record that trip as paid in cash with a note: the passenger can request again, and the review item is gone.
+- [ ] Record another unpaid trip and close it without a payment: no earning is recorded for the driver.
+- [ ] Leave a completed trip unrecorded for two hours with the sweep running: it appears in the review queue as "Payment not recorded".
 
 - [ ] Driver opens a support request about a completed trip with a photo; the operator replies; the driver gets the reply.
 - [ ] A ride with two stops and a larger category: PIN at pickup, both stops reached, completion, one capture for the quoted fare, receipt with stops and category.

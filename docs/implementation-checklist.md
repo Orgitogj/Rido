@@ -32,6 +32,7 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | Vehicle categories | Operator-managed categories with history; fare policies per area and category; drivers linked through verification; passenger chooses category and passenger count; capacity and category matching; snapshots; deactivation rules; existing drivers and policies migrated to a default category |
 | Stops | Up to two stops, validated and routed in order, one fare, snapshot on the ride, ordered progress, completion blocked while a stop remains, hidden from the public share page |
 | Scheduled requests | Saved request with the area's time zone, sweep-driven confirmation window, fresh quote and authorization only on confirmation, expiry without a charge, cancellation, upcoming and past lists |
+| Payment in the vehicle | Requests without a card; lek fares rounded to a whole lek; the driver records terminal, cash or unpaid; unpaid trips flagged and the passenger blocked until support settles or waives; earnings written on collection; driver balance; operator-recorded transfers with idempotency and audit; card mode kept behind a setting |
 | Operations dashboard | Live and period counts with stated definitions, UTC, range limit, permissions, cache with freshness, per-section unavailable state, drill-down links, no personal data |
 
 ## Implemented, awaiting external verification

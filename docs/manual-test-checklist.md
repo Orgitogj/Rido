@@ -211,7 +211,11 @@ Passenger on phone A, driver on phone B.
 - [ ] Cancel an upcoming request; it moves to the earlier list.
 - [ ] Confirm with no driver online: the ride ends as no driver found and the hold is released.
 
-## 18. Combined scenarios
+## 18. Payment in the vehicle (lek)
+
+Default payment mode. No Stripe keys are needed.
+
+- [ ] The price on the confirmation screen is in whole lek, with the note that the driver is paid by card or cash at the end.
 
 - [ ] Driver opens a support request about a completed trip with a photo; the operator replies; the driver gets the reply.
 - [ ] A ride with two stops and a larger category: PIN at pickup, both stops reached, completion, one capture for the quoted fare, receipt with stops and category.

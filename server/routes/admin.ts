@@ -759,7 +759,8 @@ export async function syncRefund(
 
 interface SupportRow {
   id: string;
-  ride_id: string;
+  ride_id: string | null;
+  requester_role: "passenger" | "driver";
   user_id: string;
   category: string;
   message: string;
@@ -778,9 +779,11 @@ interface SupportRow {
 
 const SUPPORT_SQL = `
   SELECT s.*, ao.display_name AS assigned_name, ro.display_name AS resolved_by_name,
-         u.name AS passenger_name, u.clerk_id AS passenger_clerk_id
+         COALESCE(sdp.display_name, u.name) AS passenger_name,
+         u.clerk_id AS passenger_clerk_id
     FROM mobility.support_requests s
     JOIN mobility.users u ON u.id = s.user_id
+    LEFT JOIN mobility.driver_profiles sdp ON sdp.id = s.driver_profile_id
     LEFT JOIN mobility.operators ao ON ao.id = s.assigned_operator_id
     LEFT JOIN mobility.operators ro ON ro.id = s.resolved_by`;
 
@@ -790,6 +793,7 @@ const supportItem = (
 ): AdminSupportItem => ({
   id: s.id,
   rideId: s.ride_id,
+  role: s.requester_role,
   category: s.category,
   status: s.status,
   version: s.version,
@@ -819,6 +823,7 @@ export async function listSupport(
         AND ($5::timestamptz IS NULL OR s.created_at >= $5::timestamptz)
         AND ($6::timestamptz IS NULL OR s.created_at < $6::timestamptz)
         AND ($7::timestamptz IS NULL OR (s.created_at, s.id) < ($7::timestamptz, $8::uuid))
+        AND ($10::text IS NULL OR s.requester_role = $10::text)
       ORDER BY s.created_at DESC, s.id DESC
       LIMIT $9`,
     [
@@ -831,6 +836,7 @@ export async function listSupport(
       cursor?.[0] ?? null,
       cursor?.[1] ?? null,
       q.limit + 1,
+      q.role ?? null,
     ],
   );
   const result = page(rows, q.limit, (s) => [s.created_at, s.id]);

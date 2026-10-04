@@ -128,7 +128,13 @@ const SupportList = () => {
               </Text>
             </View>
             <Text className="text-sm text-general-200 mt-1" numberOfLines={1}>
-              {t("support.tripTo", { destination: item.destination })}
+              {item.destination
+                ? t("support.tripTo", { destination: item.destination })
+                : item.rideId
+                  ? t("support.rideRequest")
+                  : item.role === "driver"
+                    ? t("support.driverRequest")
+                    : t("support.accountRequest")}
             </Text>
             <View className="flex flex-row justify-between mt-2">
               <Text className="text-xs text-general-200">

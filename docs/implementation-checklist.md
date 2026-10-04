@@ -77,7 +77,8 @@ Nothing in the authorised scope is known to be missing. The following are delibe
 | --- | --- |
 | Verification against real providers | Needs the owner's Clerk, Stripe test-mode, Google Cloud and storage credentials, and physical devices |
 | Applying migrations 013–024 to the shared database | Not authorised in this work; run `npm run db:migrate` against the target database when ready, after reading the deployment notes in [operations.md](operations.md) |
-| Driver payouts | No payout provider or operating country has been chosen. Nothing moves money to drivers and no payout records exist. See [payout-readiness.md](payout-readiness.md) |
+| Automatic driver payouts | No payout provider can serve a business in Albania through Stripe; drivers are paid by bank transfer outside the app and operators record it. See [payout-readiness.md](payout-readiness.md) |
+| Card payments in the app | Switched off by default. A bank's online payment gateway for Albania would be a new integration and needs a bank, a merchant contract and its documentation |
 | Commercial values | Fare rates per category, commission, cancellation fees, category names and capacities, the scheduling window and attachment retention periods are business or legal decisions. The code ships development placeholders or neutral defaults and labels them |
 | Retention periods for retained records | A policy and legal decision; the code keeps the records and documents what is kept, without inventing a period |
 

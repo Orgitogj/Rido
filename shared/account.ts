@@ -317,14 +317,17 @@ export interface SupportMessageView {
   author: "user" | "operator";
   body: string;
   createdAt: string;
+  attachments: SupportAttachmentView[];
 }
 
 export interface SupportConversation extends MySupportRequest {
   message: string;
   resolutionMessage: string | null;
   resolvedAt: string | null;
+  attachments: SupportAttachmentView[];
   messages: SupportMessageView[];
   canReply: boolean;
+  attachmentsRemaining: number;
 }
 
 export interface AdminBadges {

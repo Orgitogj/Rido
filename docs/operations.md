@@ -154,3 +154,6 @@ Retained without the person's name: rides, payment and refund records, disputes,
 These periods are implementation defaults in `SUPPORT_RULES`, chosen so files don't accumulate. They are separate from driver-document retention and are not legal advice; change them to match your policy. The message text of a support request is retained as described above.
 
 **No retention period is implemented for the retained records.** How long financial, safety and audit records must or may be kept depends on the operating country and is a legal decision for the service owner. Until that decision is made the records are kept indefinitely, and this must be disclosed to users.
+
+## Payment in the vehicle and driver transfers
+

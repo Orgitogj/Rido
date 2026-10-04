@@ -1,3 +1,5 @@
+import { inQuietHours, quietHoursApplyTo } from "../shared/quietHours";
+
 import { NOTIFY, type NotificationText } from "./notificationText";
 
 import type { Database, SqlClient } from "./db";
@@ -358,6 +360,24 @@ export async function deliverPending(
     const pref = prefs[0];
     if (pref?.muted) {
       await finish(n.id, "skipped", "muted");
+      continue;
+    }
+    if (
+      pref?.quiet_enabled &&
+      pref.quiet_start_minute !== null &&
+      pref.quiet_end_minute !== null &&
+      pref.quiet_timezone &&
+      quietHoursApplyTo(n.kind) &&
+      inQuietHours(
+        {
+          startMinute: pref.quiet_start_minute,
+          endMinute: pref.quiet_end_minute,
+          timeZone: pref.quiet_timezone,
+        },
+        now,
+      )
+    ) {
+      await finish(n.id, "skipped", "quiet_hours");
       continue;
     }
     const { rows: tokens } = await deps.db.query<{ token: string }>(

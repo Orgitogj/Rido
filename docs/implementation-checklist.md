@@ -49,7 +49,7 @@ State of the application as of 2026-10-02. This file separates what the code doe
 | GPS | Foreground and background tracking, stale position handling, force-quit | Manual checklist, section 9 |
 | Accessibility | Screen-reader order and labels, text scaling, contrast on real devices | Manual checklist, section 11 |
 | Albanian wording | Written during implementation; not reviewed by a native-speaking translator | Native-speaker review |
-| PostgreSQL | The server suite passed twice on a disposable local PostgreSQL 18.4 instance with four connections (471 tests), so concurrency tests contended on real row locks. Not yet run on the PostgreSQL 16 CI job or against the production database | `TEST_DATABASE_URL` run described in the README; the CI `postgres` job |
+| PostgreSQL | The server suite passed twice on a disposable local PostgreSQL 18.4 instance with four connections (471 tests), so concurrency tests contended on real row locks. Not yet run on the PostgreSQL 16 CI job or against the production database | `TEST_DATABASE_URL` run described in [reference.md](reference.md); the CI `postgres` job |
 | Support attachments | Upload, confirmation and view links against a real private bucket; progress and retry on a real connection | Manual checklist, section 14 |
 | Trip PIN | Two-device behaviour, lock countdown, waiver notification | Manual checklist, section 13 |
 | Quiet hours | Real push suppression and delivery on devices, across a real clock change | Manual checklist, section 8 |

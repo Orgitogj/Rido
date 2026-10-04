@@ -241,6 +241,29 @@ export const supportUserMessageSchema = z.strictObject({
   attachmentIds,
 });
 
+export const supportCreateSchema = z
+  .strictObject({
+    role: z.enum(supportRoles),
+    rideId: z.uuid().nullable().optional(),
+    category: z.enum(supportCategories),
+    message: z.string().trim().min(5).max(SUPPORT_RULES.messageMax),
+    clientRequestId: z.uuid(),
+    attachmentIds,
+  })
+  .refine(
+    (r) => supportCategoriesFor(r.role, Boolean(r.rideId)).includes(r.category),
+    { message: "This category isn't available here.", path: ["category"] },
+  );
+
+export const supportAttachmentUploadSchema = z.strictObject({
+  contentType: z.enum(supportAttachmentTypes),
+  sizeBytes: z
+    .number()
+    .int()
+    .min(SUPPORT_RULES.attachmentMinBytes)
+    .max(SUPPORT_RULES.attachmentMaxBytes),
+});
+
 export const supportListQuerySchema = z.strictObject({
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),

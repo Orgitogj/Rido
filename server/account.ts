@@ -161,6 +161,11 @@ async function anonymize(tx: SqlClient, userId: string, now: Date) {
     [userId],
   );
   await tx.query(
+    `UPDATE mobility.support_attachments SET delete_after = $2
+      WHERE user_id = $1 AND status <> 'deleted'`,
+    [userId, now],
+  );
+  await tx.query(
     `UPDATE mobility.trip_shares SET revoked_at = $2
       WHERE created_by = $1 AND revoked_at IS NULL`,
     [userId, now],

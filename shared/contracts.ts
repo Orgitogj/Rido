@@ -984,6 +984,7 @@ export interface AdminSupportItem {
 export interface AdminSupportDetail extends AdminSupportItem {
   message: string;
   passenger: { name: string | null; account: string };
+  attachments: AdminSupportAttachment[];
   resolutionMessage: string | null;
   resolvedBy: string | null;
   notes: { author: string; note: string; createdAt: string }[];
@@ -994,6 +995,14 @@ export interface AdminSupportDetail extends AdminSupportItem {
     toStatus: string | null;
     createdAt: string;
   }[];
+}
+
+export interface AdminSupportAttachment {
+  id: string;
+  messageId: string | null;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
 }
 
 export interface PassengerSupportRequest {

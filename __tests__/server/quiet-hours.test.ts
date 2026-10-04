@@ -177,3 +177,197 @@ describe("quiet hours helpers", () => {
     }
   });
 });
+
+describe("quiet hours preferences", () => {
+  it("validates input and keeps the setting when it's omitted", async () => {
+    const fresh = await call(ctx, getNotificationPreferences, { user: P });
+    expect(fresh.json.data.quietHours).toBeNull();
+
+    for (const quietHours of [
+      { enabled: true, start: "22:00", end: "22:00", timezone: "UTC" },
+      { enabled: true, start: "25:00", end: "07:00", timezone: "UTC" },
+      { enabled: true, start: "22:00", end: "07:00", timezone: "Mars/Olympus" },
+      { enabled: true, start: "22:00", end: "07:00" },
+      {
+        enabled: true,
+        start: "22:00",
+        end: "07:00",
+        timezone: "UTC",
+        extra: 1,
+      },
+    ]) {
+      expect((await put(P, { ...BASE, quietHours })).status).toBe(400);
+    }
+
+    const saved = await quiet(P, "22:00", "07:00", "Europe/Tirane");
+    expect(saved.status).toBe(200);
+    expect(saved.json.data.quietHours).toEqual({
+      enabled: true,
+      start: "22:00",
+      end: "07:00",
+      timezone: "Europe/Tirane",
+    });
+
+    const toggled = await put(P, { ...BASE, chatMessages: false });
+    expect(toggled.json.data).toMatchObject({
+      chatMessages: false,
+      quietHours: { enabled: true, start: "22:00", timezone: "Europe/Tirane" },
+    });
+
+    const other = await call(ctx, getNotificationPreferences, { user: Q });
+    expect((other.json.data as NotificationPreferences).quietHours).toBeNull();
+
+    const off = await put(P, {
+      ...BASE,
+      quietHours: {
+        enabled: false,
+        start: "22:00",
+        end: "07:00",
+        timezone: "Europe/Tirane",
+      },
+    });
+    expect(off.json.data.quietHours.enabled).toBe(false);
+    const cleared = await put(P, { ...BASE, quietHours: null });
+    expect(cleared.json.data.quietHours).toBeNull();
+  });
+
+  it("suppresses optional pushes in quiet hours, keeps them in the inbox, and sends ride-critical ones", async () => {
+    ctx.clock.now = new Date("2026-01-15T23:30:00Z");
+    await registerDevice(ctx, P, P_TOKEN);
+    await quiet(P, "22:00", "07:00", "UTC");
+    await onlineDriver(ctx, D);
+    const { rideId } = await requestRide(ctx, P);
+    await assign(ctx, D, rideId);
+    await drive(ctx, D, rideId);
+    await sweep(ctx.deps);
+
+    expect(kinds(P_TOKEN)).toEqual([
+      "ride_accepted",
+      "ride_arrived",
+      "ride_started",
+    ]);
+    const items = (await inbox(P)).items.map((i) => i.kind);
+    expect(items).toEqual(
+      expect.arrayContaining([
+        "ride_accepted",
+        "ride_arrived",
+        "ride_started",
+        "ride_completed",
+      ]),
+    );
+    const { rows } = await db.query<{ status: string; last_error: string }>(
+      "SELECT status, last_error FROM mobility.notifications WHERE kind = 'ride_completed'",
+    );
+    expect(rows).toEqual([{ status: "skipped", last_error: "quiet_hours" }]);
+  });
+
+  it("doesn't send a burst of old notifications when quiet hours end", async () => {
+    ctx.clock.now = new Date("2026-01-15T23:30:00Z");
+    await makeOperator(ctx, OPS, "view,support");
+    await registerDevice(ctx, P, P_TOKEN);
+    await registerDevice(ctx, Q, Q_TOKEN);
+    await quiet(P, "22:00", "07:00", "UTC");
+
+    const ids: Record<string, string> = {};
+    for (const user of [P, Q]) {
+      const created = await call(ctx, createSupport, {
+        user,
+        body: {
+          role: "passenger",
+          category: "account_issue",
+          message: "Please help with my account.",
+          clientRequestId: randomUUID(),
+        },
+      });
+      ids[user] = created.json.data.id;
+      await adminPost(
+        ctx,
+        OPS,
+        assignSupport,
+        { id: ids[user] },
+        { expectedVersion: 1 },
+      );
+      await adminPost(
+        ctx,
+        OPS,
+        adminSupportReply,
+        { id: ids[user] },
+        { body: "We're on it.", clientMessageId: randomUUID() },
+      );
+    }
+    await sweep(ctx.deps);
+    expect(kinds(P_TOKEN)).toEqual([]);
+    expect(kinds(Q_TOKEN).length).toBeGreaterThan(0);
+    expect((await inbox(P)).unread).toBeGreaterThan(0);
+
+    advanceClock(ctx, 8 * 3600);
+    await sweep(ctx.deps);
+    await sweep(ctx.deps);
+    expect(kinds(P_TOKEN)).toEqual([]);
+
+    await adminPost(
+      ctx,
+      OPS,
+      adminSupportReply,
+      { id: ids[P] },
+      { body: "Any update from your side?", clientMessageId: randomUUID() },
+    );
+    await sweep(ctx.deps);
+    expect(kinds(P_TOKEN)).toEqual(["support_update"]);
+  });
+
+  it("never hides ride requests from an online driver because of quiet hours or other switches", async () => {
+    ctx.clock.now = new Date("2026-01-15T23:30:00Z");
+    await onlineDriver(ctx, D);
+    await registerDevice(ctx, D, D_TOKEN);
+    await put(D, {
+      ...BASE,
+      accountUpdates: false,
+      chatMessages: false,
+      rideUpdates: false,
+      quietHours: {
+        enabled: true,
+        start: "22:00",
+        end: "07:00",
+        timezone: "UTC",
+      },
+    });
+    const { rideId } = await requestRide(ctx, P);
+    await sweep(ctx.deps);
+    expect(kinds(D_TOKEN)).toEqual(["offer"]);
+    await assign(ctx, D, rideId);
+
+    await put(D, { ...BASE, rideOffers: false });
+    const { rows } = await db.query<{ ride_offers: boolean }>(
+      `SELECT ride_offers FROM mobility.notification_preferences p
+         JOIN mobility.users u ON u.id = p.user_id WHERE u.clerk_id = $1`,
+      [D],
+    );
+    expect(rows[0].ride_offers).toBe(false);
+  });
+
+  it("applies each user's own time zone", async () => {
+    ctx.clock.now = new Date("2026-01-15T21:30:00Z");
+    await makeOperator(ctx, OPS, "view,support");
+    await registerDevice(ctx, P, P_TOKEN);
+    await registerDevice(ctx, Q, Q_TOKEN);
+    await quiet(P, "22:00", "07:00", "Europe/Tirane");
+    await quiet(Q, "22:00", "07:00", "UTC");
+    for (const user of [P, Q]) {
+      const created = await call(ctx, createSupport, {
+        user,
+        body: {
+          role: "passenger",
+          category: "account_issue",
+          message: "Please help with my account.",
+          clientRequestId: randomUUID(),
+        },
+      });
+      const id = created.json.data.id;
+      await adminPost(ctx, OPS, assignSupport, { id }, { expectedVersion: 1 });
+    }
+    await sweep(ctx.deps);
+    expect(kinds(P_TOKEN)).toEqual([]);
+    expect(kinds(Q_TOKEN)).toEqual(["support_update"]);
+  });
+});

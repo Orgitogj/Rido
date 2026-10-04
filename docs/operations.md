@@ -128,6 +128,9 @@ The database is the system of record: rides, payment state, the earnings ledger,
 | Driver can't start a trip because of the PIN | The driver's screen shows attempts left and the lock. After three locks the driver is told to contact support. An operator with `support` opens the ride in the console and waives the PIN with a reason; the passenger is notified. Cancelling so the passenger is re-matched also clears it |
 | Scheduled request not opened | Check the sweep's `scheduled_rides` step on the System page. Requests whose window has passed expire without a charge; the passenger can request a ride now |
 | Support attachment won't open | Links last 60 seconds; open it again. If storage is unreachable, the System page shows failing deletions and uploads answer 503 |
+| Driver didn't record the payment | After two hours the trip appears in the review queue as "Payment not recorded". Ask the driver, then record it on the ride page with a note |
+| Trip reported unpaid | The passenger is blocked from new requests. On the ride page, record it as paid (terminal or cash) or close it without a payment, with a note |
+| Transfer recorded by mistake | Records can't be edited. Record a transfer in the other direction for the same amount, with a note explaining it |
 | Dashboard section unavailable | The page shows which group failed instead of zeros. Refresh; if it persists, check the database and the server log line `dashboard_section_failed` |
 
 ## Account deletion and retained records

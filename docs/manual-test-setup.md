@@ -11,8 +11,9 @@ Nothing on this page was executed during implementation. Every step needs your c
 | Database | `DATABASE_URL` | Present. Points at Neon, the shared remote database. Migrations 013–024 have not been applied there |
 | Clerk | `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` | Present, development instance |
 | Clerk | `CLERK_SECRET_KEY` or `CLERK_JWT_KEY` | **Missing.** The server cannot verify any session without one of them |
-| Stripe | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY` | Present, both test mode |
-| Stripe | `STRIPE_WEBHOOK_SECRET` | Missing. Optional in development: the sweep and the app's refresh recover payment state |
+| Payments | `PAYMENT_MODE`, `APP_CURRENCY` | Missing, so the defaults apply: paid in the vehicle, in lek. Nothing to add |
+| Stripe | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY` | Present, test mode. Not used in the default payment mode |
+| Stripe | `STRIPE_WEBHOOK_SECRET` | Missing. Not used in the default payment mode |
 | Google Routes | `GOOGLE_ROUTES_API_KEY` | **Missing.** No quote can be priced without it |
 | Google Places | `EXPO_PUBLIC_GOOGLE_API_KEY` | Present |
 | Storage | `DOCUMENT_STORAGE_*` | Missing. Driver documents and support attachments answer 503; drivers can only be approved with the CLI waiver |
@@ -86,7 +87,7 @@ npm start
      npm run admin -- drivers
      npm run admin -- approve <ref> --waive-documents --categories general --reason "Manual test driver"
      ```
-6. **Passenger.** On phone A, sign up as a third user. Stripe test card: `4242 4242 4242 4242`, any future date, any CVC.
+6. **Passenger.** On phone A, sign up as a third user. No card is needed: the passenger pays the driver at the end of the trip.
 
 ## 5. Test order
 

@@ -1,8 +1,10 @@
 import {
   type MySupportRequest,
   SUPPORT_RULES,
+  type SupportCategory,
   type SupportConversation,
   type SupportMessageView,
+  type SupportRole,
   type SupportStatus,
 } from "../shared/account";
 
@@ -15,15 +17,17 @@ import {
 } from "./notifications";
 import { NOTIFY } from "./notificationText";
 import { audit, type OperatorRow } from "./operators";
+import { attachmentsOf, attachToRequest } from "./supportAttachments";
 
 interface RequestRow {
   id: string;
-  ride_id: string;
+  ride_id: string | null;
   user_id: string;
+  requester_role: SupportRole;
   category: string;
   status: SupportStatus;
   message: string;
-  destination_address: string;
+  destination_address: string | null;
   created_at: Date;
   updated_at: Date;
   resolved_at: Date | null;
@@ -43,12 +47,14 @@ interface MessageRow {
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
 const SELECT = `
-  SELECT s.id, s.ride_id, s.user_id, s.category, s.status, s.message,
-         r.destination_address, s.created_at, s.updated_at, s.resolved_at,
+  SELECT s.id, s.ride_id, s.user_id, s.requester_role, s.category, s.status, s.message,
+         CASE WHEN s.requester_role = 'passenger' THEN r.destination_address END
+           AS destination_address,
+         s.created_at, s.updated_at, s.resolved_at,
          s.resolution_message, s.user_read_at, s.last_operator_message_at,
          s.assigned_operator_id
     FROM mobility.support_requests s
-    JOIN mobility.rides r ON r.id = s.ride_id`;
+    LEFT JOIN mobility.rides r ON r.id = s.ride_id`;
 
 const unread = (r: RequestRow) => {
   const latest = Math.max(
@@ -66,6 +72,7 @@ const unread = (r: RequestRow) => {
 const item = (r: RequestRow): MySupportRequest => ({
   id: r.id,
   rideId: r.ride_id,
+  role: r.requester_role,
   category: r.category,
   status: r.status,
   destination: r.destination_address,
@@ -106,12 +113,17 @@ async function messagesOf(db: SqlClient, requestId: string) {
       WHERE support_request_id = $1 ORDER BY id LIMIT 500`,
     [requestId],
   );
-  return rows.map((m): SupportMessageView => ({
-    id: m.id,
-    author: m.author,
-    body: m.body,
-    createdAt: iso(m.created_at)!,
-  }));
+  const files = await attachmentsOf(db, requestId);
+  return {
+    files,
+    messages: rows.map((m): SupportMessageView => ({
+      id: m.id,
+      author: m.author,
+      body: m.body,
+      createdAt: iso(m.created_at)!,
+      attachments: files.forMessage(m.id),
+    })),
+  };
 }
 
 export async function mySupportConversation(
@@ -130,21 +142,132 @@ export async function mySupportConversation(
     "UPDATE mobility.support_requests SET user_read_at = $2 WHERE id = $1",
     [requestId, now],
   );
+  const { files, messages } = await messagesOf(db, requestId);
   return {
     ...item({ ...r, user_read_at: now }),
     message: r.message,
     resolutionMessage: r.status === "resolved" ? r.resolution_message : null,
     resolvedAt: iso(r.resolved_at),
-    messages: await messagesOf(db, requestId),
+    attachments: files.initial,
+    messages,
     canReply: r.status !== "resolved",
+    attachmentsRemaining: Math.max(
+      0,
+      SUPPORT_RULES.attachmentsPerRequest - files.count,
+    ),
   };
+}
+
+async function rideAccess(
+  db: SqlClient,
+  userId: string,
+  rideId: string,
+  role: SupportRole,
+): Promise<{ driverProfileId: string | null }> {
+  if (role === "passenger") {
+    const { rows } = await db.query(
+      `SELECT 1 FROM mobility.rides r
+        WHERE r.id = $1 AND r.user_id = $2
+          AND (r.requested_at IS NOT NULL OR r.status = 'legacy')`,
+      [rideId, userId],
+    );
+    if (!rows.length) throw notFound("Ride");
+    return { driverProfileId: null };
+  }
+  const { rows } = await db.query<{ id: string }>(
+    `SELECT dp.id FROM mobility.driver_profiles dp
+      WHERE dp.user_id = $2
+        AND (EXISTS (SELECT 1 FROM mobility.rides r
+                      WHERE r.id = $1 AND r.driver_profile_id = dp.id)
+          OR EXISTS (SELECT 1 FROM mobility.ride_offers o
+                      WHERE o.ride_id = $1 AND o.driver_profile_id = dp.id
+                        AND o.status IN ('accepted', 'withdrawn')))`,
+    [rideId, userId],
+  );
+  if (!rows[0]) throw notFound("Ride");
+  return { driverProfileId: rows[0].id };
+}
+
+export async function createSupportRequest(
+  deps: { db: Database; now: () => Date },
+  userId: string,
+  input: {
+    role: SupportRole;
+    rideId?: string | null;
+    category: SupportCategory;
+    message: string;
+    clientRequestId?: string | null;
+    attachmentIds?: string[];
+  },
+): Promise<{ id: string; created: boolean }> {
+  const now = deps.now();
+  return transaction(deps.db, async (tx) => {
+    await tx.query("SELECT 1 FROM mobility.users WHERE id = $1 FOR UPDATE", [
+      userId,
+    ]);
+    if (input.clientRequestId) {
+      const { rows: existing } = await tx.query<{ id: string }>(
+        `SELECT id FROM mobility.support_requests
+          WHERE user_id = $1 AND client_request_id = $2`,
+        [userId, input.clientRequestId],
+      );
+      if (existing[0]) return { id: existing[0].id, created: false };
+    }
+    let driverProfileId: string | null = null;
+    if (input.rideId) {
+      driverProfileId = (await rideAccess(tx, userId, input.rideId, input.role))
+        .driverProfileId;
+    } else if (input.role === "driver") {
+      const { rows } = await tx.query<{ id: string }>(
+        "SELECT id FROM mobility.driver_profiles WHERE user_id = $1 AND deleted_at IS NULL",
+        [userId],
+      );
+      if (!rows[0]) {
+        throw new ApiError(
+          403,
+          "NOT_A_DRIVER",
+          "Start a driver application before contacting driver support.",
+        );
+      }
+      driverProfileId = rows[0].id;
+    }
+    const { rows } = await tx.query<{ id: string }>(
+      `INSERT INTO mobility.support_requests
+         (ride_id, user_id, category, message, requester_role, driver_profile_id,
+          client_request_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING id`,
+      [
+        input.rideId ?? null,
+        userId,
+        input.category,
+        input.message,
+        input.role,
+        driverProfileId,
+        input.clientRequestId ?? null,
+        now,
+      ],
+    );
+    await tx.query(
+      `INSERT INTO mobility.support_events (support_request_id, action, to_status, created_at)
+       VALUES ($1, 'created', 'open', $2)`,
+      [rows[0].id, now],
+    );
+    await attachToRequest(
+      tx,
+      userId,
+      rows[0].id,
+      null,
+      input.attachmentIds ?? [],
+    );
+    return { id: rows[0].id, created: true };
+  });
 }
 
 export async function userSupportMessage(
   deps: { db: Database; now: () => Date },
   userId: string,
   requestId: string,
-  input: { body: string; clientMessageId: string },
+  input: { body: string; clientMessageId: string; attachmentIds?: string[] },
 ) {
   const now = deps.now();
   await transaction(deps.db, async (tx) => {
@@ -162,7 +285,7 @@ export async function userSupportMessage(
       throw new ApiError(
         409,
         "SUPPORT_CLOSED",
-        "This request is resolved. Open a new request from the trip's receipt if you still need help.",
+        "This request is resolved. Open a new request if you still need help.",
       );
     }
     const { rows: counts } = await tx.query<{ total: number; recent: number }>(
@@ -187,11 +310,18 @@ export async function userSupportMessage(
         SUPPORT_RULES.burstWindowSeconds,
       );
     }
-    await tx.query(
+    const inserted = await tx.query<{ id: string }>(
       `INSERT INTO mobility.support_messages
          (support_request_id, author, user_id, body, client_message_id, created_at)
-       VALUES ($1, 'user', $2, $3, $4, $5)`,
+       VALUES ($1, 'user', $2, $3, $4, $5) RETURNING id::text`,
       [requestId, userId, input.body, input.clientMessageId, now],
+    );
+    await attachToRequest(
+      tx,
+      userId,
+      requestId,
+      inserted.rows[0].id,
+      input.attachmentIds ?? [],
     );
     await tx.query(
       `UPDATE mobility.support_requests
@@ -215,7 +345,7 @@ export async function notifySupport(
   dedupe: string,
   now: Date,
 ) {
-  const { rows } = await tx.query<{ user_id: string; ride_id: string }>(
+  const { rows } = await tx.query<{ user_id: string; ride_id: string | null }>(
     "SELECT user_id, ride_id FROM mobility.support_requests WHERE id = $1",
     [requestId],
   );
@@ -316,5 +446,5 @@ export async function supportMessagesForOperator(
   db: SqlClient,
   requestId: string,
 ) {
-  return messagesOf(db, requestId);
+  return (await messagesOf(db, requestId)).messages;
 }

@@ -44,6 +44,7 @@ import { ratingState, summarySql, toSummary } from "./ratings";
 import { resubmitStaleRefunds, syncOpenRefunds } from "./refunds";
 import { pruneRoutingUsage } from "./routingBudget";
 import { redactExpiredEvidence } from "./safety";
+import { purgeSupportAttachments } from "./supportAttachments";
 import { syncOpenTipRefunds } from "./tipRefunds";
 import { syncOpenTips } from "./tips";
 import { enforceDriverEligibility, purgeDriverDocuments } from "./verification";
@@ -433,6 +434,7 @@ export async function sweep(
       ["routing_usage_prune", () => pruneRoutingUsage(deps.db, now)],
       ["rate_limit_prune", () => pruneRateLimits(deps.db, now)],
       ["driver_eligibility", () => enforceDriverEligibility(deps)],
+      ["support_attachment_purge", () => purgeSupportAttachments(deps)],
       ["driver_document_purge", () => purgeDriverDocuments(deps)],
       ["earnings_reconcile", () => reconcileEarnings(deps)],
       ["refund_resubmit", () => resubmitStaleRefunds(deps)],

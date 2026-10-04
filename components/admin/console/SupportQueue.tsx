@@ -106,7 +106,7 @@ const SupportQueue = () => {
         >
           <View className="flex flex-row justify-between">
             <Text className="text-sm font-JakartaSemiBold">
-              {item.category.replace(/_/g, " ")} ·{" "}
+              {item.role} · {item.category.replace(/_/g, " ")} ·{" "}
               {item.status.replace("_", " ")}
               {item.assignedTo
                 ? ` · ${item.assignedToMe ? "you" : item.assignedTo}`
@@ -117,7 +117,8 @@ const SupportQueue = () => {
             </Text>
           </View>
           <Text className="text-xs text-neutral-600 mt-1" numberOfLines={1}>
-            Ride {shortId(item.rideId)} · {item.preview}
+            {item.rideId ? `Ride ${shortId(item.rideId)}` : "Account"} ·{" "}
+            {item.preview}
           </Text>
         </ListRow>
       ))}

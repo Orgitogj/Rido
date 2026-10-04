@@ -1293,7 +1293,9 @@ export async function processStorageDeletions(
       const job = rows[0];
       if (!job) return "empty";
       const live = await tx.query(
-        "SELECT 1 FROM mobility.driver_documents WHERE storage_key = $1",
+        `SELECT 1 FROM mobility.driver_documents WHERE storage_key = $1
+         UNION ALL
+         SELECT 1 FROM mobility.support_attachments WHERE storage_key = $1`,
         [job.key],
       );
       if (live.rows.length) {

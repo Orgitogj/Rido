@@ -117,7 +117,13 @@ const SupportThread = () => {
                   {t(`support.category.${categoryKey(data.category)}`)}
                 </Text>
                 <Text className="text-sm text-general-200 mt-1">
-                  {t("support.tripTo", { destination: data.destination })}
+                  {data.destination
+                    ? t("support.tripTo", { destination: data.destination })
+                    : data.rideId
+                      ? t("support.rideRequest")
+                      : data.role === "driver"
+                        ? t("support.driverRequest")
+                        : t("support.accountRequest")}
                 </Text>
                 <Text className="text-sm mt-1">
                   {t(`support.status.${data.status}`)} ·{" "}

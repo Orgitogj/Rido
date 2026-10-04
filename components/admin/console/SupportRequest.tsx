@@ -97,8 +97,9 @@ const SupportDetailPage = () => {
       <Section title={`Support request ${shortId(s.id)}`}>
         <KeyValue label="Status" value={s.status.replace("_", " ")} />
         <KeyValue label="Category" value={s.category.replace(/_/g, " ")} />
+        <KeyValue label="Asked as" value={s.role} />
         <KeyValue
-          label="Passenger"
+          label="Requester"
           value={`${s.passenger.name ?? "No name"} (${s.passenger.account})`}
         />
         <KeyValue
@@ -113,22 +114,26 @@ const SupportDetailPage = () => {
             value={`${when(s.resolvedAt)} by ${s.resolvedBy ?? "—"}`}
           />
         )}
-        <Pressable
-          onPress={() =>
-            router.push({
-              pathname: "/admin/rides/[id]",
-              params: { id: s.rideId },
-            })
-          }
-          className="mt-2"
-        >
-          <Text className="text-sm text-[#0286FF]">
-            Open ride {shortId(s.rideId)} →
+        {s.rideId ? (
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/admin/rides/[id]",
+                params: { id: s.rideId! },
+              })
+            }
+            className="mt-2"
+          >
+            <Text className="text-sm text-[#0066CC]">
+              Open ride {shortId(s.rideId)} →
+            </Text>
+          </Pressable>
+        ) : (
+          <Text className="text-sm text-general-200 mt-2">
+            About the account, not a specific ride.
           </Text>
-        </Pressable>
-        <Text className="text-sm mt-4 font-JakartaSemiBold">
-          Passenger&apos;s message
-        </Text>
+        )}
+        <Text className="text-sm mt-4 font-JakartaSemiBold">Request</Text>
         <Text className="text-sm mt-1" selectable>
           {s.message}
         </Text>

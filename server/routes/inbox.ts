@@ -3,20 +3,31 @@ import {
   inboxQuerySchema,
   inboxReadSchema,
   notificationPreferencesSchema,
+  supportAttachmentUploadSchema,
+  supportCreateSchema,
   supportListQuerySchema,
   supportMessageSchema,
+  supportUserMessageSchema,
 } from "../../shared/account";
 import { rideIdSchema } from "../../shared/contracts";
 import { type Deps, parseInput, readJson } from "../http";
 import { getPreferences, listInbox, markRead, setPreferences } from "../inbox";
 import { permissionsOf, requireOperator } from "../operators";
+import { enforceRateLimit } from "../rateLimit";
 import {
+  createSupportRequest,
   listMySupport,
   mySupportConversation,
   operatorSupportMessage,
   supportMessagesForOperator,
   userSupportMessage,
 } from "../support";
+import {
+  attachmentAccessForUser,
+  completeAttachmentUpload,
+  removeAttachment,
+  requestAttachmentUpload,
+} from "../supportAttachments";
 import { ensureUser } from "../users";
 
 import { decodeCursor, encodeCursor } from "./admin";
@@ -104,11 +115,83 @@ export async function postSupportMessage(
 ) {
   const user = await me(request, deps);
   const id = parseInput(rideIdSchema, params.id);
-  const input = await readJson(request, supportMessageSchema);
+  const input = await readJson(request, supportUserMessageSchema);
   return Response.json(
     { data: await userSupportMessage(deps, user.id, id, input) },
     { status: 201 },
   );
+}
+
+export async function createSupport(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const input = await readJson(request, supportCreateSchema);
+  await enforceRateLimit(deps.db, "supportRequests", user.id, deps.now());
+  const created = await createSupportRequest(deps, user.id, input);
+  return Response.json(
+    {
+      data: await mySupportConversation(
+        deps.db,
+        user.id,
+        created.id,
+        deps.now(),
+      ),
+    },
+    { status: created.created ? 201 : 200 },
+  );
+}
+
+export async function createSupportAttachment(
+  request: Request,
+  _params: unknown,
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const input = await readJson(request, supportAttachmentUploadSchema);
+  await enforceRateLimit(deps.db, "uploadTickets", user.id, deps.now());
+  return Response.json(
+    { data: await requestAttachmentUpload(deps, user.id, input) },
+    { status: 201 },
+  );
+}
+
+export async function completeSupportAttachment(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const id = parseInput(rideIdSchema, params.id);
+  return Response.json({
+    data: await completeAttachmentUpload(deps, user.id, id),
+  });
+}
+
+export async function deleteSupportAttachment(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const id = parseInput(rideIdSchema, params.id);
+  await removeAttachment(deps, user.id, id);
+  return Response.json({ data: { removed: true } });
+}
+
+export async function supportAttachmentAccess(
+  request: Request,
+  params: { id?: string; attachmentId?: string },
+  deps: Deps,
+) {
+  const user = await me(request, deps);
+  const id = parseInput(rideIdSchema, params.id);
+  const attachmentId = parseInput(rideIdSchema, params.attachmentId);
+  return Response.json({
+    data: await attachmentAccessForUser(deps, user.id, id, attachmentId),
+  });
 }
 
 export async function adminSupportMessages(

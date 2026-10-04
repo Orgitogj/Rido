@@ -38,7 +38,9 @@ Record the build, date, device models and OS versions with the results.
 - [ ] Save a place outside every service area and try to book from it: the booking screen explains that the saved place is outside coverage and the place stays saved.
 - [ ] Sign in as a second user on the same phone: the first user's places are not shown.
 
-## 3. Booking and payment (Stripe test mode)
+## 3. Booking and payment (card mode only)
+
+This section applies only with `PAYMENT_MODE=card_online`. In the default mode, use section 18 instead.
 
 - [ ] Get a price; the confirmation shows price, distance, time and how long the price is held.
 - [ ] Wait for the price to expire on the confirmation screen: the request button is replaced by an expiry notice; getting a new price shows whether it changed.

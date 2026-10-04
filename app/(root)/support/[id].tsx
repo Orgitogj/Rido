@@ -13,20 +13,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import CustomButton from "@/components/CustomButton";
 import ListState from "@/components/ListState";
 import ScreenHeader from "@/components/ScreenHeader";
+import {
+  AttachmentLinks,
+  AttachmentPicker,
+} from "@/components/SupportAttachments";
 import { ApiRequestError, useApi } from "@/lib/fetch";
 import { useI18n } from "@/lib/i18n";
 import { newClientId } from "@/lib/places";
-import { SUPPORT_RULES, type SupportConversation } from "@/shared/account";
+import { useSupportAttachments } from "@/lib/supportUploads";
+import {
+  SUPPORT_RULES,
+  supportCategories,
+  type SupportCategory,
+  type SupportConversation,
+} from "@/shared/account";
 
-const KNOWN = [
-  "charge_question",
-  "trip_problem",
-  "driver_issue",
-  "other",
-] as const;
-const categoryKey = (c: string) =>
-  (KNOWN as readonly string[]).includes(c)
-    ? (c as (typeof KNOWN)[number])
+const categoryKey = (c: string): SupportCategory =>
+  (supportCategories as readonly string[]).includes(c)
+    ? (c as SupportCategory)
     : "other";
 
 const SupportThread = () => {
@@ -42,6 +46,9 @@ const SupportThread = () => {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const pendingId = useRef<string | null>(null);
+  const attachments = useSupportAttachments(
+    SUPPORT_RULES.attachmentsPerMessage,
+  );
 
   const load = useCallback(async () => {
     try {
@@ -70,10 +77,15 @@ const SupportThread = () => {
     try {
       setData(
         await request<SupportConversation>(`/api/support/${id}/messages`, {
-          body: { body, clientMessageId: pendingId.current },
+          body: {
+            body,
+            clientMessageId: pendingId.current,
+            attachmentIds: attachments.readyIds,
+          },
         }),
       );
       pendingId.current = null;
+      attachments.clear();
       setDraft("");
     } catch (e) {
       setSendError(errorText(e));
@@ -135,12 +147,16 @@ const SupportThread = () => {
                 <Text className="text-sm mt-1" selectable>
                   {data.message}
                 </Text>
+                <AttachmentLinks
+                  requestId={data.id}
+                  attachments={data.attachments}
+                />
               </View>
 
               {data.messages.map((m) => (
                 <View
                   key={m.id}
-                  className={`rounded-2xl p-3 mb-2 max-w-[88%] ${m.author === "user" ? "bg-[#0286FF] self-end" : "bg-white self-start"}`}
+                  className={`rounded-2xl p-3 mb-2 max-w-[88%] ${m.author === "user" ? "bg-[#0066CC] self-end" : "bg-white self-start"}`}
                 >
                   <Text
                     className={`text-xs ${m.author === "user" ? "text-white" : "text-general-200"}`}
@@ -154,6 +170,11 @@ const SupportThread = () => {
                   >
                     {m.body}
                   </Text>
+                  <AttachmentLinks
+                    requestId={data.id}
+                    attachments={m.attachments}
+                    light={m.author === "user"}
+                  />
                 </View>
               ))}
 
@@ -184,9 +205,17 @@ const SupportThread = () => {
                     className="min-h-[80px] rounded-xl bg-neutral-100 p-3 text-base"
                     style={{ textAlignVertical: "top" }}
                   />
+                  <AttachmentPicker
+                    controller={attachments}
+                    max={Math.min(
+                      SUPPORT_RULES.attachmentsPerMessage,
+                      data.attachmentsRemaining,
+                    )}
+                    disabled={sending}
+                  />
                   {sendError && (
                     <Text
-                      className="text-sm text-red-500 mt-2"
+                      className="text-sm text-red-600 mt-2"
                       accessibilityLiveRegion="polite"
                     >
                       {sendError}
@@ -194,7 +223,7 @@ const SupportThread = () => {
                   )}
                   <CustomButton
                     title={sending ? t("common.sending") : t("common.send")}
-                    disabled={sending || !draft.trim()}
+                    disabled={sending || !draft.trim() || attachments.blocked}
                     className="mt-3"
                     onPress={send}
                   />

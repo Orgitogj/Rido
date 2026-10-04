@@ -8,24 +8,21 @@ import ListState from "@/components/ListState";
 import ScreenHeader from "@/components/ScreenHeader";
 import { useApi } from "@/lib/fetch";
 import { useI18n } from "@/lib/i18n";
-
-import type { MySupportRequest, SupportStatus } from "@/shared/account";
+import {
+  type MySupportRequest,
+  supportCategories,
+  type SupportCategory,
+  type SupportStatus,
+} from "@/shared/account";
 
 interface SupportPage {
   items: MySupportRequest[];
   nextCursor: string | null;
 }
 
-const KNOWN_CATEGORIES = [
-  "charge_question",
-  "trip_problem",
-  "driver_issue",
-  "other",
-] as const;
-
-const supportCategoryKey = (category: string) =>
-  (KNOWN_CATEGORIES as readonly string[]).includes(category)
-    ? (category as (typeof KNOWN_CATEGORIES)[number])
+const supportCategoryKey = (category: string): SupportCategory =>
+  (supportCategories as readonly string[]).includes(category)
+    ? (category as SupportCategory)
     : "other";
 
 const STATUS_STYLE: Record<SupportStatus, string> = {
@@ -78,9 +75,14 @@ const SupportList = () => {
         <Text className="text-sm text-general-200 mb-2">
           {t("support.intro")}
         </Text>
-        <Text className="text-xs text-general-200 mb-4">
+        <Text className="text-xs text-general-200 mb-3">
           {t("support.notEmergency")}
         </Text>
+        <CustomButton
+          title={t("support.newRequest")}
+          className="mb-4"
+          onPress={() => router.push("/(root)/support/new")}
+        />
 
         {status === "loading" && items.length === 0 && (
           <ListState kind="loading" message={t("common.loading")} />
@@ -141,7 +143,7 @@ const SupportList = () => {
                 {dateTime(item.updatedAt)}
               </Text>
               {item.unread && (
-                <Text className="text-xs text-[#0286FF] font-JakartaBold">
+                <Text className="text-xs text-[#0066CC] font-JakartaBold">
                   {t("support.newReply")}
                 </Text>
               )}

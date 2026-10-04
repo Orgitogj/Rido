@@ -1014,8 +1014,9 @@ Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the deci
 | --- | --- |
 | Sign in, API access | Clerk publishable key + `CLERK_SECRET_KEY` |
 | Quotes, rides, drivers | `DATABASE_URL` (migrated) |
-| Requesting a ride | Stripe publishable + secret key |
-| Webhook settlement | `STRIPE_WEBHOOK_SECRET` + Stripe CLI (local) or a public URL |
+| Requesting a ride | Nothing extra in the default mode (paid in the vehicle). Stripe publishable + secret key only with `PAYMENT_MODE=card_online` |
+| Payment mode and currency (optional) | `PAYMENT_MODE` (`in_vehicle` default, or `card_online`), `APP_CURRENCY` (`all` default, or `usd`) |
+| Webhook settlement (card mode only) | `STRIPE_WEBHOOK_SECRET` + Stripe CLI (local) or a public URL |
 | Scheduled sweep (production), scheduled requests (any environment) | `CRON_SECRET` + a scheduler calling the sweep every minute |
 | Trip PIN | `RIDE_PIN_SECRET` (32+ characters). Required in production; without it in development no PIN is issued |
 | Scheduling window (optional) | `SCHEDULED_RIDE_MIN_LEAD_MINUTES` (default 30), `SCHEDULED_RIDE_MAX_DAYS` (default 7) |

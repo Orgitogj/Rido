@@ -698,6 +698,7 @@ export const supportStatuses = ["open", "in_progress", "resolved"] as const;
 export type SupportStatus = (typeof supportStatuses)[number];
 
 export const adminSupportQuerySchema = adminListQuerySchema.extend({
+  role: z.enum(["passenger", "driver"]).optional(),
   status: z.enum(supportStatuses).optional(),
   assigned: z.enum(["me", "unassigned", "any"]).default("any"),
   rideId: z.uuid().optional(),
@@ -967,7 +968,8 @@ export interface AdminFeedbackItem {
 
 export interface AdminSupportItem {
   id: string;
-  rideId: string;
+  rideId: string | null;
+  role: "passenger" | "driver";
   category: string;
   status: SupportStatus;
   version: number;

@@ -343,11 +343,20 @@ export async function deliverPending(
       continue;
     }
     const column = PREFERENCE_COLUMN[categoryOf(n.kind)];
-    const { rows: muted } = await deps.db.query(
-      `SELECT 1 FROM mobility.notification_preferences WHERE user_id = $1 AND NOT ${column}`,
+    const { rows: prefs } = await deps.db.query<{
+      muted: boolean;
+      quiet_enabled: boolean;
+      quiet_start_minute: number | null;
+      quiet_end_minute: number | null;
+      quiet_timezone: string | null;
+    }>(
+      `SELECT NOT ${column} AS muted, quiet_enabled, quiet_start_minute,
+              quiet_end_minute, quiet_timezone
+         FROM mobility.notification_preferences WHERE user_id = $1`,
       [n.user_id],
     );
-    if (muted.length) {
+    const pref = prefs[0];
+    if (pref?.muted) {
       await finish(n.id, "skipped", "muted");
       continue;
     }

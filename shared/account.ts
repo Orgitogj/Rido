@@ -222,9 +222,23 @@ export function supportCategoriesFor(
   );
 }
 
+const attachmentIds = z
+  .array(z.uuid())
+  .max(SUPPORT_RULES.attachmentsPerMessage)
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "Each attachment can be used once.",
+  })
+  .default([]);
+
 export const supportMessageSchema = z.strictObject({
   body: z.string().trim().min(1).max(SUPPORT_RULES.messageMax),
   clientMessageId: z.uuid(),
+});
+
+export const supportUserMessageSchema = z.strictObject({
+  body: z.string().trim().min(1).max(SUPPORT_RULES.messageMax),
+  clientMessageId: z.uuid(),
+  attachmentIds,
 });
 
 export const supportListQuerySchema = z.strictObject({

@@ -6,6 +6,7 @@ import type {
   InboxPage,
   NotificationCategory,
   NotificationPreferences,
+  NotificationPreferencesInput,
 } from "../shared/account";
 
 interface InboxRow {
@@ -125,17 +126,27 @@ export async function getPreferences(
 export async function setPreferences(
   db: SqlClient,
   userId: string,
-  p: NotificationPreferences,
+  p: NotificationPreferencesInput,
   now: Date,
 ) {
+  const quiet = p.quietHours;
   await db.query(
     `INSERT INTO mobility.notification_preferences
-       (user_id, ride_updates, chat_messages, ride_offers, account_updates, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (user_id, ride_updates, chat_messages, ride_offers, account_updates, updated_at,
+        quiet_enabled, quiet_start_minute, quiet_end_minute, quiet_timezone)
+     VALUES ($1, $2, $3, $4, $5, $6, $8, $9, $10, $11)
      ON CONFLICT (user_id) DO UPDATE
        SET ride_updates = EXCLUDED.ride_updates, chat_messages = EXCLUDED.chat_messages,
            ride_offers = EXCLUDED.ride_offers, account_updates = EXCLUDED.account_updates,
-           updated_at = EXCLUDED.updated_at`,
+           updated_at = EXCLUDED.updated_at,
+           quiet_enabled = CASE WHEN $7::boolean THEN EXCLUDED.quiet_enabled
+                                ELSE notification_preferences.quiet_enabled END,
+           quiet_start_minute = CASE WHEN $7::boolean THEN EXCLUDED.quiet_start_minute
+                                     ELSE notification_preferences.quiet_start_minute END,
+           quiet_end_minute = CASE WHEN $7::boolean THEN EXCLUDED.quiet_end_minute
+                                   ELSE notification_preferences.quiet_end_minute END,
+           quiet_timezone = CASE WHEN $7::boolean THEN EXCLUDED.quiet_timezone
+                                 ELSE notification_preferences.quiet_timezone END`,
     [
       userId,
       p.rideUpdates,
@@ -143,6 +154,11 @@ export async function setPreferences(
       p.rideOffers,
       p.accountUpdates,
       now,
+      quiet !== undefined,
+      quiet?.enabled ?? false,
+      quiet ? parseClock(quiet.start) : null,
+      quiet ? parseClock(quiet.end) : null,
+      quiet?.timezone ?? null,
     ],
   );
   return getPreferences(db, userId);

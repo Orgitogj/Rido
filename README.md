@@ -1467,6 +1467,7 @@ __tests__/, jest/    tests and the PostgreSQL test database
 - **Vehicle categories.** One category per request; no upgrades, no per-category commission, and no check that a vehicle physically matches a category beyond the operator's review.
 - **Stops.** At most two, fixed at request time, with no waiting fees and no editing during the trip. Reaching a stop is the driver's tap; it is not checked against GPS.
 - **Scheduled requests.** Not a reservation. They depend on the sweep running every minute and on the passenger confirming; there is no automatic booking, no recurring schedule and no advance driver assignment. An area's time zone must be set by an operator; it is `UTC` until then.
-- **Payouts.** Blocked until a provider and country are chosen. See [docs/payout-readiness.md](docs/payout-readiness.md).
+- **Payment in the vehicle.** The app trusts what the driver records and can't check a terminal or cash payment. There is no link to the bank's terminal, no cash-handling limits, and no automatic reminder to a passenger with an unpaid trip beyond the block on new requests.
+- **Payouts.** No automatic payouts. Operators record manual transfers; see [docs/payout-readiness.md](docs/payout-readiness.md) for what an automatic integration would need.
 - **Not planned without a decision.** Pooled rides, emergency dispatch, phone masking, in-app calling, automated identity verification, and country-specific transport or insurance rules. See [docs/implementation-checklist.md](docs/implementation-checklist.md#features-requiring-a-separate-decision).
 - **Web.** Web is limited to building the API server; maps and payments are native-only.

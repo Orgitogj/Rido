@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isValidTimeZone } from "./quietHours";
+
 export const languages = ["en", "sq"] as const;
 export type Language = (typeof languages)[number];
 
@@ -142,6 +144,23 @@ export const inboxReadSchema = z.union([
       .max(100),
   }),
 ]);
+
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+export const quietHoursSchema = z
+  .strictObject({
+    enabled: z.boolean(),
+    start: clock,
+    end: clock,
+    timezone: z.string().min(1).max(64).refine(isValidTimeZone, {
+      message: "Unknown time zone.",
+    }),
+  })
+  .refine((q) => q.start !== q.end, {
+    message: "Start and end can't be the same time.",
+    path: ["end"],
+  });
+export type QuietHours = z.infer<typeof quietHoursSchema>;
 
 export const notificationPreferencesSchema = z.strictObject({
   rideUpdates: z.boolean(),

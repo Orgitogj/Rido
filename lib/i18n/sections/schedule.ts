@@ -9,7 +9,7 @@ export default section(
     notReservation:
       "Scheduling saves your request. It does not reserve a driver or guarantee a pickup.",
     howItWorks:
-      "About {lead} minutes before the pickup time we'll ask you to review the current price and confirm payment. A driver is requested only after you confirm. If you don't confirm by {grace} minutes after the pickup time, the request expires and nothing is charged.",
+      "About {lead} minutes before the pickup time we'll ask you to review the current price and confirm. A driver is requested only after you confirm. If you don't confirm by {grace} minutes after the pickup time, the request expires and nothing is charged.",
     noPriceYet:
       "No price is shown now because fares are calculated when you confirm, not days ahead.",
     pushHint:
@@ -57,11 +57,11 @@ export default section(
       scheduled:
         "We'll remind you before the pickup time. No driver is reserved yet.",
       awaiting_confirmation:
-        "Review the current price and confirm payment to request a driver.",
+        "Review the current price and confirm to request a driver.",
       searching: "Your request was confirmed and we're looking for a driver.",
       fulfilled: "This request became a ride. Open it for details.",
       no_driver:
-        "No driver accepted in time. The hold on your card is released; see the receipt.",
+        "No driver accepted in time. There is nothing to pay; see the receipt.",
       cancelled: "This request was cancelled. Nothing was charged for it.",
       expired: "This request ended without a ride. Nothing was charged.",
     },
@@ -96,7 +96,7 @@ export default section(
     notReservation:
       "Planifikimi ruan kërkesën tënde. Nuk rezervon shofer dhe nuk garanton marrjen.",
     howItWorks:
-      "Rreth {lead} minuta para orës së marrjes do të të kërkojmë të shohësh çmimin aktual dhe të konfirmosh pagesën. Shoferi kërkohet vetëm pasi të konfirmosh. Nëse nuk konfirmon deri {grace} minuta pas orës së marrjes, kërkesa skadon dhe nuk tarifohet asgjë.",
+      "Rreth {lead} minuta para orës së marrjes do të të kërkojmë të shohësh çmimin aktual dhe të konfirmosh. Shoferi kërkohet vetëm pasi të konfirmosh. Nëse nuk konfirmon deri {grace} minuta pas orës së marrjes, kërkesa skadon dhe nuk tarifohet asgjë.",
     noPriceYet:
       "Çmimi nuk shfaqet tani sepse llogaritet kur konfirmon, jo ditë përpara.",
     pushHint:
@@ -144,11 +144,11 @@ export default section(
       scheduled:
         "Do të të kujtojmë para orës së marrjes. Ende nuk është rezervuar asnjë shofer.",
       awaiting_confirmation:
-        "Shiko çmimin aktual dhe konfirmo pagesën për të kërkuar një shofer.",
+        "Shiko çmimin aktual dhe konfirmo për të kërkuar një shofer.",
       searching: "Kërkesa u konfirmua dhe po kërkojmë një shofer.",
       fulfilled: "Kjo kërkesë u bë udhëtim. Hape për detaje.",
       no_driver:
-        "Asnjë shofer nuk pranoi në kohë. Bllokimi në kartë lirohet; shiko faturën.",
+        "Asnjë shofer nuk pranoi në kohë. Nuk ka asgjë për të paguar; shiko faturën.",
       cancelled: "Kjo kërkesë u anulua. Nuk u tarifua asgjë për të.",
       expired: "Kjo kërkesë përfundoi pa udhëtim. Nuk u tarifua asgjë.",
     },

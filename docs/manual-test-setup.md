@@ -95,7 +95,7 @@ Run these in order. Stop and fix at the first failure; later sections assume the
 
 | Order | What | Checklist section | Needs beyond the first-ride setup |
 | --- | --- | --- | --- |
-| 1 | One ordinary ride: driver online, passenger requests the Standard category with one passenger and no stops, accept, pickup, enter the PIN once correctly, complete, receipt, capture visible in Stripe test mode | 3, 4 | Nothing |
+| 1 | One ordinary ride: driver online, passenger requests the Standard category with one passenger and no stops (no card is asked for), accept, pickup, enter the PIN once correctly, complete, then the driver records the payment as terminal or cash; the receipt shows it and the driver's Earnings screen shows the balance | 3, 4, 18 | Nothing |
 | 2 | Trip PIN failures: wrong PIN, lock, block, operator waiver, new PIN after a re-match | 13 | Nothing |
 | 3 | Stops: two stops, order, progress, receipt | 16 | Nothing |
 | 4 | Vehicle categories and passenger count | 15 | The second category with a fare policy |

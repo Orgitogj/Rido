@@ -33,7 +33,9 @@ Client-side values (`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`, `EXPO_PUBLIC_STRIPE_PUB
 | Fare rates and currency | Placeholder USD rates in the seeded example area | Set by the operator in the console; a commercial decision |
 | Commission policy | 0% default | A commercial decision |
 | Service areas | One small labelled example | Draw the real areas |
-| Stripe | Test keys | Live keys only after legal and payout decisions; console refunds stay disabled on a live key |
+| Payments | Paid in the vehicle, recorded by the driver | Agree how terminal payments are reconciled with the bank's terminal statement, and how often drivers are paid |
+| Fare rates | Placeholder lek rates in the seeded example area | Set by the operator in the console; a commercial decision |
+| Stripe (card mode only) | Test keys | Live keys only after legal and payout decisions; console refunds stay disabled on a live key |
 | Driver approval | CLI waiver available | Review real documents in the console |
 | Clerk | Development instance | Production instance and authorised parties |
 | Vehicle categories | The migrated **Standard** category and one seeded development example | Define the real categories, capacities and their fare policies; a commercial decision |

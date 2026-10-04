@@ -972,6 +972,10 @@ The default payment mode. The business is in Albania, where Stripe is not availa
 - **Cancelled, unmatched and interrupted trips** have nothing to pay.
 - **Earnings.** When a payment is recorded as collected, the ride's earning is written to the ledger once, split by the commission policy. Unpaid and waived trips write nothing.
 - **Driver balance.** Terminal payments reach the business, which owes the driver their share. Cash stays with the driver, who owes the business its commission. The balance is: driver's share of terminal payments, minus commission on cash trips, minus transfers to the driver, plus transfers from the driver. The driver sees it on the Earnings screen.
+- **Transfers.** Operators with the `refund` permission record bank or cash transfers on the console's **Driver balances** page. A record states a transfer that was already made outside the app; the app moves no money. Records can't be edited, each submission is idempotent, and each is audited. Drivers see the amount, date, method and reference, not the operator's name or note.
+- **What is switched off in this mode.** Card holds, captures, in-app tips, console refunds and Stripe webhooks are not used. Stripe keys are optional.
+- **Trust.** The app can't verify a terminal or cash payment. It records what the driver or the operator states. Reconciling terminal payments against the bank's terminal statement is done outside the app.
+- **Switching back.** `PAYMENT_MODE=card_online` with `APP_CURRENCY=usd` restores the Stripe flow for new rides. Rides keep the method they were created with. The app's screens format amounts without an explicit currency as lek, so card mode in USD would need a screen pass before real use.
 ### Driver payouts
 
 Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.

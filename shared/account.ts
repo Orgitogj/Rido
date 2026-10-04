@@ -177,6 +177,51 @@ export type SupportAttachmentType = (typeof supportAttachmentTypes)[number];
 export const supportRoles = ["passenger", "driver"] as const;
 export type SupportRole = (typeof supportRoles)[number];
 
+export const passengerSupportCategories = [
+  "charge_question",
+  "trip_problem",
+  "driver_issue",
+  "account_issue",
+  "other",
+] as const;
+
+export const driverSupportCategories = [
+  "passenger_issue",
+  "trip_problem",
+  "earnings_question",
+  "application_question",
+  "account_issue",
+  "other",
+] as const;
+
+export const supportCategories = [
+  ...new Set([...passengerSupportCategories, ...driverSupportCategories]),
+] as [SupportCategory, ...SupportCategory[]];
+
+export type SupportCategory =
+  | (typeof passengerSupportCategories)[number]
+  | (typeof driverSupportCategories)[number];
+
+export const RIDE_ONLY_SUPPORT_CATEGORIES: SupportCategory[] = [
+  "charge_question",
+  "trip_problem",
+  "driver_issue",
+  "passenger_issue",
+];
+
+export function supportCategoriesFor(
+  role: SupportRole,
+  withRide: boolean,
+): SupportCategory[] {
+  const all: readonly SupportCategory[] =
+    role === "driver" ? driverSupportCategories : passengerSupportCategories;
+  return all.filter(
+    (c) =>
+      (withRide || !RIDE_ONLY_SUPPORT_CATEGORIES.includes(c)) &&
+      (!withRide || c !== "application_question"),
+  );
+}
+
 export const supportMessageSchema = z.strictObject({
   body: z.string().trim().min(1).max(SUPPORT_RULES.messageMax),
   clientMessageId: z.uuid(),

@@ -1,6 +1,10 @@
 # Driver payout readiness
 
-Status: **blocked**. This build has no payout provider and no operating country, so it does not move money to drivers. Nothing in the code creates payout records, transfers, connected accounts or payout schedules, and nothing on the driver or operator screens claims that money has been paid out. The operator dashboard reports "Paid out to drivers: Not available" for this reason.
+Status: **manual transfers only**. The owner decided on 2026-10-04 that the business operates in Albania, takes payment in the vehicle (the business's card terminal, or cash) in Albanian lek, and pays drivers by bank transfer outside the app. The app records earnings, each driver's balance with the business, and the transfers an operator states were made. It moves no money, and an automatic payout integration remains blocked.
+
+Decisions made:
+
+| Decision | Outcome |
 
 This document lists what has to be decided before payouts can be built, where a provider would connect to the existing code, and the accounting rules any implementation must keep.
 

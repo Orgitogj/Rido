@@ -968,6 +968,10 @@ The default payment mode. The business is in Albania, where Stripe is not availa
 - **Requesting.** The passenger sees the price and taps **Request ride**. No card is asked for and no payment provider is called; the search for a driver starts at once. A repeated or concurrent request returns the same ride.
 - **Paying.** At the end of the trip the passenger pays the driver on the business's card terminal (POS) or in cash.
 - **Recording.** After completing the trip, the driver records how it was paid: terminal, cash, or not paid. This can be recorded once; a different second answer is refused. If the driver records nothing for two hours, the trip goes to the review queue.
+- **Unpaid trips.** A trip recorded as unpaid goes to the review queue, and the passenger can't get a new price or request another ride until support settles it. An operator with the `support` permission records it as paid (terminal or cash) or closes it without a payment, with a note. Every such action is audited.
+- **Cancelled, unmatched and interrupted trips** have nothing to pay.
+- **Earnings.** When a payment is recorded as collected, the ride's earning is written to the ledger once, split by the commission policy. Unpaid and waived trips write nothing.
+- **Driver balance.** Terminal payments reach the business, which owes the driver their share. Cash stays with the driver, who owes the business its commission. The balance is: driver's share of terminal payments, minus commission on cash trips, minus transfers to the driver, plus transfers from the driver. The driver sees it on the Earnings screen.
 ### Driver payouts
 
 Not built. See [docs/payout-readiness.md](docs/payout-readiness.md) for the decisions required, the integration points and the accounting rules to keep. Earnings remain a ledger; nothing is described as paid out.

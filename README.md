@@ -1363,6 +1363,9 @@ TEST_DATABASE_URL=postgresql://... TEST_DATABASE_ALLOW_RESET=1 TEST_DB_POOL_MAX=
 | `POST /api/rides/:id/stops` | assigned driver | Mark the next stop as reached (`index`) |
 | `GET /api/scheduled-rides`, `POST /api/scheduled-rides`, `GET /api/scheduled-rides/window` | passenger | Upcoming and past scheduled requests; create one; the allowed window in the pickup area's time zone |
 | `GET /api/scheduled-rides/:id`, `POST /api/scheduled-rides/:id/cancel`, `POST /api/scheduled-rides/:id/quote` | passenger (own) | One request; cancel it; get a fresh price once confirmation is open |
+| `POST /api/rides/:id/collection` | assigned driver | Record how a completed trip was paid: `pos`, `cash` or `unpaid` |
+| `POST /api/admin/rides/:id/collection` | operator (support) | Settle or waive a pending or unpaid trip (`pos`, `cash` or `waived`, with a note) |
+| `GET /api/admin/balances`, `GET /api/admin/balances/:id`, `POST /api/admin/balances/:id` | operator (refund) | Driver balances; one driver's balance and transfers; record a transfer made outside the app |
 | `GET /api/admin/dashboard` | operator (view) | Live and period figures (`from`, `to`, UTC) |
 | `GET /api/admin/support/:id/messages`, `POST /api/admin/support/:id/messages` | operator (view / support, assignee) | Conversation; reply to the passenger |
 | `GET /api/admin/badges` | operator (view) | Queue counts allowed by the operator's permissions |

@@ -12,8 +12,10 @@ How to configure, deploy, monitor and recover the service. Nothing here has been
 | Clerk | `CLERK_SECRET_KEY` or `CLERK_JWT_KEY` | required | No session can be verified |
 | Clerk | `CLERK_SECRET_KEY` | recommended | Account deletions cannot delete the sign-in identity and stay pending |
 | Clerk | `CLERK_AUTHORIZED_PARTIES` | required in production | Tokens from any origin are accepted |
-| Stripe | `STRIPE_SECRET_KEY` | required | No bookings |
-| Stripe | `STRIPE_WEBHOOK_SECRET` | required in production | Only the sweep recovers payment state |
+| Payments | `PAYMENT_MODE` | optional | Defaults to `in_vehicle`: passengers pay the driver by terminal or cash and Stripe is not used. `card_online` restores the Stripe flow |
+| Payments | `APP_CURRENCY` | optional | Defaults to `all` (lek) for new fare policies; `usd` for card mode |
+| Stripe | `STRIPE_SECRET_KEY` | required only with `PAYMENT_MODE=card_online` | No card bookings |
+| Stripe | `STRIPE_WEBHOOK_SECRET` | required in production only with `PAYMENT_MODE=card_online` | Only the sweep recovers payment state |
 | Scheduler | `CRON_SECRET` (16+ characters) | required | The sweep endpoint refuses every call |
 | Google Routes | `GOOGLE_ROUTES_API_KEY` | required | Quotes are refused, never guessed |
 | Trip PIN | `RIDE_PIN_SECRET` (32+ characters) | required in production, recommended in development | No trip PIN is issued in development; production readiness fails |

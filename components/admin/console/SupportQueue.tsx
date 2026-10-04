@@ -30,16 +30,24 @@ const ASSIGNED = [
   { value: "unassigned", label: "Unassigned" },
 ] as const;
 
+const ROLES = [
+  { value: "", label: "Passengers and drivers" },
+  { value: "passenger", label: "Passengers" },
+  { value: "driver", label: "Drivers" },
+] as const;
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const SupportQueue = () => {
   const [status, setStatus] = useState<SupportStatus | "">("open");
   const [assigned, setAssigned] = useState<"any" | "me" | "unassigned">("any");
+  const [role, setRole] = useState<"" | "passenger" | "driver">("");
   const [rideId, setRideId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const list = usePaged<AdminSupportItem>("/api/admin/support", {
     status: status || undefined,
+    role: role || undefined,
     assigned,
     rideId: UUID.test(rideId.trim()) ? rideId.trim() : undefined,
     ...dayRange(from, to),
@@ -64,6 +72,16 @@ const SupportQueue = () => {
             label={a.label}
             active={assigned === a.value}
             onPress={() => setAssigned(a.value)}
+          />
+        ))}
+      </View>
+      <View className="flex flex-row flex-wrap">
+        {ROLES.map((r) => (
+          <Chip
+            key={r.label}
+            label={r.label}
+            active={role === r.value}
+            onPress={() => setRole(r.value)}
           />
         ))}
       </View>

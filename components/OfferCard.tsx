@@ -21,7 +21,7 @@ const OfferCard = ({
   onAccept: () => void;
   onDecline: () => void;
 }) => {
-  const { t, language, money, km } = useI18n();
+  const { t, tn, language, money, km } = useI18n();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -60,6 +60,16 @@ const OfferCard = ({
         {t("ride.offer.passengerRating", {
           rating: formatRating(offer.passengerRating, language),
         })}
+      </Text>
+
+      <Text className="text-sm text-general-200 mt-1">
+        {[
+          offer.categoryName,
+          tn("ride.offer.passengers", offer.passengerCount),
+          offer.stopCount > 0 ? tn("ride.offer.stops", offer.stopCount) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </Text>
 
       <View className="flex flex-row items-center mt-4">

@@ -105,6 +105,15 @@ describe("health and readiness", () => {
         STRIPE_WEBHOOK_SECRET: "whsec_x",
         EXPO_PUBLIC_SERVER_URL: "https://api.example",
       }),
+    ).toBe(false);
+    expect(
+      configReady({
+        ...production,
+        CLERK_AUTHORIZED_PARTIES: "https://app.example",
+        STRIPE_WEBHOOK_SECRET: "whsec_x",
+        EXPO_PUBLIC_SERVER_URL: "https://api.example",
+        RIDE_PIN_SECRET: "0123456789abcdef0123456789abcdef",
+      }),
     ).toBe(true);
     const live = checkConfig({ ...base, STRIPE_SECRET_KEY: "sk_live_x" }).find(
       (c) => c.name === "STRIPE_SECRET_KEY",

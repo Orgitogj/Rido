@@ -124,10 +124,35 @@ const ReceiptScreen = () => {
 
             <View className="bg-white rounded-2xl px-5 py-3 mt-4">
               <Row label={t("pay.receipt.pickup")} value={r.pickup.address} />
+              {r.stops.map((stop, index) => (
+                <Row
+                  key={index}
+                  label={t("pay.receipt.stop", { number: index + 1 })}
+                  value={
+                    r.outcome === "completed" || index < r.stopsCompleted
+                      ? stop.address
+                      : t("pay.receipt.stopNotReached", {
+                          address: stop.address,
+                        })
+                  }
+                />
+              ))}
               <Row
                 label={t("pay.receipt.destination")}
                 value={r.destination.address}
               />
+              {r.category && (
+                <Row
+                  label={t("pay.receipt.category")}
+                  value={r.category.name}
+                />
+              )}
+              {!r.isLegacyDemo && (
+                <Row
+                  label={t("pay.receipt.passengers")}
+                  value={String(r.passengerCount)}
+                />
+              )}
               {r.driver && (
                 <Row
                   label={t("pay.receipt.driver")}

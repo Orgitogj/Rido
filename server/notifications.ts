@@ -200,6 +200,7 @@ export async function enqueueForTransition(
     tx,
     after.driver_profile_id ?? before.driver_profile_id,
   );
+  const inVehicle = after.payment_method === "in_vehicle";
   switch (after.status) {
     case "accepted":
       return toPassenger("ride_accepted", NOTIFY.rideAccepted(driver));
@@ -210,10 +211,10 @@ export async function enqueueForTransition(
     case "completed":
       return toPassenger(
         "ride_completed",
-        NOTIFY.rideCompleted(after.fare_cents),
+        NOTIFY.rideCompleted(after.fare_cents, inVehicle),
       );
     case "no_driver":
-      return toPassenger("no_driver", NOTIFY.noDriver());
+      return toPassenger("no_driver", NOTIFY.noDriver(inVehicle));
     case "cancelled": {
       if (actor === "passenger" && driver) {
         return enqueueNotification(
@@ -230,10 +231,16 @@ export async function enqueueForTransition(
         );
       }
       if (actor === "driver") {
-        return toPassenger("ride_cancelled", NOTIFY.cancelledByDriver());
+        return toPassenger(
+          "ride_cancelled",
+          NOTIFY.cancelledByDriver(inVehicle),
+        );
       }
       if (actor === "system" && before.status !== "awaiting_payment") {
-        return toPassenger("ride_cancelled", NOTIFY.cancelledBySystem());
+        return toPassenger(
+          "ride_cancelled",
+          NOTIFY.cancelledBySystem(inVehicle),
+        );
       }
       return;
     }
@@ -250,7 +257,7 @@ export async function enqueueForTransition(
       }
       return;
     case "interrupted":
-      return toPassenger("ride_interrupted", NOTIFY.interrupted());
+      return toPassenger("ride_interrupted", NOTIFY.interrupted(inVehicle));
     default:
       return;
   }

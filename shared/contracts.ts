@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import {
   appCurrency,
+  type CollectionMethod,
+  type CollectionStatus,
   type Currency,
   formatAmount,
   type PaymentMethod,
@@ -248,14 +250,88 @@ export interface QuoteResponse {
   driversNearby: number;
 }
 
-export interface BookingResponse {
+export type BookingResponse =
+  | {
+      paymentMethod: "card_online";
+      rideId: string;
+      fareCents: number;
+      currency: Currency;
+      paymentStatus: PaymentStatus;
+      paymentIntentClientSecret: string;
+      customerId: string;
+      customerEphemeralKeySecret: string;
+    }
+  | {
+      paymentMethod: "in_vehicle";
+      rideId: string;
+      fareCents: number;
+      currency: Currency;
+      status: RideStatus;
+    };
+
+export interface CollectionView {
+  status: CollectionStatus;
+  method: CollectionMethod | null;
+  collectedAt: string | null;
+  canRecord: boolean;
+}
+
+export const collectionRequestSchema = z.strictObject({
+  method: z.enum(["pos", "cash", "unpaid"]),
+});
+
+export const adminCollectionSchema = z.strictObject({
+  outcome: z.enum(["pos", "cash", "waived"]),
+  note: z.string().trim().min(3).max(500),
+});
+
+export const settlementCreateSchema = z.strictObject({
+  direction: z.enum(["to_driver", "from_driver"]),
+  amountCents: z.number().int().min(1).max(1_000_000_000),
+  method: z.enum(["bank_transfer", "cash"]),
+  reference: z.string().trim().max(100).optional(),
+  note: z.string().trim().max(500).optional(),
+  idempotencyKey: z.uuid(),
+});
+
+export interface DriverBalanceView {
+  currency: Currency;
+  earnedHeldByPlatformCents: number;
+  commissionOnCashCents: number;
+  paidToDriverCents: number;
+  receivedFromDriverCents: number;
+  netOwedToDriverCents: number;
+  lastSettlementAt: string | null;
+}
+
+export interface DriverSettlementView {
+  id: string;
+  direction: "to_driver" | "from_driver";
+  amountCents: number;
+  currency: Currency;
+  method: "bank_transfer" | "cash";
+  reference: string | null;
+  note: string | null;
+  operator: string | null;
+  createdAt: string;
+}
+
+export interface DriverBalanceItem {
+  driverProfileId: string;
+  displayName: string;
+  balance: DriverBalanceView;
+}
+
+export interface DriverBalanceDetail extends DriverBalanceItem {
+  settlements: DriverSettlementView[];
+}
+
+export interface CollectionDue {
   rideId: string;
   fareCents: number;
-  currency: "usd";
-  paymentStatus: PaymentStatus;
-  paymentIntentClientSecret: string;
-  customerId: string;
-  customerEphemeralKeySecret: string;
+  currency: Currency;
+  destinationAddress: string;
+  completedAt: string | null;
 }
 
 export interface AssignedDriver {
@@ -276,6 +352,8 @@ export interface RideView {
   currency: Currency;
   pickup: Place;
   destination: Place;
+  paymentMethod: PaymentMethod;
+  collection: CollectionView | null;
   distanceMeters: number | null;
   durationSeconds: number;
   createdAt: string;
@@ -393,7 +471,14 @@ export type ReceiptPaymentState =
   | "charged"
   | "partially_refunded"
   | "refunded"
-  | "legacy_demo";
+  | "legacy_demo"
+  | "pay_in_vehicle"
+  | "collection_pending"
+  | "paid_pos"
+  | "paid_cash"
+  | "unpaid"
+  | "waived"
+  | "nothing_due";
 
 export interface Receipt {
   rideId: string;
@@ -403,6 +488,11 @@ export interface Receipt {
   isLegacyDemo: boolean;
   pickup: Place;
   destination: Place;
+  paymentMethod: PaymentMethod;
+  collection: {
+    status: CollectionStatus;
+    method: CollectionMethod | null;
+  } | null;
   driver: { name: string; vehicle: string; plate: string } | null;
   legacyDemoDriver: string | null;
   requestedAt: string | null;
@@ -591,6 +681,7 @@ export interface DriverDashboard {
   profile: DriverProfileView | null;
   offer: RideOfferView | null;
   activeRide: RideView | null;
+  collectionsDue: CollectionDue[];
   serverTime: string;
 }
 
@@ -692,6 +783,8 @@ export const reviewCategories = [
   "refund_reversed",
   "refund_mismatch",
   "driver_ineligible_during_trip",
+  "passenger_unpaid",
+  "collection_not_recorded",
 ] as const;
 export type ReviewCategory = (typeof reviewCategories)[number];
 
@@ -813,6 +906,15 @@ export interface AdminRideDetail {
     currency: Currency;
     pickupAddress: string;
     destinationAddress: string;
+    paymentMethod: PaymentMethod;
+    collection: {
+      status: CollectionStatus;
+      method: CollectionMethod | null;
+      recordedBy: "driver" | "operator" | null;
+      note: string | null;
+      collectedAt: string | null;
+      canRecord: boolean;
+    } | null;
     createdAt: string;
     requestedAt: string | null;
     completedAt: string | null;
@@ -1052,7 +1154,8 @@ export type TipIneligibleReason =
   | "simulated"
   | "no_driver"
   | "window_closed"
-  | "already_tipped";
+  | "already_tipped"
+  | "not_available";
 
 export interface TipView {
   id: string;
@@ -1136,6 +1239,8 @@ export interface EarningsSummary {
     tipsCents: number;
   };
   policy: CommissionPolicyView;
+  balance: DriverBalanceView;
+  settlements: DriverSettlementView[];
   payouts: { available: false; message: string };
 }
 

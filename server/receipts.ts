@@ -1,4 +1,5 @@
 import { formatCents } from "../shared/contracts";
+import { asCurrency } from "../shared/currency";
 
 import { ratingState } from "./ratings";
 import { settlementState } from "./rides";
@@ -184,7 +185,7 @@ export function receiptFrom(row: ReceiptRow, now: Date): Receipt {
     startedAt: iso(row.started_at),
     completedAt: iso(row.completed_at),
     endedAt: iso(row.completed_at ?? row.interrupted_at ?? row.cancelled_at),
-    currency: "usd",
+    currency: asCurrency(row.currency),
     quotedFareCents: row.fare_cents,
     chargedCents: charged,
     refundedCents: row.refunded_cents,

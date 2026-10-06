@@ -12,11 +12,79 @@ export const REMATCH = {
   searchSeconds: 120,
 } as const;
 
+function inVehiclePreview(
+  ride: RideRow,
+  viewer: "passenger" | "driver",
+): CancellationPreview | null {
+  if (viewer === "passenger") {
+    if (ride.status === "awaiting_payment") {
+      return {
+        action: "cancel",
+        variant: "passenger_unpaid",
+        title: "Cancel this request?",
+        consequence:
+          "No driver has been requested yet. There is nothing to pay and no cancellation fee.",
+        feeCents: 0,
+      };
+    }
+    if (ride.status === "requested" || ride.status === "offered") {
+      return {
+        action: "cancel",
+        variant: "passenger_searching",
+        title: "Cancel ride request?",
+        consequence:
+          "We'll stop looking for a driver. There is nothing to pay and no cancellation fee.",
+        feeCents: 0,
+      };
+    }
+    if (PRE_PICKUP_STATUSES.includes(ride.status)) {
+      return {
+        action: "cancel",
+        variant: "passenger_assigned",
+        title: "Cancel ride?",
+        consequence:
+          "Your driver will be told. There is nothing to pay and no cancellation fee.",
+        feeCents: 0,
+      };
+    }
+    return null;
+  }
+  if (PRE_PICKUP_STATUSES.includes(ride.status)) {
+    return {
+      action: "cancel",
+      variant:
+        ride.rematch_count < REMATCH.maxRematches
+          ? "driver_rematch"
+          : "driver_final",
+      title: "Cancel this ride?",
+      consequence:
+        ride.rematch_count < REMATCH.maxRematches
+          ? "We'll look for another driver for this passenger. You won't be offered this ride again."
+          : "This passenger has already been re-matched the maximum number of times, so their request will end.",
+      feeCents: 0,
+    };
+  }
+  if (ride.status === "in_progress") {
+    return {
+      action: "interrupt",
+      variant: "driver_interrupt",
+      title: "End trip early?",
+      consequence:
+        "Only do this if the trip can't continue, for example for safety or a vehicle problem. The trip ends as interrupted: the passenger pays nothing, and the trip is flagged for review.",
+      feeCents: 0,
+    };
+  }
+  return null;
+}
+
 export function cancellationPreview(
   ride: RideRow,
   viewer: "passenger" | "driver",
 ): CancellationPreview | null {
   const hold = formatCents(ride.fare_cents);
+  if (ride.payment_method === "in_vehicle") {
+    return inVehiclePreview(ride, viewer);
+  }
   if (viewer === "passenger") {
     if (ride.status === "awaiting_payment") {
       return {

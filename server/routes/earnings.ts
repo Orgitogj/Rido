@@ -6,6 +6,7 @@ import {
   rideIdSchema,
 } from "../../shared/contracts";
 import { appCurrency, asCurrency } from "../../shared/currency";
+import { driverBalance, listSettlements } from "../collection";
 import { entryView, type EntryRow } from "../earnings";
 import { policyAt } from "../earningsPolicy";
 import { ApiError, notFound } from "../errors";
@@ -121,10 +122,16 @@ export async function earningsSummary(
       tipCommissionBps: policy.tipCommissionBps,
       label: policy.label,
     },
+    balance: await driverBalance(deps.db, profileId, appCurrency()),
+    settlements: (await listSettlements(deps.db, profileId, 20)).map((s) => ({
+      ...s,
+      operator: null,
+      note: null,
+    })),
     payouts: {
       available: false,
       message:
-        "Payouts aren't set up yet. These amounts are earnings recorded for you; none of it has been paid out.",
+        "There are no automatic payouts. Transfers recorded by the operator are listed under your balance.",
     },
   };
   return Response.json({ data: body });

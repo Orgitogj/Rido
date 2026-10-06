@@ -82,8 +82,16 @@ describe("health and readiness", () => {
       STRIPE_SECRET_KEY: "sk_test_x",
       CRON_SECRET: "0123456789abcdef",
       GOOGLE_ROUTES_API_KEY: "g",
+      PAYMENT_MODE: "card_online",
     };
     expect(configReady(base)).toBe(true);
+    expect(
+      configReady({
+        ...base,
+        PAYMENT_MODE: "in_vehicle",
+        STRIPE_SECRET_KEY: undefined,
+      }),
+    ).toBe(true);
     expect(configReady({ ...base, CRON_SECRET: "short" })).toBe(false);
     expect(configReady({ ...base, STRIPE_SECRET_KEY: "pk_test_wrong" })).toBe(
       false,

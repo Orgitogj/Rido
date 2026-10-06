@@ -1,3 +1,5 @@
+import { paymentMode } from "./paymentMode";
+
 export type ConfigLevel = "required" | "recommended" | "optional";
 
 export interface ConfigCheck {
@@ -34,7 +36,8 @@ export function checkConfig(env: Env = process.env): ConfigCheck[] {
     "DOCUMENT_STORAGE_SECRET_ACCESS_KEY",
   ].filter((n) => has(env, n)).length;
   const stripeMode = stripeModeOf(env);
-  return [
+  const cardOnline = paymentMode(env) === "card_online";
+  const all: ConfigCheck[] = [
     {
       area: "Database",
       name: "DATABASE_URL",
@@ -64,9 +67,18 @@ export function checkConfig(env: Env = process.env): ConfigCheck[] {
       note: "Restricts which origins' tokens are accepted.",
     },
     {
+      area: "Payments",
+      name: "PAYMENT_MODE",
+      level: "optional",
+      ok: true,
+      note: cardOnline
+        ? "card_online: cards are authorized in the app through Stripe."
+        : "in_vehicle (default): passengers pay the driver by card terminal or cash; Stripe is not used.",
+    },
+    {
       area: "Stripe",
       name: "STRIPE_SECRET_KEY",
-      level: "required",
+      level: cardOnline ? "required" : "optional",
       ok: stripeMode !== "unconfigured",
       note:
         stripeMode === "live"
@@ -78,7 +90,7 @@ export function checkConfig(env: Env = process.env): ConfigCheck[] {
     {
       area: "Stripe",
       name: "STRIPE_WEBHOOK_SECRET",
-      level: production ? "required" : "recommended",
+      level: !cardOnline ? "optional" : production ? "required" : "recommended",
       ok: has(env, "STRIPE_WEBHOOK_SECRET"),
       note: "Verifies payment, refund and dispute webhooks. Without it only the sweep recovers payment state.",
     },
@@ -128,6 +140,7 @@ export function checkConfig(env: Env = process.env): ConfigCheck[] {
         : "Optional in development; Expo uses the dev server.",
     },
   ];
+  return all;
 }
 
 export function configReady(env: Env = process.env) {

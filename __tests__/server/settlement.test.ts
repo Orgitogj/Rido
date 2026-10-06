@@ -286,15 +286,18 @@ describe("receipts", () => {
     expect(Object.keys(trips[0]).sort()).toEqual(
       [
         "acceptedAt",
+        "categoryName",
         "completedAt",
         "currency",
         "destination",
         "distanceMeters",
         "fareCents",
+        "passengerCount",
         "pickup",
         "ratingPending",
         "rideId",
         "startedAt",
+        "stopCount",
       ].sort(),
     );
     await onlineDriver(ctx, "user_driver_two", 20_000);

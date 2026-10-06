@@ -86,8 +86,12 @@ export function canTransition(
 export function allowedActions(
   status: RideStatus,
   viewer: "passenger" | "driver",
+  stopsRemaining = 0,
 ): RideAction[] {
   const actions = new Set<RideAction>();
+  if (viewer === "driver" && status === "in_progress" && stopsRemaining > 0) {
+    return ["stop_reached", "interrupt"];
+  }
   for (const [to, actors] of Object.entries(TRANSITIONS[status] ?? {})) {
     if (!actors?.includes(viewer)) continue;
     if (to === "cancelled") actions.add("cancel");
@@ -163,6 +167,11 @@ export interface RideRow {
   review_resolved_at: Date | null;
   review_resolved_by: string | null;
   review_note: string | null;
+  vehicle_category_id: string | null;
+  vehicle_category_name: string | null;
+  passenger_count: number;
+  stops: { address: string; latitude: number; longitude: number }[];
+  stops_completed: number;
   payment_method: "card_online" | "in_vehicle";
   collection_status: "pending" | "collected" | "unpaid" | "waived" | null;
   collection_method: "pos" | "cash" | null;
@@ -208,6 +217,14 @@ export async function transitionRide(
       409,
       "INVALID_TRANSITION",
       `This ride can't move from ${ride.status} to ${to}.`,
+    );
+  }
+
+  if (to === "completed" && ride.stops_completed < ride.stops.length) {
+    throw new ApiError(
+      409,
+      "STOPS_REMAINING",
+      "Mark each stop as reached before completing the trip.",
     );
   }
 

@@ -163,6 +163,12 @@ export interface RideRow {
   review_resolved_at: Date | null;
   review_resolved_by: string | null;
   review_note: string | null;
+  payment_method: "card_online" | "in_vehicle";
+  collection_status: "pending" | "collected" | "unpaid" | "waived" | null;
+  collection_method: "pos" | "cash" | null;
+  collected_at: Date | null;
+  collection_recorded_by: "driver" | "operator" | null;
+  collection_note: string | null;
 }
 
 export async function lockRide(tx: SqlClient, rideId: string) {
@@ -206,6 +212,9 @@ export async function transitionRide(
   }
 
   const set: Record<string, unknown> = { ...opts.set };
+  if (to === "completed" && ride.payment_method === "in_vehicle") {
+    set.collection_status = "pending";
+  }
   const stamp = TIMESTAMP_FOR[to];
   if (stamp && !(stamp in set)) set[stamp] = opts.now;
   if (to === "cancelled" || to === "no_driver" || to === "interrupted") {

@@ -175,7 +175,7 @@ const RideStatusPanel = ({
       <View className="flex flex-row items-center justify-between mb-2">
         <StatusBadge status={ride.status} />
         <Text className="text-lg font-JakartaBold">
-          {money(ride.fareCents)}
+          {money(ride.fareCents, ride.currency)}
         </Text>
       </View>
       <Text
@@ -327,7 +327,7 @@ const RideStatusPanel = ({
                 ? t("ride.panel.charged")
                 : t("ride.panel.fare")
             }
-            value={money(ride.fareCents)}
+            value={money(ride.fareCents, ride.currency)}
           />
         </View>
       )}

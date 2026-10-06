@@ -4,6 +4,7 @@ import {
   receiptIdSchema,
   supportRequestSchema,
 } from "../../shared/contracts";
+import { asCurrency } from "../../shared/currency";
 import { notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
 import { enforceRateLimit } from "../rateLimit";
@@ -69,6 +70,7 @@ export async function listDriverTrips(
     started_at: Date | null;
     completed_at: Date | null;
     fare_cents: number;
+    currency: string;
     distance_meters: number | null;
     status: "completed";
     payment_status: string;
@@ -78,7 +80,7 @@ export async function listDriverTrips(
   }>(
     `SELECT r.id, r.origin_address, r.origin_latitude, r.origin_longitude,
             r.destination_address, r.destination_latitude, r.destination_longitude,
-            r.accepted_at, r.started_at, r.completed_at, r.fare_cents, r.distance_meters,
+            r.accepted_at, r.started_at, r.completed_at, r.fare_cents, r.currency, r.distance_meters,
             r.status, r.payment_status, r.demo_driver_id, r.driver_profile_id,
             EXISTS (SELECT 1 FROM mobility.ratings g
                      WHERE g.ride_id = r.id AND g.rater_role = 'driver') AS rated
@@ -105,7 +107,7 @@ export async function listDriverTrips(
     startedAt: iso(r.started_at),
     completedAt: iso(r.completed_at),
     fareCents: r.fare_cents,
-    currency: "usd",
+    currency: asCurrency(r.currency),
     distanceMeters: r.distance_meters,
     ratingPending: !r.rated && ratingEligibility(r, now).reason === null,
   }));

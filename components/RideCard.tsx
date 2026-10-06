@@ -118,7 +118,7 @@ const RideCard = ({ ride }: { ride: RideView }) => {
                 : t("booking.history.fare")}
             </Text>
             <Text className="text-md font-JakartaBold">
-              {money(ride.fareCents)}
+              {money(ride.fareCents, ride.currency)}
               {paymentTag}
             </Text>
           </View>

@@ -22,9 +22,9 @@ const isCategory = (value: string): value is SupportCategory =>
 
 function paymentText(r: Receipt, i18n: I18n) {
   const params = {
-    fare: i18n.money(r.quotedFareCents),
-    charged: i18n.money(r.chargedCents),
-    refunded: i18n.money(r.refundedCents),
+    fare: i18n.money(r.quotedFareCents, r.currency),
+    charged: i18n.money(r.chargedCents, r.currency),
+    refunded: i18n.money(r.refundedCents, r.currency),
   };
   if (r.paymentState === "hold_expired" && r.outcome === "completed") {
     return i18n.t("pay.receipt.state.hold_expired_completed");

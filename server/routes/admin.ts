@@ -24,6 +24,7 @@ import {
   supportResolveSchema,
   supportVersionSchema,
 } from "../../shared/contracts";
+import { asCurrency } from "../../shared/currency";
 import { type DisputeRow, syncDisputesForIntent } from "../disputes";
 import { entryView, type EntryRow, reconcileRide } from "../earnings";
 import { ApiError, notFound } from "../errors";
@@ -35,6 +36,7 @@ import {
   permissionsOf,
   requireOperator,
 } from "../operators";
+import { paymentMode } from "../paymentMode";
 import {
   applyRefundSnapshot,
   createOperatorRefund,
@@ -127,6 +129,7 @@ export async function adminMe(request: Request, _params: unknown, deps: Deps) {
     displayName: operator.display_name,
     permissions: permissionsOf(operator),
     stripeMode: stripeMode(),
+    paymentMode: paymentMode(),
   };
   return Response.json({ data: body });
 }
@@ -478,7 +481,7 @@ export async function rideDetail(
       fareCents: r.fare_cents,
       capturedCents: r.captured_cents,
       refundedCents: r.refunded_cents,
-      currency: "usd",
+      currency: asCurrency(r.currency),
       pickupAddress: r.origin_address,
       destinationAddress: r.destination_address,
       createdAt: iso(r.created_at)!,

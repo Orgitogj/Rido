@@ -5,6 +5,7 @@ import {
   type Page,
   rideIdSchema,
 } from "../../shared/contracts";
+import { appCurrency, asCurrency } from "../../shared/currency";
 import { entryView, type EntryRow } from "../earnings";
 import { policyAt } from "../earningsPolicy";
 import { ApiError, notFound } from "../errors";
@@ -96,7 +97,7 @@ export async function earningsSummary(
   const body: EarningsSummary = {
     from: q.from ?? null,
     to: q.to ?? null,
-    currency: "usd",
+    currency: appCurrency(),
     confirmed: {
       rides: s.rides,
       fareCents: s.fare,
@@ -135,6 +136,7 @@ interface EarningRideRow {
   origin_address: string;
   destination_address: string;
   payment_status: string;
+  currency: string;
   fare_cents: number;
   e_fare: number | null;
   commission_rate_bps: number | null;
@@ -150,7 +152,7 @@ interface EarningRideRow {
 
 const RIDE_SQL = `
   SELECT r.id, r.completed_at, r.origin_address, r.destination_address,
-         r.payment_status, r.fare_cents,
+         r.payment_status, r.fare_cents, r.currency,
          re.fare_cents AS e_fare, re.commission_rate_bps, re.commission_cents,
          re.driver_share_cents, re.commission_policy_version,
          t.amount_cents AS tip_amount, t.status AS tip_status,
@@ -188,7 +190,7 @@ function toRide(r: EarningRideRow): DriverEarningRide {
         : r.payment_status === "authorized" || r.payment_status === "processing"
           ? "pending"
           : "not_charged",
-    currency: "usd",
+    currency: asCurrency(r.currency),
     fareCents: r.e_fare ?? r.fare_cents,
     commissionRateBps: r.commission_rate_bps,
     commissionCents: r.commission_cents,

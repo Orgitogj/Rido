@@ -3,6 +3,7 @@ import {
   type RideView,
   type SettlementState,
 } from "../shared/contracts";
+import { asCurrency } from "../shared/currency";
 
 import { type IdentityAdmin, processAccountDeletions } from "./account";
 import { cancellationPreview } from "./cancellation";
@@ -541,7 +542,7 @@ function toView(
     paymentStatus: row.payment_status,
     version: row.version,
     fareCents: row.fare_cents,
-    currency: "usd",
+    currency: asCurrency(row.currency),
     pickup: {
       address: row.origin_address,
       latitude: row.origin_latitude,

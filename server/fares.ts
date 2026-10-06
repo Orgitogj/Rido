@@ -1,3 +1,6 @@
+import { appCurrency, asCurrency, roundUpToUnit } from "../shared/currency";
+import { DEFAULT_VEHICLE_CATEGORY_ID } from "../shared/vehicleCategory";
+
 import { type Database, type SqlClient, transaction } from "./db";
 import { ApiError, notFound } from "./errors";
 import { audit, type OperatorRow } from "./operators";
@@ -54,7 +57,7 @@ export function computeFare(
   policy: Pick<
     FarePolicyRow,
     "base_cents" | "per_km_cents" | "per_minute_cents" | "minimum_fare_cents"
-  >,
+  > & { currency?: string },
   route: { distanceMeters: number; durationSeconds: number },
 ): FareBreakdown {
   const distanceCents = roundHalfUp(
@@ -71,7 +74,10 @@ export function computeFare(
     distanceCents,
     timeCents,
     minimumApplied: subtotal < policy.minimum_fare_cents,
-    totalCents: Math.max(subtotal, policy.minimum_fare_cents),
+    totalCents: roundUpToUnit(
+      Math.max(subtotal, policy.minimum_fare_cents),
+      asCurrency(policy.currency),
+    ),
   };
 }
 
@@ -188,10 +194,12 @@ export async function createFarePolicy(
     perMinuteCents: number;
     minimumFareCents: number;
     effectiveFrom: string;
+    vehicleCategoryId?: string;
     reason: string;
   },
 ) {
   const now = deps.now();
+  const categoryId = input.vehicleCategoryId ?? DEFAULT_VEHICLE_CATEGORY_ID;
   const effectiveFrom = new Date(input.effectiveFrom);
   const refuse = async (status: number, code: string, message: string) => {
     await audit(deps.db, {
@@ -221,8 +229,9 @@ export async function createFarePolicy(
     const { rows } = await tx.query<FarePolicyRow>(
       `INSERT INTO mobility.fare_policies
          (service_area_id, version, label, is_development, base_cents, per_km_cents,
-          per_minute_cents, minimum_fare_cents, effective_from, reason, created_by, created_at)
-       SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+          per_minute_cents, minimum_fare_cents, effective_from, reason, created_by, created_at,
+          vehicle_category_id, currency)
+       SELECT $1, COALESCE(MAX(version), 0) + 1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
          FROM mobility.fare_policies WHERE service_area_id = $1
        RETURNING *`,
       [
@@ -237,6 +246,8 @@ export async function createFarePolicy(
         input.reason,
         operator.id,
         now,
+        categoryId,
+        appCurrency(),
       ],
     );
     await areaEvent(tx, {

@@ -5,6 +5,7 @@ import {
   containsPoint,
   type Vertex,
 } from "../shared/serviceArea";
+import { DEFAULT_VEHICLE_CATEGORY_ID } from "../shared/vehicleCategory";
 
 import { type Database, type SqlClient, transaction } from "./db";
 import { ApiError, notFound } from "./errors";
@@ -63,6 +64,7 @@ export async function serviceAreaForTrip(
   db: SqlClient,
   pickup: Point,
   destination: Point,
+  stops: Point[] = [],
 ): Promise<ServiceAreaRow> {
   const areas = await activeAreasContaining(db, pickup);
   if (!areas.length) {
@@ -84,7 +86,21 @@ export async function serviceAreaForTrip(
       "This destination is outside the area we serve from your pickup. Choose a destination inside the covered area.",
     );
   }
-  return area;
+  const covering =
+    areas.find(
+      (a) =>
+        a.dropoff_rule === "anywhere" ||
+        (containsPoint(a.boundary, destination) &&
+          stops.every((s) => containsPoint(a.boundary, s))),
+    ) ?? null;
+  if (!covering) {
+    throw new ApiError(
+      422,
+      "STOP_OUTSIDE_SERVICE_AREA",
+      "One of your stops is outside the area we serve from your pickup. Remove it or choose a stop inside the covered area.",
+    );
+  }
+  return covering;
 }
 
 const iso = (d: Date) => new Date(d).toISOString();
@@ -103,13 +119,16 @@ type PolicyWithNames = FarePolicyRow & {
   created_by_name: string | null;
   cancelled_by_name: string | null;
   quotes_using: number;
+  category_name: string | null;
 };
 
 async function areaPolicies(db: SqlClient, areaIds: string[]) {
   const { rows } = await db.query<PolicyWithNames>(
     `SELECT fp.*, c.display_name AS created_by_name, x.display_name AS cancelled_by_name,
+            vc.name AS category_name,
             (SELECT count(*)::int FROM mobility.quotes q WHERE q.fare_policy_id = fp.id) AS quotes_using
        FROM mobility.fare_policies fp
+       LEFT JOIN mobility.vehicle_categories vc ON vc.id = fp.vehicle_category_id
        LEFT JOIN mobility.operators c ON c.id = fp.created_by
        LEFT JOIN mobility.operators x ON x.id = fp.cancelled_by
       WHERE fp.service_area_id = ANY($1::uuid[])
@@ -125,7 +144,11 @@ function item(
   now: Date,
 ): ServiceAreaItem {
   const states = policyStates(policies, now);
-  const current = policies.find((p) => states.get(p.id) === "in_effect");
+  const inEffect = policies.filter((p) => states.get(p.id) === "in_effect");
+  const current =
+    inEffect.find(
+      (p) => p.vehicle_category_id === DEFAULT_VEHICLE_CATEGORY_ID,
+    ) ?? inEffect[0];
   return {
     id: a.id,
     code: a.code,

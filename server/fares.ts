@@ -10,6 +10,7 @@ import type { FarePolicyState, FarePolicyView } from "../shared/adminPricing";
 export interface FarePolicyRow {
   id: string;
   service_area_id: string;
+  vehicle_category_id: string;
   version: number;
   label: string;
   is_development: boolean;
@@ -88,13 +89,15 @@ export async function effectivePolicy(
   db: SqlClient,
   serviceAreaId: string,
   at: Date,
+  vehicleCategoryId: string = DEFAULT_VEHICLE_CATEGORY_ID,
 ): Promise<FarePolicyRow | null> {
   const { rows } = await db.query<FarePolicyRow>(
     `SELECT * FROM mobility.fare_policies
       WHERE service_area_id = $1 AND status = 'scheduled' AND effective_from <= $2
+        AND vehicle_category_id = $3
       ORDER BY effective_from DESC, version DESC
       LIMIT 1`,
-    [serviceAreaId, at],
+    [serviceAreaId, at, vehicleCategoryId],
   );
   return rows[0] ?? null;
 }
@@ -111,11 +114,19 @@ export function policyStates(
         new Date(b.effective_from).getTime() -
           new Date(a.effective_from).getTime() || b.version - a.version,
     );
-  const current = live.find((p) => new Date(p.effective_from) <= now);
+  const current = new Map<string, string>();
+  for (const p of live) {
+    const key = `${p.service_area_id}:${p.vehicle_category_id}`;
+    if (!current.has(key) && new Date(p.effective_from) <= now) {
+      current.set(key, p.id);
+    }
+  }
   for (const p of policies) {
+    const key = `${p.service_area_id}:${p.vehicle_category_id}`;
     if (p.status === "cancelled") states.set(p.id, "cancelled");
     else if (new Date(p.effective_from) > now) states.set(p.id, "scheduled");
-    else states.set(p.id, p.id === current?.id ? "in_effect" : "superseded");
+    else
+      states.set(p.id, current.get(key) === p.id ? "in_effect" : "superseded");
   }
   return states;
 }
@@ -125,11 +136,14 @@ export function policyView(
     created_by_name?: string | null;
     cancelled_by_name?: string | null;
     quotes_using?: number;
+    category_name?: string | null;
   },
   state: FarePolicyState,
 ): FarePolicyView {
   return {
     id: p.id,
+    vehicleCategoryId: p.vehicle_category_id,
+    vehicleCategoryName: p.category_name ?? null,
     version: p.version,
     label: p.label,
     isDevelopment: p.is_development,
@@ -226,6 +240,11 @@ export async function createFarePolicy(
       [serviceAreaId],
     );
     if (!areas[0]) return null;
+    const { rows: categories } = await tx.query(
+      "SELECT 1 FROM mobility.vehicle_categories WHERE id = $1",
+      [categoryId],
+    );
+    if (!categories.length) return "NO_CATEGORY" as const;
     const { rows } = await tx.query<FarePolicyRow>(
       `INSERT INTO mobility.fare_policies
          (service_area_id, version, label, is_development, base_cents, per_km_cents,
@@ -260,6 +279,13 @@ export async function createFarePolicy(
     });
     return { policy: rows[0], code: areas[0].code };
   });
+  if (created === "NO_CATEGORY") {
+    return refuse(
+      422,
+      "CATEGORY_UNAVAILABLE",
+      "That vehicle category doesn't exist.",
+    );
+  }
   if (!created) throw notFound("Service area");
   await audit(deps.db, {
     operator,
@@ -273,6 +299,7 @@ export async function createFarePolicy(
       version: created.policy.version,
       effectiveFrom: new Date(created.policy.effective_from).toISOString(),
       isDevelopment: input.isDevelopment,
+      vehicleCategoryId: categoryId,
     },
   });
   return created.policy;

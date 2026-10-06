@@ -31,6 +31,10 @@ import {
   formatBoundary,
   parseBoundary,
 } from "@/shared/serviceArea";
+import {
+  DEFAULT_VEHICLE_CATEGORY_ID,
+  type VehicleCategoryAdmin,
+} from "@/shared/vehicleCategory";
 
 type Tone = "error" | "success" | "info" | "warning";
 
@@ -43,6 +47,10 @@ const ServiceArea = () => {
     allowed ? `/api/admin/service-areas/${id}` : null,
   );
   const d = query.data;
+  const categories = useApiQuery<VehicleCategoryAdmin[]>(
+    allowed ? "/api/admin/vehicle-categories" : null,
+  );
+  const [categoryId, setCategoryId] = useState(DEFAULT_VEHICLE_CATEGORY_ID);
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(
     null,
   );
@@ -132,6 +140,11 @@ const ServiceArea = () => {
   const effectiveFrom = parseEffectiveFrom(effective);
   const ratesValid = Object.values(rates).every((v) => v !== null);
   const inEffect = d.policies.find((p) => p.state === "in_effect");
+  const pricedCategories = new Set(
+    d.policies
+      .filter((p) => p.state === "in_effect")
+      .map((p) => p.vehicleCategoryId),
+  );
 
   return (
     <View>
@@ -245,8 +258,10 @@ const ServiceArea = () => {
       <Section title="Fare policies">
         <Text className="text-xs text-general-200 mb-2">
           Policies are never edited. Schedule a new version with an effective
-          date; quotes and rides keep the price they were given. Amounts are in
-          US dollars, the only currency this build supports.
+          date; quotes and rides keep the price they were given. New policies
+          are in Albanian lek, and fares are rounded up to a whole lek. Each
+          vehicle category has its own sequence of policies; a category is
+          offered here only while one of its policies is in effect.
         </Text>
         {d.policies.length === 0 && (
           <Notice
@@ -258,7 +273,8 @@ const ServiceArea = () => {
           <View key={p.id} className="py-3 border-b border-neutral-100">
             <View className="flex flex-row justify-between">
               <Text className="text-sm font-JakartaSemiBold">
-                v{p.version} · {p.label} · {POLICY_STATE_LABEL[p.state]}
+                {p.vehicleCategoryName ?? "Unknown category"} · v{p.version} ·{" "}
+                {p.label} · {POLICY_STATE_LABEL[p.state]}
                 {p.isDevelopment ? " · development rates" : ""}
               </Text>
               <Text className="text-xs text-general-200">
@@ -315,6 +331,22 @@ const ServiceArea = () => {
       </Section>
 
       <Section title="Schedule a new fare policy">
+        <Text className="text-xs text-general-200 mb-1">Vehicle category</Text>
+        {categories.status === "error" && (
+          <Notice tone="error" text={categories.error} />
+        )}
+        <View className="flex flex-row flex-wrap">
+          {(categories.data ?? [])
+            .filter((c) => c.status === "active" || c.id === categoryId)
+            .map((c) => (
+              <Chip
+                key={c.id}
+                label={`${c.name}${pricedCategories.has(c.id) ? "" : " · not priced here"}${c.isDevelopment ? " · development example" : ""}`}
+                active={categoryId === c.id}
+                onPress={() => setCategoryId(c.id)}
+              />
+            ))}
+        </View>
         <Field
           label="Label"
           value={label}
@@ -391,6 +423,7 @@ const ServiceArea = () => {
                       isDevelopment,
                       ...rates,
                       effectiveFrom,
+                      vehicleCategoryId: categoryId,
                       reason: policyReason.trim(),
                     },
                   }),

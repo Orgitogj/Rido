@@ -599,6 +599,19 @@ const RideDetailPage = () => {
           label="Route"
           value={`${r.pickupAddress} → ${r.destinationAddress}`}
         />
+        {r.stopAddresses.length > 0 && (
+          <KeyValue
+            label={`Stops (${r.stopsCompleted} of ${r.stopAddresses.length} reached)`}
+            value={r.stopAddresses
+              .map((address, index) => `${index + 1}. ${address}`)
+              .join(" · ")}
+          />
+        )}
+        <KeyValue
+          label="Vehicle category"
+          value={r.categoryName ?? "None (requested before categories)"}
+        />
+        <KeyValue label="Passengers" value={String(r.passengerCount)} />
         <KeyValue label="Created" value={when(r.createdAt)} />
         <KeyValue label="Completed" value={when(r.completedAt)} />
         <KeyValue label="Ended" value={when(r.endedAt)} />

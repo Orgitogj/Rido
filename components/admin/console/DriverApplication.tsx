@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import {
   ActionButton,
+  Chip,
   Field,
   KeyValue,
   Notice,
@@ -20,6 +21,7 @@ import {
 import { ApiRequestError, useApi, useApiQuery } from "@/lib/fetch";
 
 import type { AdminDriverDetail } from "@/shared/contracts";
+import type { VehicleCategoryAdmin } from "@/shared/vehicleCategory";
 
 type Action =
   "approve" | "request_changes" | "reject" | "suspend" | "reinstate";
@@ -76,6 +78,50 @@ const DriverApplication = () => {
     text: string;
   } | null>(null);
   const d = query.data;
+  const categories = useApiQuery<VehicleCategoryAdmin[]>(
+    allowed ? "/api/admin/vehicle-categories" : null,
+  );
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const currentCategories = (d?.categories ?? [])
+    .map((c) => c.id)
+    .sort()
+    .join(",");
+
+  useEffect(() => {
+    setCategoryIds(currentCategories ? currentCategories.split(",") : []);
+  }, [currentCategories]);
+
+  const toggleCategory = (categoryId: string) =>
+    setCategoryIds((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((c) => c !== categoryId)
+        : [...prev, categoryId],
+    );
+
+  const saveCategories = async () => {
+    if (!d) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await request(`/api/admin/drivers/${id}/categories`, {
+        body: {
+          categoryIds,
+          reason: reason.trim(),
+          expectedVersion: d.version,
+        },
+      });
+      setReason("");
+      setMessage({ tone: "success", text: "Vehicle categories updated." });
+    } catch (e) {
+      setMessage({
+        tone: "error",
+        text: e instanceof ApiRequestError ? e.message : "Couldn't save.",
+      });
+    } finally {
+      setBusy(false);
+      query.refetch();
+    }
+  };
 
   const view = async (documentId: string) => {
     setMessage(null);
@@ -115,6 +161,7 @@ const DriverApplication = () => {
             ? { applicantMessage: applicantMessage.trim() }
             : {}),
           expectedVersion: d.version,
+          ...(action === "approve" ? { categoryIds } : {}),
           documents: Object.entries(decisions).map(([documentId, x]) => ({
             documentId,
             decision: x.decision,
@@ -169,6 +216,11 @@ const DriverApplication = () => {
     (x) => x.decision === "reject" && x.note.trim().length < 3,
   );
   const available = ACTIONS.filter((a) => a.from.includes(d.status));
+  const categoriesChanged =
+    [...categoryIds].sort().join(",") !== currentCategories;
+  const selectable = (categories.data ?? []).filter(
+    (c) => c.status === "active" || categoryIds.includes(c.id),
+  );
 
   return (
     <View>
@@ -205,6 +257,16 @@ const DriverApplication = () => {
         />
         <KeyValue label="Plate" value={d.plate} />
         <KeyValue label="Seats" value={String(d.vehicleSeats)} />
+        <KeyValue
+          label="Vehicle categories"
+          value={
+            d.categories.length
+              ? d.categories
+                  .map((c) => `${c.name}${c.active ? "" : " (inactive)"}`)
+                  .join(", ")
+              : "None"
+          }
+        />
         <KeyValue label="Online" value={d.online ? "Yes" : "No"} />
         <KeyValue label="Submitted" value={when(d.submittedAt)} />
         <KeyValue
@@ -337,6 +399,59 @@ const DriverApplication = () => {
         })}
       </Section>
 
+      <Section title="Vehicle categories">
+        <Text className="text-xs text-general-200 mb-2">
+          Choose the categories this vehicle qualifies for after checking it
+          against the documents. The driver can&apos;t change these. Requests
+          are matched only when the vehicle has at least as many seats as the
+          passengers in the request. Approving needs at least one category.
+        </Text>
+        {categories.status === "error" && (
+          <Notice tone="error" text={categories.error} />
+        )}
+        {categories.status === "loading" && !categories.data && (
+          <Text className="text-sm text-general-200">Loading…</Text>
+        )}
+        <View className="flex flex-row flex-wrap">
+          {selectable.map((c) => (
+            <Chip
+              key={c.id}
+              label={`${c.name} · up to ${c.capacity}${c.status === "active" ? "" : " · inactive"}${c.isDevelopment ? " · development example" : ""}`}
+              active={categoryIds.includes(c.id)}
+              onPress={() => toggleCategory(c.id)}
+            />
+          ))}
+        </View>
+        {selectable.some(
+          (c) => categoryIds.includes(c.id) && c.capacity > d.vehicleSeats,
+        ) && (
+          <Notice
+            tone="warning"
+            text={`A selected category allows more passengers than this vehicle's ${d.vehicleSeats} seats. The driver will only be offered requests that fit the vehicle.`}
+          />
+        )}
+        {(d.status === "approved" || d.status === "suspended") && (
+          <View className="flex flex-row mt-2">
+            <ActionButton
+              title="Update categories"
+              disabled={
+                busy ||
+                d.ownApplication ||
+                !categoriesChanged ||
+                categoryIds.length === 0 ||
+                reason.trim().length < 3
+              }
+              onPress={saveCategories}
+            />
+          </View>
+        )}
+        {(d.status === "approved" || d.status === "suspended") && (
+          <Text className="text-xs text-general-200">
+            Uses the internal reason entered under Decision below.
+          </Text>
+        )}
+      </Section>
+
       <Section title="Decision">
         {available.length === 0 ? (
           <Text className="text-sm text-general-200">
@@ -376,6 +491,7 @@ const DriverApplication = () => {
                 d.ownApplication ||
                 reason.trim().length < 3 ||
                 rejectsNeedNotes ||
+                (a.action === "approve" && categoryIds.length === 0) ||
                 (needsMessage(a.action) && applicantMessage.trim().length < 3)
               }
               onPress={() => decide(a.action)}

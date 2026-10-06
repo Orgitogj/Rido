@@ -294,15 +294,18 @@ export async function rideDetail(
       vehicle_model: string | null;
       vehicle_plate: string | null;
       review_resolver: string | null;
+      from_schedule: boolean;
     }
   >(
     `SELECT r.*, COALESCE(r.passenger_name, u.name) AS passenger_name, u.clerk_id AS passenger_clerk_id,
             dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model, dp.vehicle_plate,
-            o.display_name AS review_resolver
+            o.display_name AS review_resolver, po.display_name AS pin_waiver,
+            EXISTS (SELECT 1 FROM mobility.scheduled_rides s WHERE s.ride_id = r.id) AS from_schedule
        FROM mobility.rides r
        JOIN mobility.users u ON u.id = r.user_id
        LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
        LEFT JOIN mobility.operators o ON o.id = r.review_resolved_by
+       LEFT JOIN mobility.operators po ON po.id = r.pin_waived_by
       WHERE r.id = $1`,
     [rideId],
   );
@@ -498,6 +501,11 @@ export async function rideDetail(
                 r.collection_status === "unpaid",
             }
           : null,
+      stopAddresses: r.stops.map((stop) => stop.address),
+      stopsCompleted: r.stops_completed,
+      categoryName: r.vehicle_category_name,
+      passengerCount: r.passenger_count,
+      fromScheduledRequest: r.from_schedule,
       createdAt: iso(r.created_at)!,
       requestedAt: iso(r.requested_at),
       completedAt: iso(r.completed_at),

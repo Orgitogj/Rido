@@ -544,6 +544,87 @@ const CollectionSection = ({
   );
 };
 
+const PinPanel = ({
+  detail,
+  onChanged,
+}: {
+  detail: AdminRideDetail;
+  onChanged: () => void;
+}) => {
+  const operator = useOperator();
+  const request = useApi();
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+  const pin = detail.pin;
+  const canWaive = operator?.permissions.includes("support") ?? false;
+
+  const waive = async () => {
+    setBusy(true);
+    try {
+      await request(`/api/admin/rides/${detail.ride.id}/pin-waiver`, {
+        body: { reason: reason.trim() },
+      });
+      setResult({
+        tone: "success",
+        text: "The driver can now start without the PIN. The passenger was told.",
+      });
+      setReason("");
+    } catch (e) {
+      setResult({ tone: "error", text: errorText(e) });
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
+
+  return (
+    <Section title="Trip PIN">
+      <KeyValue
+        label="State"
+        value={
+          pin.verifiedAt
+            ? `Verified ${when(pin.verifiedAt)}`
+            : pin.waivedAt
+              ? `Waived ${when(pin.waivedAt)} by ${pin.waivedBy ?? "—"}`
+              : pin.required
+                ? pin.blocked
+                  ? "Required · entry blocked after repeated wrong PINs"
+                  : "Required · not entered yet"
+                : "Not required for this assignment"
+        }
+      />
+      <KeyValue
+        label="Wrong attempts"
+        value={`${pin.failedAttempts} since the last lock · ${pin.lockouts} lock${pin.lockouts === 1 ? "" : "s"}`}
+      />
+      <Text className="text-xs text-general-200 mt-2">
+        The PIN itself is never shown here. Waive it only after confirming the
+        passenger is with the driver, for example when their phone is
+        unavailable. The waiver is audited, the passenger is notified, and it
+        ends if the ride is re-matched.
+      </Text>
+      {result && <Notice tone={result.tone} text={result.text} />}
+      {pin.canWaive && canWaive && (
+        <View className="mt-3">
+          <Field
+            label="Why the PIN can't be used (at least 10 characters, kept in the audit log)"
+            value={reason}
+            onChangeText={setReason}
+            multiline
+          />
+          <ActionButton
+            title="Allow start without PIN"
+            tone="danger"
+            disabled={busy || reason.trim().length < 10}
+            onPress={waive}
+          />
+        </View>
+      )}
+    </Section>
+  );
+};
+
 const RideDetailPage = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
   const detail = useApiQuery<AdminRideDetail>(`/api/admin/rides/${id}`);
@@ -635,6 +716,8 @@ const RideDetailPage = () => {
       </Section>
 
       <ReviewPanel detail={d} onChanged={detail.refetch} />
+
+      <PinPanel detail={d} onChanged={detail.refetch} />
 
       <CollectionSection detail={d} onChanged={detail.refetch} />
 

@@ -249,7 +249,7 @@ export function useRide(rideId: string) {
   );
 
   const perform = useCallback(
-    async (action: RideAction, reason?: string): Promise<"ok" | "left"> => {
+    async (action: RideAction, detail?: string): Promise<"ok" | "left"> => {
       const path =
         action === "cancel"
           ? `/api/rides/${rideId}/cancel`
@@ -262,8 +262,12 @@ export function useRide(rideId: string) {
         action === "cancel"
           ? {}
           : action === "interrupt"
-            ? { reason }
-            : { status: action };
+            ? { reason: detail }
+            : action === "stop_reached"
+              ? { index: Number(detail) }
+              : action === "in_progress" && detail
+                ? { status: action, pin: detail }
+                : { status: action };
       try {
         const next = await request<RideView | null>(path, { body });
         if (!next) {

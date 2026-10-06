@@ -1,4 +1,5 @@
 import * as admin from "../../scripts/admin-lib.cjs";
+import { derivePin } from "../../server/pin";
 import { registerDevice as registerDeviceHandler } from "../../server/routes/devices";
 import {
   acceptOffer,
@@ -21,7 +22,13 @@ import {
 } from "../../server/routes/rides";
 import { watchRide } from "../../server/routes/watch";
 
-import { call, DESTINATION, PICKUP, type TestContext } from "./helpers";
+import {
+  call,
+  DESTINATION,
+  PICKUP,
+  TEST_PIN_SECRET,
+  type TestContext,
+} from "./helpers";
 
 import type { Handler } from "../../server/http";
 import type { DriverDashboard, RideView } from "../../shared/contracts";
@@ -144,16 +151,31 @@ export const decline = (ctx: TestContext, driver: string, offerId: string) =>
 export const cancel = (ctx: TestContext, user: string, rideId: string) =>
   call(ctx, cancelRide, { user, params: { id: rideId }, body: {} });
 
-export const setStatus = (
+export async function tripPin(ctx: TestContext, rideId: string) {
+  const { rows } = await ctx.db.query<{ pin_nonce: string | null }>(
+    "SELECT pin_nonce FROM mobility.rides WHERE id = $1",
+    [rideId],
+  );
+  const nonce = rows[0]?.pin_nonce;
+  return nonce ? derivePin(TEST_PIN_SECRET, rideId, nonce) : undefined;
+}
+
+export const setStatus = async (
   ctx: TestContext,
   user: string,
   rideId: string,
   status: string,
+  pin?: string | null,
 ) =>
   call(ctx, updateRideStatus, {
     user,
     params: { id: rideId },
-    body: { status },
+    body: {
+      status,
+      ...(status === "in_progress" && pin !== null
+        ? { pin: pin ?? (await tripPin(ctx, rideId)) }
+        : {}),
+    },
   });
 
 export async function assign(ctx: TestContext, driver: string, rideId: string) {

@@ -72,6 +72,8 @@ const ride = (patch: Partial<RideView> = {}): RideView => ({
     rateBy: null,
   },
   counterpartRating: null,
+  pin: null,
+  pinEntry: null,
   serverTime: "2026-01-01T00:00:00.000Z",
   ...patch,
 });

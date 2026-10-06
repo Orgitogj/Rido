@@ -145,6 +145,7 @@ export function sessionToken(
 }
 
 export const WEBHOOK_SECRET = "whsec_test_secret";
+export const TEST_PIN_SECRET = "test-ride-pin-secret-0123456789abcdef";
 const stripeForSigning = new Stripe("sk_test_signing_only");
 
 export function signWebhook(event: object) {
@@ -669,6 +670,7 @@ export function createContext(db: Pool): TestContext {
   process.env.CLERK_JWT_KEY = TEST_JWT_PUBLIC_KEY;
   process.env.STRIPE_SECRET_KEY = "sk_test_signing_only";
   process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  process.env.RIDE_PIN_SECRET = TEST_PIN_SECRET;
   const stripe = new FakeStripe();
   const routing = new FakeRouting();
   stripe.clock = null;

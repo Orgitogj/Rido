@@ -80,6 +80,7 @@ const TTL_SECONDS: Record<string, number> = {
   ride_cancelled: 30 * 60,
   ride_rematching: 5 * 60,
   ride_interrupted: 60 * 60,
+  pin_waived: 15 * 60,
   no_driver: 30 * 60,
   hold_released: 24 * 3600,
   chat_message: 10 * 60,

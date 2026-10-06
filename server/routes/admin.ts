@@ -7,6 +7,7 @@ import {
   type AdminRefund,
   adminRefundSchema,
   adminTipRefundSchema,
+  pinWaiverSchema,
   adminReviewQuerySchema,
   adminRideQuerySchema,
   type AdminSupportDetail,
@@ -29,7 +30,8 @@ import { type DisputeRow, syncDisputesForIntent } from "../disputes";
 import { entryView, type EntryRow, reconcileRide } from "../earnings";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
-import { deliverPending } from "../notifications";
+import { deliverPending, enqueueNotification } from "../notifications";
+import { NOTIFY } from "../notificationText";
 import {
   audit,
   type OperatorRow,
@@ -37,6 +39,7 @@ import {
   requireOperator,
 } from "../operators";
 import { paymentMode } from "../paymentMode";
+import { pinBlocked, pinRequired } from "../pin";
 import {
   applyRefundSnapshot,
   createOperatorRefund,
@@ -45,7 +48,7 @@ import {
   refundableSummary,
   syncRefundsForIntent,
 } from "../refunds";
-import { settlementState } from "../rides";
+import { settlementState, withLockedRide } from "../rides";
 import { notifySupport } from "../support";
 import {
   attachmentAccessForOperator,
@@ -226,6 +229,72 @@ export async function resolveReview(
   return Response.json({ data: { rideId, resolved: true } });
 }
 
+export async function waiveRidePin(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const rideId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "support", {
+    type: "ride",
+    id: rideId,
+    action: "pin_waive",
+  });
+  const { reason } = await readJson(request, pinWaiverSchema);
+  const now = deps.now();
+  const outcome = await withLockedRide(deps, rideId, async (tx, ride) => {
+    if (ride.status !== "arrived") return "NOT_AT_PICKUP" as const;
+    if (!ride.pin_nonce) return "PIN_NOT_REQUIRED" as const;
+    if (ride.pin_waived_at) return "ALREADY" as const;
+    await tx.query(
+      `UPDATE mobility.rides
+          SET pin_waived_at = $2, pin_waived_by = $3, version = version + 1, updated_at = now()
+        WHERE id = $1`,
+      [rideId, now, operator.id],
+    );
+    await tx.query(
+      `INSERT INTO mobility.ride_events
+         (ride_id, from_status, to_status, actor, actor_user_id, reason, created_at)
+       VALUES ($1, 'arrived', 'arrived', 'operator', $2, 'pin_waived', $3)`,
+      [rideId, operator.user_id, now],
+    );
+    await enqueueNotification(
+      tx,
+      {
+        userId: ride.user_id,
+        rideId,
+        kind: "pin_waived",
+        dedupeKey: `ride:${rideId}:pin_waived:${ride.rematch_count}`,
+        ...NOTIFY.pinWaived(),
+        target: `/ride/${rideId}`,
+      },
+      now,
+    );
+    return "WAIVED" as const;
+  });
+  const failed = outcome === "NOT_AT_PICKUP" || outcome === "PIN_NOT_REQUIRED";
+  await audit(deps.db, {
+    operator,
+    action: "pin_waive",
+    targetType: "ride",
+    targetId: rideId,
+    reason,
+    result: failed ? "failed" : "succeeded",
+    detail: failed ? { error: outcome } : { repeated: outcome === "ALREADY" },
+  });
+  if (outcome === "NOT_AT_PICKUP") {
+    throw new ApiError(
+      409,
+      outcome,
+      "The PIN can only be waived while the driver is waiting at the pickup.",
+    );
+  }
+  if (outcome === "PIN_NOT_REQUIRED") {
+    throw new ApiError(409, outcome, "This ride doesn't require a trip PIN.");
+  }
+  return Response.json({ data: { rideId, waived: true } });
+}
+
 export async function searchRides(
   request: Request,
   _params: unknown,
@@ -294,6 +363,7 @@ export async function rideDetail(
       vehicle_model: string | null;
       vehicle_plate: string | null;
       review_resolver: string | null;
+      pin_waiver: string | null;
       from_schedule: boolean;
     }
   >(
@@ -542,6 +612,16 @@ export async function rideDetail(
       resolvedAt: iso(r.review_resolved_at),
       resolvedBy: r.review_resolver,
       note: r.review_note,
+    },
+    pin: {
+      required: pinRequired(r) && r.pin_verified_at === null,
+      verifiedAt: iso(r.pin_verified_at),
+      waivedAt: iso(r.pin_waived_at),
+      waivedBy: r.pin_waiver,
+      failedAttempts: r.pin_failed_attempts,
+      lockouts: r.pin_lockouts,
+      blocked: pinRequired(r) && pinBlocked(r),
+      canWaive: r.status === "arrived" && pinRequired(r),
     },
     events: events.rows.map((e) => ({
       fromStatus: e.from_status,

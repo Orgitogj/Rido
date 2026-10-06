@@ -1,5 +1,6 @@
 import {
   type AssignedDriver,
+  RIDE_PIN,
   type RideView,
   type SettlementState,
 } from "../shared/contracts";
@@ -41,6 +42,7 @@ import {
   type PaymentGateway,
   paymentStatusFor,
 } from "./payments";
+import { derivePin, pinBlocked, pinRequired, pinSecret } from "./pin";
 import { pruneRateLimits } from "./rateLimit";
 import { ratingState, summarySql, toSummary } from "./ratings";
 import { resubmitStaleRefunds, syncOpenRefunds } from "./refunds";
@@ -530,6 +532,15 @@ const viewSql = (nowRef: string) => `
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
+const PIN_STATUSES: RideRow["status"][] = ["accepted", "arriving", "arrived"];
+
+function passengerPin(row: RideRow, viewer: "passenger" | "driver") {
+  if (viewer !== "passenger" || !PIN_STATUSES.includes(row.status)) return null;
+  if (!pinRequired(row)) return null;
+  const secret = pinSecret();
+  return secret ? derivePin(secret, row.id, row.pin_nonce!) : null;
+}
+
 function toView(
   row: ViewRow,
   viewer: "passenger" | "driver",
@@ -623,6 +634,22 @@ function toView(
           ? toSummary(row.driver_summary)
           : null
         : toSummary(row.passenger_summary),
+    pin: passengerPin(row, viewer),
+    pinEntry:
+      viewer === "driver" && PIN_STATUSES.includes(row.status)
+        ? {
+            required: pinRequired(row),
+            attemptsLeft: Math.max(
+              0,
+              RIDE_PIN.maxAttempts - row.pin_failed_attempts,
+            ),
+            lockedUntil:
+              row.pin_locked_until && new Date(row.pin_locked_until) > now
+                ? iso(row.pin_locked_until)
+                : null,
+            blocked: pinRequired(row) && pinBlocked(row),
+          }
+        : null,
     serverTime: now.toISOString(),
   };
 }

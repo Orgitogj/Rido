@@ -102,6 +102,13 @@ export function checkConfig(env: Env = process.env): ConfigCheck[] {
       note: "At least 16 characters. Protects POST /api/internal/sweep.",
     },
     {
+      area: "Trip PIN",
+      name: "RIDE_PIN_SECRET",
+      level: production ? "required" : "recommended",
+      ok: (env.RIDE_PIN_SECRET?.trim().length ?? 0) >= 32,
+      note: "At least 32 random characters. Without it new rides start without a passenger PIN check.",
+    },
+    {
       area: "Google Routes",
       name: "GOOGLE_ROUTES_API_KEY",
       level: "required",

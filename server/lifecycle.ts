@@ -1,5 +1,6 @@
 import { ApiError } from "./errors";
 import { enqueueForTransition } from "./notifications";
+import { newPinNonce, pinRequired, pinRotation, pinSecret } from "./pin";
 
 import type { SqlClient } from "./db";
 import type {
@@ -167,6 +168,13 @@ export interface RideRow {
   review_resolved_at: Date | null;
   review_resolved_by: string | null;
   review_note: string | null;
+  pin_nonce: string | null;
+  pin_failed_attempts: number;
+  pin_lockouts: number;
+  pin_locked_until: Date | null;
+  pin_verified_at: Date | null;
+  pin_waived_at: Date | null;
+  pin_waived_by: string | null;
   vehicle_category_id: string | null;
   vehicle_category_name: string | null;
   passenger_count: number;
@@ -210,6 +218,7 @@ export async function transitionRide(
     now: Date;
     reason?: string | null;
     set?: Record<string, unknown>;
+    pinVerified?: boolean;
   },
 ): Promise<RideRow> {
   if (!canTransition(ride.status, to, opts.actor)) {
@@ -227,8 +236,22 @@ export async function transitionRide(
       "Mark each stop as reached before completing the trip.",
     );
   }
+  if (to === "in_progress" && pinRequired(ride) && !opts.pinVerified) {
+    throw new ApiError(
+      409,
+      "PIN_REQUIRED",
+      "Ask the passenger for the trip PIN to start.",
+    );
+  }
 
   const set: Record<string, unknown> = { ...opts.set };
+  if (to === "accepted") {
+    Object.assign(set, pinRotation(pinSecret() ? newPinNonce() : null));
+  } else if (to === "requested") {
+    Object.assign(set, pinRotation(null));
+  } else if (to === "in_progress" && opts.pinVerified) {
+    set.pin_verified_at = opts.now;
+  }
   if (to === "completed" && ride.payment_method === "in_vehicle") {
     set.collection_status = "pending";
   }

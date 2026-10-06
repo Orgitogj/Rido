@@ -35,6 +35,8 @@ const ride = (patch: Partial<RideView> = {}): RideView => ({
   currency: "usd",
   pickup: { address: "A", latitude: 0, longitude: 0 },
   destination: { address: "B", latitude: 0, longitude: 0.05 },
+  paymentMethod: "card_online",
+  collection: null,
   distanceMeters: 5000,
   durationSeconds: 600,
   createdAt: "2026-01-01T00:00:00.000Z",

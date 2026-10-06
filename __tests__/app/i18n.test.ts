@@ -75,10 +75,10 @@ describe("dictionaries", () => {
   it("never claims that earnings were paid out", () => {
     for (const language of ["en", "sq"] as const) {
       const earnings = dictionaries[language].driver.earnings;
-      expect(earnings.noPayoutsBody.length).toBeGreaterThan(20);
+      expect(earnings.balanceNote.length).toBeGreaterThan(20);
     }
-    expect(dictionaries.en.driver.earnings.noPayoutsBody).toMatch(
-      /none of it has been paid out/,
+    expect(dictionaries.en.driver.earnings.balanceNote).toMatch(
+      /Transfers are made outside the app and recorded here by the operator/,
     );
     expect(dictionaries.en.safety.emergency).toMatch(
       /does not contact emergency services/,

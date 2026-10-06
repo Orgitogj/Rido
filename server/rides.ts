@@ -8,6 +8,7 @@ import { asCurrency } from "../shared/currency";
 import { type IdentityAdmin, processAccountDeletions } from "./account";
 import { cancellationPreview } from "./cancellation";
 import { chatSummary, purgeExpiredChats } from "./chat";
+import { collectionView, flagUnrecordedCollections } from "./collection";
 import { type Database, type SqlClient, transaction } from "./db";
 import { syncOpenDisputes } from "./disputes";
 import { ensureRideEarning, reconcileEarnings } from "./earnings";
@@ -256,6 +257,30 @@ export async function syncIntent(
   return settlePayment(deps, ride, { force: true });
 }
 
+export async function startSearchWithoutPayment(
+  deps: RideDeps,
+  rideId: string,
+): Promise<RideRow> {
+  await refreshMatchRanking(deps, rideId).catch(() =>
+    log("ranking_refresh_failed", { rideId }),
+  );
+  return withLockedRide(deps, rideId, async (tx, ride) => {
+    if (ride.payment_method !== "in_vehicle") return ride;
+    if (ride.status !== "awaiting_payment") return ride;
+    const now = deps.now();
+    ride = await transitionRide(tx, ride, "requested", {
+      actor: "system",
+      now,
+      set: {
+        search_deadline: new Date(
+          now.getTime() + MATCHING.searchTimeoutSeconds * 1000,
+        ),
+      },
+    });
+    return offerToNextDriver(tx, ride, now);
+  });
+}
+
 export async function settlePayment(
   deps: RideDeps,
   ride: RideRow,
@@ -426,6 +451,7 @@ export async function sweep(
       now: deps.now,
     };
     const steps: [string, () => Promise<unknown>][] = [
+      ["collection_follow_up", () => flagUnrecordedCollections(deps.db, now)],
       ["refund_sync", () => syncOpenRefunds(deps)],
       ["tip_sync", () => syncOpenTips(deps)],
       ["tip_refund_sync", () => syncOpenTipRefunds(deps)],
@@ -553,6 +579,8 @@ function toView(
       latitude: row.destination_latitude,
       longitude: row.destination_longitude,
     },
+    paymentMethod: row.payment_method,
+    collection: collectionView(row, viewer),
     distanceMeters: row.distance_meters,
     durationSeconds: row.duration_seconds,
     createdAt: iso(row.created_at)!,

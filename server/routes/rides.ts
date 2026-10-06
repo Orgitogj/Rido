@@ -9,9 +9,11 @@ import {
 } from "../../shared/contracts";
 import { asCurrency } from "../../shared/currency";
 import { driverCancel, interruptTrip, passengerCancel } from "../cancellation";
+import { assertNoUnpaidRide } from "../collection";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
 import { ACTIVE_STATUSES, type RideRow, transitionRide } from "../lifecycle";
+import { startSearchWithoutPayment } from "../rides";
 import {
   advanceRideById,
   rideView,
@@ -253,6 +255,7 @@ export async function createBooking(
     [quoteId, user.id],
   );
   if (!quote.rows[0]) throw notFound("Quote");
+  await assertNoUnpaidRide(deps.db, user.id);
 
   const active = await deps.db.query<{ id: string }>(
     `SELECT id FROM mobility.rides
@@ -319,6 +322,17 @@ export async function createBooking(
     }
   }
 
+  if (ride.payment_method === "in_vehicle") {
+    const started = await startSearchWithoutPayment(deps, ride.id);
+    const direct: BookingResponse = {
+      paymentMethod: "in_vehicle",
+      rideId: started.id,
+      fareCents: started.fare_cents,
+      currency: asCurrency(started.currency),
+      status: started.status,
+    };
+    return Response.json({ data: direct }, { status: created ? 201 : 200 });
+  }
   const customerId = await ensureStripeCustomer(deps, user);
 
   let intent;
@@ -371,9 +385,10 @@ export async function createBooking(
 
   const ephemeralKey = await deps.payments.createEphemeralKey(customerId);
   const body: BookingResponse = {
+    paymentMethod: "card_online",
     rideId: ride.id,
     fareCents: ride.fare_cents,
-    currency: "usd",
+    currency: asCurrency(ride.currency),
     paymentStatus: ride.payment_status,
     paymentIntentClientSecret: intent.client_secret,
     customerId,

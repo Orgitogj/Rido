@@ -47,6 +47,8 @@ export interface DashboardLive {
     reviewOpen: number;
     financialIssues: number;
     disputesOpen: number;
+    unpaidRides: number;
+    collectionsPending: number;
   };
   scheduled: { upcoming: number; awaitingConfirmation: number };
 }
@@ -72,6 +74,10 @@ export interface DashboardPeriod {
     refundedCents: number;
     ledgerDriverEarningsCents: number;
     ledgerCommissionCents: number;
+    collectedPosCents: number;
+    collectedCashCents: number;
+    transfersToDriversCents: number;
+    transfersFromDriversCents: number;
     payouts: { available: false; paidOutCents: 0 };
   };
   scheduled: { created: number; expired: number };

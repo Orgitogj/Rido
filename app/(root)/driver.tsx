@@ -35,7 +35,7 @@ class LocalProblem extends Error {
 }
 
 const DriverScreen = () => {
-  const { t, language, error: errorText, queryError } = useI18n();
+  const { t, language, error: errorText, queryError, money } = useI18n();
   const { user } = useUser();
   const { getToken } = useAuth();
   const request = useApi();
@@ -414,6 +414,39 @@ const DriverScreen = () => {
                     ? t("driver.pushDenied")
                     : t("driver.pushUnavailable")}
               </Text>
+            )}
+
+            {(data?.collectionsDue ?? []).length > 0 && (
+              <View
+                className="bg-orange-50 rounded-2xl p-5 mt-5"
+                accessibilityRole="alert"
+              >
+                <Text className="text-lg font-JakartaBold">
+                  {t("driver.collectionsDueTitle")}
+                </Text>
+                <Text className="text-sm text-neutral-700 mt-1">
+                  {t("driver.collectionsDueBody")}
+                </Text>
+                {(data?.collectionsDue ?? []).map((due) => (
+                  <View key={due.rideId} className="mt-3">
+                    <Text className="text-sm" numberOfLines={1}>
+                      {due.destinationAddress}
+                    </Text>
+                    <CustomButton
+                      title={t("driver.recordPayment", {
+                        fare: money(due.fareCents, due.currency),
+                      })}
+                      className="mt-2"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/(root)/ride/[id]",
+                          params: { id: due.rideId },
+                        })
+                      }
+                    />
+                  </View>
+                ))}
+              </View>
             )}
 
             {activeRide && (

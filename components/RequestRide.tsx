@@ -1,4 +1,3 @@
-import { PaymentSheetError, useStripe } from "@stripe/stripe-react-native";
 import React, { useRef, useState } from "react";
 import { Text } from "react-native";
 
@@ -9,14 +8,7 @@ import { PaymentProps } from "@/types/type";
 
 import type { BookingResponse, RideView } from "@/shared/contracts";
 
-const NOT_AUTHORIZED = [
-  "requires_action",
-  "failed",
-  "pending",
-  "cancelled",
-] as const;
-
-const Payment = ({
+const RequestRide = ({
   quoteId,
   fareCents,
   currency,
@@ -25,7 +17,6 @@ const Payment = ({
   disabled,
 }: PaymentProps) => {
   const { t, error: errorText, money } = useI18n();
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const request = useApi();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,53 +33,14 @@ const Payment = ({
     inFlight.current = true;
     setBusy(true);
     setError(null);
-
     try {
       const booking = await request<BookingResponse>("/api/rides", {
         body: { quoteId },
       });
-
       if (booking.paymentMethod === "in_vehicle") {
         onRequested(booking.rideId);
-        return;
-      }
-
-      const init = await initPaymentSheet({
-        merchantDisplayName: "Uber Clone (demo)",
-        paymentIntentClientSecret: booking.paymentIntentClientSecret,
-        customerId: booking.customerId,
-        customerEphemeralKeySecret: booking.customerEphemeralKeySecret,
-        returnURL: "myapp://confirm-ride",
-      });
-      if (init.error) {
-        setError(t("pay.startFailed"));
-        return;
-      }
-
-      const sheet = await presentPaymentSheet();
-      if (sheet.error?.code === PaymentSheetError.Canceled) return;
-
-      let ride: RideView;
-      try {
-        ride = await request<RideView>(`/api/rides/${booking.rideId}/refresh`, {
-          method: "POST",
-        });
-      } catch {
-        setError(t("pay.notConfirmed"));
-        return;
-      }
-
-      if (ride.paymentStatus === "authorized") {
-        onRequested(ride.id);
       } else {
-        const known = NOT_AUTHORIZED.find((s) => s === ride.paymentStatus);
-        setError(
-          known
-            ? t(`pay.notAuthorizedState.${known}`)
-            : sheet.error
-              ? t("pay.declined")
-              : t("pay.notAuthorized"),
-        );
+        setError(t("pay.webOnly"));
       }
     } catch (e) {
       if (
@@ -118,7 +70,6 @@ const Payment = ({
           {error}
         </Text>
       )}
-
       <CustomButton
         title={
           busy
@@ -133,4 +84,4 @@ const Payment = ({
   );
 };
 
-export default Payment;
+export default RequestRide;

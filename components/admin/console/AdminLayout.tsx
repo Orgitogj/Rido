@@ -20,6 +20,7 @@ const NAV = [
   { href: "/admin/drivers", label: "Drivers", badge: "drivers" },
   { href: "/admin/areas", label: "Service areas", badge: null },
   { href: "/admin/categories", label: "Vehicle categories", badge: null },
+  { href: "/admin/balances", label: "Driver balances", badge: null },
   { href: "/admin/dashboard", label: "Dashboard", badge: null },
   { href: "/admin/system", label: "System", badge: null },
 ] as const;
@@ -135,18 +136,19 @@ const AdminLayout = () => {
             </Pressable>
           </View>
         </View>
-        {operator.stripeMode !== "test" && (
-          <View className="px-6">
-            <Notice
-              tone="warning"
-              text={
-                operator.stripeMode === "live"
-                  ? "The server uses a live Stripe key. Refunds from this console are disabled; they only run in Stripe test mode."
-                  : "Stripe is not configured on the server. Refunds are unavailable."
-              }
-            />
-          </View>
-        )}
+        {operator.paymentMode === "card_online" &&
+          operator.stripeMode !== "test" && (
+            <View className="px-6">
+              <Notice
+                tone="warning"
+                text={
+                  operator.stripeMode === "live"
+                    ? "The server uses a live Stripe key. Refunds from this console are disabled; they only run in Stripe test mode."
+                    : "Stripe is not configured on the server. Refunds are unavailable."
+                }
+              />
+            </View>
+          )}
         <ScrollView
           contentContainerStyle={{
             padding: 24,

@@ -277,5 +277,29 @@ export function useRide(rideId: string) {
     [rideId, request, applyRide],
   );
 
-  return { ride, live, polyline, connection, mode, error, perform };
+  const recordCollection = useCallback(
+    async (method: "pos" | "cash" | "unpaid") => {
+      try {
+        const next = await request<RideView>(
+          `/api/rides/${rideId}/collection`,
+          { body: { method } },
+        );
+        applyRide(next);
+      } finally {
+        subscription.current?.refreshNow();
+      }
+    },
+    [rideId, request, applyRide],
+  );
+
+  return {
+    ride,
+    live,
+    polyline,
+    connection,
+    mode,
+    error,
+    perform,
+    recordCollection,
+  };
 }

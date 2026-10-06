@@ -138,7 +138,7 @@ const RideRow = ({ ride }: { ride: DriverEarningRide }) => {
 };
 
 const EarningsScreen = () => {
-  const { t, tn, language, queryError, money } = useI18n();
+  const { t, tn, language, queryError, money, dateTime } = useI18n();
   const [period, setPeriod] = useState<EarningsPeriod>("week");
   const range = useMemo(() => periodRange(period, new Date()), [period]);
   const summary = useApiQuery<EarningsSummary>(
@@ -243,12 +243,79 @@ const EarningsScreen = () => {
             </View>
 
             <View className="bg-white rounded-2xl p-4 mt-4">
-              <Text className="text-sm font-JakartaSemiBold">
-                {t("driver.earnings.noPayoutsTitle")}
+              <Text
+                className="text-sm font-JakartaSemiBold"
+                accessibilityRole="header"
+              >
+                {t("driver.earnings.balanceTitle")}
               </Text>
-              <Text className="text-xs text-general-200 mt-1">
-                {t("driver.earnings.noPayoutsBody")}
+              <Text className="text-xl font-JakartaBold mt-1">
+                {s.balance.netOwedToDriverCents > 0
+                  ? t("driver.earnings.balanceOwedToYou", {
+                      amount: money(
+                        s.balance.netOwedToDriverCents,
+                        s.balance.currency,
+                      ),
+                    })
+                  : s.balance.netOwedToDriverCents < 0
+                    ? t("driver.earnings.balanceYouOwe", {
+                        amount: money(
+                          -s.balance.netOwedToDriverCents,
+                          s.balance.currency,
+                        ),
+                      })
+                    : t("driver.earnings.balanceSettled")}
               </Text>
+              <View className="mt-2">
+                <Row
+                  label={t("driver.earnings.heldByBusiness")}
+                  value={money(
+                    s.balance.earnedHeldByPlatformCents,
+                    s.balance.currency,
+                  )}
+                />
+                <Row
+                  label={t("driver.earnings.cashCommission")}
+                  value={money(
+                    s.balance.commissionOnCashCents,
+                    s.balance.currency,
+                  )}
+                />
+                <Row
+                  label={t("driver.earnings.paidToYou")}
+                  value={money(s.balance.paidToDriverCents, s.balance.currency)}
+                />
+                <Row
+                  label={t("driver.earnings.receivedFromYou")}
+                  value={money(
+                    s.balance.receivedFromDriverCents,
+                    s.balance.currency,
+                  )}
+                />
+              </View>
+              <Text className="text-xs text-general-200 mt-2">
+                {t("driver.earnings.balanceNote")}
+              </Text>
+              <Text className="text-sm font-JakartaSemiBold mt-3">
+                {t("driver.earnings.transfersTitle")}
+              </Text>
+              {s.settlements.length === 0 && (
+                <Text className="text-xs text-general-200 mt-1">
+                  {t("driver.earnings.noTransfers")}
+                </Text>
+              )}
+              {s.settlements.map((transfer) => (
+                <Text key={transfer.id} className="text-xs mt-1">
+                  {dateTime(transfer.createdAt)} ·{" "}
+                  {t(`driver.earnings.transfer_${transfer.direction}`)} ·{" "}
+                  {money(transfer.amountCents, transfer.currency)} ·{" "}
+                  {t(`driver.earnings.transferMethod_${transfer.method}`)}
+                  {transfer.reference ? ` · ${transfer.reference}` : ""}
+                </Text>
+              ))}
+            </View>
+
+            <View className="bg-white rounded-2xl p-4 mt-4">
               <Text className="text-xs text-general-200 mt-2">
                 {language === "en"
                   ? s.policy.label

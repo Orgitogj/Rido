@@ -484,6 +484,20 @@ export async function rideDetail(
       currency: asCurrency(r.currency),
       pickupAddress: r.origin_address,
       destinationAddress: r.destination_address,
+      paymentMethod: r.payment_method,
+      collection:
+        r.payment_method === "in_vehicle" && r.collection_status
+          ? {
+              status: r.collection_status,
+              method: r.collection_method,
+              recordedBy: r.collection_recorded_by,
+              note: r.collection_note,
+              collectedAt: iso(r.collected_at),
+              canRecord:
+                r.collection_status === "pending" ||
+                r.collection_status === "unpaid",
+            }
+          : null,
       createdAt: iso(r.created_at)!,
       requestedAt: iso(r.requested_at),
       completedAt: iso(r.completed_at),

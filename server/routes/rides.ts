@@ -25,6 +25,7 @@ import {
   syncIntent,
   withLockedRide,
 } from "../rides";
+import { linkScheduledBooking, scheduleOpenForBooking } from "../scheduled";
 import { type AppUser, ensureUser } from "../users";
 
 import { decodeCursor, encodeCursor } from "./admin";
@@ -293,6 +294,20 @@ export async function createBooking(
     );
   }
 
+  if (!(await scheduleOpenForBooking(deps.db, quoteId, deps.now()))) {
+    const { rows: already } = await deps.db.query(
+      "SELECT 1 FROM mobility.rides WHERE quote_id = $1",
+      [quoteId],
+    );
+    if (!already.length) {
+      throw new ApiError(
+        409,
+        "SCHEDULE_CLOSED",
+        "This scheduled request can no longer be confirmed.",
+      );
+    }
+  }
+
   const inserted = await deps.db.query<RideRow>(
     `INSERT INTO mobility.rides (
        quote_id, user_id,
@@ -363,6 +378,7 @@ export async function createBooking(
     }
   }
 
+  await linkScheduledBooking(deps.db, quoteId, ride.id, deps.now());
   if (ride.payment_method === "in_vehicle") {
     const started = await startSearchWithoutPayment(deps, ride.id);
     const direct: BookingResponse = {

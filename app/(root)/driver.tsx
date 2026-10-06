@@ -458,6 +458,18 @@ const DriverScreen = () => {
             )}
 
             <DriverTrips />
+            <CustomButton
+              title={t("support.driverRequest")}
+              bgVariant="outline"
+              textVariant="primary"
+              className="mt-5"
+              onPress={() =>
+                router.push({
+                  pathname: "/(root)/support/new",
+                  params: { role: "driver" },
+                })
+              }
+            />
           </>
         )}
 

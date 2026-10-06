@@ -120,14 +120,6 @@ export default section(
       resolved: "resolved {date}",
       openConversation: "Open conversation",
       report: "Report a problem",
-      reportNote:
-        "Support reviews every report. Refunds, if any, are decided by support and appear on this receipt once processed.",
-      whatHappened: "What happened?",
-      describe: "Describe the problem",
-      sendReport: "Send report",
-      reportSent:
-        "Thanks. Support received your report. You can follow it under Help & support.",
-      reportFailed: "Couldn't send your report.",
     },
   },
   {
@@ -250,14 +242,6 @@ export default section(
       resolved: "zgjidhur {date}",
       openConversation: "Hap bisedën",
       report: "Raporto një problem",
-      reportNote:
-        "Ekipi i ndihmës shqyrton çdo raportim. Rimbursimet, nëse ka, vendosen nga ekipi i ndihmës dhe shfaqen në këtë faturë pasi të përpunohen.",
-      whatHappened: "Çfarë ndodhi?",
-      describe: "Përshkruaj problemin",
-      sendReport: "Dërgo raportimin",
-      reportSent:
-        "Faleminderit. Ekipi i ndihmës e mori raportimin. Mund ta ndjekësh te Ndihma.",
-      reportFailed: "Raportimi nuk u dërgua dot.",
     },
   },
 );

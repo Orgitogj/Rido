@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import CustomButton from "@/components/CustomButton";
@@ -9,23 +9,16 @@ import RatingCard from "@/components/RatingCard";
 import ScreenHeader from "@/components/ScreenHeader";
 import StatusBadge from "@/components/StatusBadge";
 import TipSection from "@/components/TipSection";
-import { useApi, useApiQuery } from "@/lib/fetch";
+import { useApiQuery } from "@/lib/fetch";
 import { type I18n, useI18n } from "@/lib/i18n";
+import { supportCategories, type SupportCategory } from "@/shared/account";
 
 import type { PassengerSupportRequest, Receipt } from "@/shared/contracts";
 
 const PENDING = ["hold_releasing", "charge_pending", "hold_active"];
 
-const CATEGORIES = [
-  "charge_question",
-  "trip_problem",
-  "driver_issue",
-  "other",
-] as const;
-type Category = (typeof CATEGORIES)[number];
-
-const isCategory = (value: string): value is Category =>
-  (CATEGORIES as readonly string[]).includes(value);
+const isCategory = (value: string): value is SupportCategory =>
+  (supportCategories as readonly string[]).includes(value);
 
 function paymentText(r: Receipt, i18n: I18n) {
   const params = {
@@ -50,9 +43,8 @@ const Row = ({ label, value }: { label: string; value: string }) => (
 
 const ReceiptScreen = () => {
   const i18n = useI18n();
-  const { t, error: errorText, queryError, money, dateTime } = i18n;
+  const { t, queryError, money, dateTime } = i18n;
   const { id } = useLocalSearchParams<{ id: string }>();
-  const request = useApi();
   const receipt = useApiQuery<Receipt>(`/api/receipts/${id}`, {
     refetchOnFocus: true,
   });
@@ -60,14 +52,6 @@ const ReceiptScreen = () => {
     `/api/rides/${id}/support`,
     { refetchOnFocus: true },
   );
-  const [category, setCategory] = useState<Category>("charge_question");
-  const [message, setMessage] = useState("");
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportState, setReportState] = useState<{
-    ok: boolean;
-    text: string;
-  } | null>(null);
-  const [sending, setSending] = useState(false);
   const { refetch } = receipt;
   const r = receipt.data;
 
@@ -76,26 +60,6 @@ const ReceiptScreen = () => {
     const timer = setInterval(refetch, 5000);
     return () => clearInterval(timer);
   }, [r, refetch]);
-
-  const report = async () => {
-    setSending(true);
-    try {
-      await request(`/api/rides/${id}/support`, {
-        body: { category, message },
-      });
-      setReportState({ ok: true, text: t("pay.receipt.reportSent") });
-      setReportOpen(false);
-      setMessage("");
-      support.refetch();
-    } catch (e) {
-      setReportState({
-        ok: false,
-        text: errorText(e, t("pay.receipt.reportFailed")),
-      });
-    } finally {
-      setSending(false);
-    }
-  };
 
   const close = () =>
     router.canGoBack() ? router.back() : router.replace("/(root)/(tabs)/rides");
@@ -318,76 +282,19 @@ const ReceiptScreen = () => {
               </View>
             )}
 
-            {reportState && (
-              <Text
-                className={`text-sm mt-4 ${reportState.ok ? "text-green-700" : "text-red-600"}`}
-                accessibilityLiveRegion="polite"
-              >
-                {reportState.text}
-              </Text>
-            )}
-
-            {!r.isLegacyDemo && !reportOpen && (
+            {!r.isLegacyDemo && (
               <CustomButton
                 title={t("pay.receipt.report")}
                 bgVariant="outline"
                 textVariant="primary"
                 className="mt-5"
-                onPress={() => setReportOpen(true)}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(root)/support/new",
+                    params: { rideId: r.rideId, role: "passenger" },
+                  })
+                }
               />
-            )}
-
-            {reportOpen && (
-              <View className="bg-white rounded-2xl p-5 mt-5">
-                <Text
-                  className="text-base font-JakartaBold"
-                  accessibilityRole="header"
-                >
-                  {t("pay.receipt.report")}
-                </Text>
-                <Text className="text-xs text-general-200 mt-1">
-                  {t("pay.receipt.reportNote")}
-                </Text>
-                <View accessibilityRole="radiogroup">
-                  {CATEGORIES.map((c) => (
-                    <CustomButton
-                      key={c}
-                      title={t(`support.category.${c}`)}
-                      bgVariant={category === c ? "primary" : "outline"}
-                      textVariant={category === c ? "default" : "primary"}
-                      className="mt-2"
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: category === c }}
-                      onPress={() => setCategory(c)}
-                    />
-                  ))}
-                </View>
-                <TextInput
-                  value={message}
-                  onChangeText={setMessage}
-                  placeholder={t("pay.receipt.whatHappened")}
-                  multiline
-                  maxLength={1000}
-                  className="border border-neutral-300 rounded-xl p-3 mt-3 min-h-[90px]"
-                  accessibilityLabel={t("pay.receipt.describe")}
-                />
-                <CustomButton
-                  title={
-                    sending ? t("common.sending") : t("pay.receipt.sendReport")
-                  }
-                  disabled={sending || message.trim().length < 5}
-                  className="mt-3"
-                  onPress={report}
-                />
-                <CustomButton
-                  title={t("common.cancel")}
-                  bgVariant="outline"
-                  textVariant="primary"
-                  className="mt-2"
-                  disabled={sending}
-                  onPress={() => setReportOpen(false)}
-                />
-              </View>
             )}
           </>
         )}

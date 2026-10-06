@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { Currency } from "./currency";
+
 export const DASHBOARD_RULES = {
   maxRangeDays: 92,
   cacheSeconds: 15,
@@ -64,7 +66,7 @@ export interface DashboardPeriod {
   };
   search: { accepted: number; averageSecondsToAccept: number | null };
   money: {
-    currency: "usd";
+    currency: Currency;
     faresCapturedCents: number;
     tipsCapturedCents: number;
     refundedCents: number;

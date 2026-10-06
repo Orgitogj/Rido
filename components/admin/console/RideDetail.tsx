@@ -693,6 +693,12 @@ const RideDetailPage = () => {
           value={r.categoryName ?? "None (requested before categories)"}
         />
         <KeyValue label="Passengers" value={String(r.passengerCount)} />
+        {r.fromScheduledRequest && (
+          <KeyValue
+            label="Origin"
+            value="Scheduled request, confirmed by the passenger"
+          />
+        )}
         <KeyValue label="Created" value={when(r.createdAt)} />
         <KeyValue label="Completed" value={when(r.completedAt)} />
         <KeyValue label="Ended" value={when(r.endedAt)} />

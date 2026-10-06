@@ -65,6 +65,7 @@ const ConfirmRide = () => {
     passengerCount,
     scheduledRideId,
     setQuote,
+    setScheduledRide,
     clear,
   } = useRideStore();
   const savedPlaces = usePlacesStore((s) => s.places);
@@ -184,8 +185,29 @@ const ConfirmRide = () => {
     if (status === "ready" && quote && secondsLeft === 0) setStatus("expired");
   }, [status, quote, secondsLeft]);
 
+  useEffect(
+    () => () => {
+      if (!useRideStore.getState().scheduledRideId) return;
+      useRideStore.getState().reset();
+      useLocationStore.getState().setStops([]);
+      useLocationStore.getState().setLocationStatus("idle");
+    },
+    [],
+  );
+
+  const backToScheduled = () => {
+    if (!scheduledRideId) return;
+    const id = scheduledRideId;
+    setScheduledRide(null);
+    router.replace({ pathname: "/(root)/scheduled/[id]", params: { id } });
+  };
+
   const onRequested = (rideId: string) => {
     clear();
+    if (scheduledRideId) {
+      setScheduledRide(null);
+      useLocationStore.getState().setLocationStatus("idle");
+    }
     router.replace({ pathname: "/(root)/ride/[id]", params: { id: rideId } });
   };
 
@@ -224,6 +246,17 @@ const ConfirmRide = () => {
               onPress={loadQuote}
             />
           )}
+          {scheduledRideId &&
+            (problem.code === "SCHEDULE_CLOSED" ||
+              problem.code === "SCHEDULE_NOT_OPEN") && (
+              <CustomButton
+                title={t("booking.confirm.backToScheduled")}
+                bgVariant="outline"
+                textVariant="primary"
+                className="mt-3"
+                onPress={backToScheduled}
+              />
+            )}
           {problem.changeLocations && (
             <CustomButton
               title={t("booking.confirm.changeLocations")}
@@ -255,6 +288,41 @@ const ConfirmRide = () => {
               <Text className="text-sm text-orange-800">{notice}</Text>
             </View>
           )}
+          {scheduledRideId && (
+            <View className="bg-blue-50 rounded-xl p-3 mb-3">
+              <Text className="text-sm text-blue-800">
+                {t("booking.confirm.scheduledIntro")}
+              </Text>
+            </View>
+          )}
+          <View className="bg-white rounded-2xl p-4 mb-3">
+            <Text
+              className="text-base font-JakartaBold mb-1"
+              accessibilityRole="header"
+            >
+              {t("booking.confirm.itinerary")}
+            </Text>
+            <Text className="text-xs text-general-200 mt-1">
+              {t("booking.confirm.pickup")}
+            </Text>
+            <Text className="text-sm font-JakartaMedium">{userAddress}</Text>
+            {quote.stops.map((stop, index) => (
+              <View key={index}>
+                <Text className="text-xs text-general-200 mt-2">
+                  {t("booking.stops.number", { number: index + 1 })}
+                </Text>
+                <Text className="text-sm font-JakartaMedium">
+                  {stop.address}
+                </Text>
+              </View>
+            ))}
+            <Text className="text-xs text-general-200 mt-2">
+              {t("booking.confirm.destination")}
+            </Text>
+            <Text className="text-sm font-JakartaMedium">
+              {destinationAddress}
+            </Text>
+          </View>
           <View className="flex flex-col w-full py-3 px-5 rounded-3xl bg-general-600">
             <Line
               label={t("booking.confirm.price")}

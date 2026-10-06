@@ -153,6 +153,12 @@ const ReceiptScreen = () => {
                   value={String(r.passengerCount)}
                 />
               )}
+              {r.scheduledRideId && (
+                <Row
+                  label={t("pay.receipt.origin")}
+                  value={t("pay.receipt.fromSchedule")}
+                />
+              )}
               {r.driver && (
                 <Row
                   label={t("pay.receipt.driver")}

@@ -11,7 +11,7 @@ import type { RideView } from "@/shared/contracts";
 const geoapifyKey = process.env.EXPO_PUBLIC_GEOAPIFY_API_KEY;
 
 const RideCard = ({ ride }: { ride: RideView }) => {
-  const { t, money, dateTime } = useI18n();
+  const { t, tn, money, dateTime } = useI18n();
   const who =
     ride.driver?.name ??
     (ride.legacyDemoDriver
@@ -82,6 +82,21 @@ const RideCard = ({ ride }: { ride: RideView }) => {
                 {ride.destination.address}
               </Text>
             </View>
+            {(ride.category || ride.stops.length > 0) && (
+              <Text className="text-xs text-general-200">
+                {[
+                  ride.category?.name,
+                  ride.category
+                    ? tn("ride.offer.passengers", ride.passengerCount)
+                    : null,
+                  ride.stops.length > 0
+                    ? tn("ride.offer.stops", ride.stops.length)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+            )}
           </View>
         </View>
 

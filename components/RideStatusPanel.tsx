@@ -18,6 +18,7 @@ import StatusBadge from "@/components/StatusBadge";
 import { icons } from "@/constants";
 import { ApiRequestError } from "@/lib/fetch";
 import { useI18n } from "@/lib/i18n";
+import { nextTarget } from "@/lib/itinerary";
 import { formatRating } from "@/lib/ratingText";
 import {
   actionLabel,
@@ -67,22 +68,55 @@ const Row = ({ label, value }: { label: string; value: string }) => (
   </View>
 );
 
-const Route = ({ ride }: { ride: RideView }) => (
-  <View className="flex flex-col w-full mt-4">
-    <View className="flex flex-row items-center border-t border-b border-general-700 w-full py-3">
-      <Image source={icons.to} className="w-6 h-6" />
-      <Text className="text-base font-Jakarta ml-2 flex-1">
-        {ride.pickup.address}
-      </Text>
+const Route = ({ ride }: { ride: RideView }) => {
+  const { t } = useI18n();
+  const started = ride.status === "in_progress" || ride.status === "completed";
+  return (
+    <View className="flex flex-col w-full mt-4">
+      <View className="flex flex-row items-center border-t border-b border-general-700 w-full py-3">
+        <Image source={icons.to} className="w-6 h-6" />
+        <Text className="text-base font-Jakarta ml-2 flex-1">
+          {ride.pickup.address}
+        </Text>
+      </View>
+      {ride.stops.map((stop, index) => {
+        const reached = index < ride.stopsCompleted;
+        const next =
+          ride.status === "in_progress" && index === ride.stopsCompleted;
+        return (
+          <View
+            key={index}
+            className="flex flex-row items-center border-b border-general-700 w-full py-3"
+          >
+            <Image source={icons.marker} className="w-6 h-6" />
+            <View className="ml-2 flex-1">
+              <Text
+                className={`text-xs ${next ? "text-[#0066CC] font-JakartaBold" : "text-general-200"}`}
+              >
+                {started && reached
+                  ? t("ride.panel.stopReached", { number: index + 1 })
+                  : next
+                    ? t("ride.panel.stopNext", { number: index + 1 })
+                    : t("ride.panel.stop", { number: index + 1 })}
+              </Text>
+              <Text
+                className={`text-base font-Jakarta ${reached ? "text-general-200" : ""}`}
+              >
+                {stop.address}
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+      <View className="flex flex-row items-center border-b border-general-700 w-full py-3">
+        <Image source={icons.point} className="w-6 h-6" />
+        <Text className="text-base font-Jakarta ml-2 flex-1">
+          {ride.destination.address}
+        </Text>
+      </View>
     </View>
-    <View className="flex flex-row items-center border-b border-general-700 w-full py-3">
-      <Image source={icons.point} className="w-6 h-6" />
-      <Text className="text-base font-Jakarta ml-2 flex-1">
-        {ride.destination.address}
-      </Text>
-    </View>
-  </View>
-);
+  );
+};
 
 const RideStatusPanel = ({
   ride,
@@ -165,8 +199,13 @@ const RideStatusPanel = ({
         ? t("ride.busy.ending")
         : t("ride.busy.updating");
 
+  const upcoming = nextTarget(ride);
   const navigateTo =
-    ride.status === "in_progress" ? ride.destination : ride.pickup;
+    ride.status === "in_progress" ? upcoming.place : ride.pickup;
+  const nextStopNumber =
+    ride.status === "in_progress" && upcoming.stopIndex !== null
+      ? upcoming.stopIndex + 1
+      : null;
 
   return (
     <View className="pb-10">
@@ -210,7 +249,7 @@ const RideStatusPanel = ({
       )}
 
       {live && !isTerminal(ride.status) && (
-        <EtaCard live={live} viewer={ride.viewer} />
+        <EtaCard live={live} viewer={ride.viewer} stopNumber={nextStopNumber} />
       )}
 
       {ride.driver && !isDriver && (
@@ -231,6 +270,13 @@ const RideStatusPanel = ({
             label={t("ride.panel.rating")}
             value={formatRating(ride.counterpartRating, language)}
           />
+          {ride.category && (
+            <Row label={t("ride.panel.category")} value={ride.category.name} />
+          )}
+          <Row
+            label={t("ride.panel.passengers")}
+            value={String(ride.passengerCount)}
+          />
         </View>
       )}
 
@@ -248,15 +294,24 @@ const RideStatusPanel = ({
             label={t("ride.panel.tripTime")}
             value={duration(ride.durationSeconds / 60)}
           />
+          {ride.category && (
+            <Row label={t("ride.panel.category")} value={ride.category.name} />
+          )}
+          <Row
+            label={t("ride.panel.passengers")}
+            value={String(ride.passengerCount)}
+          />
         </View>
       )}
 
       {isDriver && !isTerminal(ride.status) && (
         <CustomButton
           title={
-            ride.status === "in_progress"
-              ? t("ride.panel.navigateDestination")
-              : t("ride.panel.navigatePickup")
+            ride.status !== "in_progress"
+              ? t("ride.panel.navigatePickup")
+              : nextStopNumber
+                ? t("ride.panel.navigateStop", { number: nextStopNumber })
+                : t("ride.panel.navigateDestination")
           }
           bgVariant="outline"
           textVariant="primary"

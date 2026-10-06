@@ -7,6 +7,7 @@ import {
   type DashboardSection,
   type DashboardView,
 } from "../shared/adminDashboard";
+import { appCurrency } from "../shared/currency";
 
 import { eligibleDriverSql } from "./eligibility";
 import { ApiError } from "./errors";
@@ -278,7 +279,7 @@ async function period(
       averageSecondsToAccept: orNull(requests.to_accept),
     },
     money: {
-      currency: "usd",
+      currency: appCurrency(),
       faresCapturedCents: num(fares.cents),
       tipsCapturedCents: num(tips.cents),
       refundedCents: num(refunds.cents),

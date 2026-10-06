@@ -19,6 +19,7 @@ const NOT_AUTHORIZED = [
 const Payment = ({
   quoteId,
   fareCents,
+  currency,
   onRequested,
   onExpired,
   disabled,
@@ -117,7 +118,7 @@ const Payment = ({
         title={
           busy
             ? t("pay.requesting")
-            : t("pay.requestRide", { price: money(fareCents) })
+            : t("pay.requestRide", { price: money(fareCents, currency) })
         }
         className="mt-6 mb-4"
         disabled={busy || disabled}

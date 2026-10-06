@@ -107,8 +107,8 @@ const ConfirmRide = () => {
           before === result.quote.fareCents
             ? t("booking.confirm.priceSame")
             : t("booking.confirm.priceChanged", {
-                previous: money(before),
-                current: money(result.quote.fareCents),
+                previous: money(before, result.quote.currency),
+                current: money(result.quote.fareCents, result.quote.currency),
               }),
         );
       }
@@ -232,7 +232,7 @@ const ConfirmRide = () => {
           <View className="flex flex-col w-full py-3 px-5 rounded-3xl bg-general-600">
             <Line
               label={t("booking.confirm.price")}
-              value={money(quote.fareCents)}
+              value={money(quote.fareCents, quote.currency)}
               strong
             />
             <Line

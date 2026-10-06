@@ -12,7 +12,8 @@ const RideScreen = () => {
   const { t, language } = useI18n();
   const { id } = useLocalSearchParams<{ id: string }>();
   const rideId = String(id);
-  const { ride, live, polyline, connection, error, perform } = useRide(rideId);
+  const { ride, live, polyline, connection, error, perform, recordCollection } =
+    useRide(rideId);
 
   const back = () =>
     router.canGoBack()
@@ -66,6 +67,7 @@ const RideScreen = () => {
         live={live}
         connection={connection}
         perform={perform}
+        recordCollection={recordCollection}
       />
       <Text className="text-xs text-general-200" selectable>
         {t("ride.panel.rideId", { id: ride.id.slice(0, 8) })}

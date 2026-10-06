@@ -48,6 +48,11 @@ const Payment = ({
         body: { quoteId },
       });
 
+      if (booking.paymentMethod === "in_vehicle") {
+        onRequested(booking.rideId);
+        return;
+      }
+
       const init = await initPaymentSheet({
         merchantDisplayName: "Uber Clone (demo)",
         paymentIntentClientSecret: booking.paymentIntentClientSecret,

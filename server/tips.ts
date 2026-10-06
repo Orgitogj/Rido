@@ -45,6 +45,7 @@ interface TipRideRow {
   fare_cents: number;
   currency: string;
   driver_name: string | null;
+  payment_method: string;
 }
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -80,6 +81,9 @@ export function tipEligibility(
     return { reason: "not_completed", tipBy: null };
   }
   if (!ride.driver_profile_id) return { reason: "no_driver", tipBy: null };
+  if (ride.payment_method === "in_vehicle") {
+    return { reason: "not_available", tipBy: null };
+  }
   const tipBy = new Date(
     new Date(ride.completed_at).getTime() + TIP_RULES.windowDays * DAY_MS,
   );
@@ -120,7 +124,7 @@ async function loadRide(db: SqlClient, rideId: string, lock = false) {
   const { rows } = await db.query<TipRideRow>(
     `SELECT r.id, r.user_id, r.status, r.payment_status, r.demo_driver_id,
             r.driver_profile_id, r.completed_at, r.captured_cents, r.fare_cents,
-            r.currency, dp.display_name AS driver_name
+            r.currency, dp.display_name AS driver_name, r.payment_method
        FROM mobility.rides r
        LEFT JOIN mobility.driver_profiles dp ON dp.id = r.driver_profile_id
       WHERE r.id = $1${lock ? " FOR SHARE OF r" : ""}`,
@@ -176,6 +180,7 @@ const NOT_ALLOWED: Record<TipIneligibleReason, string> = {
   payment_pending: "You can tip once the fare payment is confirmed.",
   window_closed: `Tips can be added within ${TIP_RULES.windowDays} days of the trip.`,
   already_tipped: "You've already tipped for this trip.",
+  not_available: "Tips aren't taken in the app for trips paid in the vehicle.",
 };
 
 export async function startTip(

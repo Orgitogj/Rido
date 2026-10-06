@@ -31,6 +31,8 @@ const CATEGORIES: { value: ReviewCategory | ""; label: string }[] = [
     value: "authorization_expiring_during_trip",
     label: "Authorization expiring",
   },
+  { value: "passenger_unpaid", label: "Reported unpaid" },
+  { value: "collection_not_recorded", label: "Payment not recorded" },
 ];
 
 const ReviewQueue = () => {

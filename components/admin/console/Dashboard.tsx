@@ -319,6 +319,18 @@ const Dashboard = () => {
                     }
                   />
                   <Metric
+                    label="Trips reported unpaid"
+                    value={String(live.queues.unpaidRides)}
+                    note="The passenger can't request again until support settles it"
+                    href="/admin"
+                    tone={live.queues.unpaidRides > 0 ? "attention" : undefined}
+                  />
+                  <Metric
+                    label="Payments not recorded yet"
+                    value={String(live.queues.collectionsPending)}
+                    note="Completed trips where the driver hasn't recorded the payment"
+                  />
+                  <Metric
                     label="Card disputes open"
                     value={String(live.queues.disputesOpen)}
                     href="/admin"
@@ -445,9 +457,28 @@ const Dashboard = () => {
                     value={formatCents(period.money.ledgerCommissionCents)}
                   />
                   <Metric
-                    label="Paid out to drivers"
+                    label="Collected on terminals"
+                    value={formatCents(period.money.collectedPosCents)}
+                    note="Card payments in the vehicle, as recorded by drivers or support"
+                  />
+                  <Metric
+                    label="Collected in cash"
+                    value={formatCents(period.money.collectedCashCents)}
+                    note="Kept by drivers"
+                  />
+                  <Metric
+                    label="Transfers to drivers (recorded)"
+                    value={formatCents(period.money.transfersToDriversCents)}
+                    note="Bank or cash transfers entered by operators; this system moves no money"
+                  />
+                  <Metric
+                    label="Received from drivers (recorded)"
+                    value={formatCents(period.money.transfersFromDriversCents)}
+                  />
+                  <Metric
+                    label="Automatic payouts"
                     value="Not available"
-                    note="No payout provider is connected, so nothing has been paid out by this system"
+                    note="No payout provider is connected, so nothing is paid out by this system"
                   />
                 </Grid>
                 <Text className="text-sm font-JakartaSemiBold mb-2">

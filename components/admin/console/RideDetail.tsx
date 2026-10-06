@@ -442,6 +442,108 @@ const ReviewPanel = ({
   );
 };
 
+const COLLECTION_STATE = {
+  pending: "Waiting for the driver to record the payment",
+  collected: "Collected",
+  unpaid: "Reported unpaid by the driver",
+  waived: "Closed without a payment",
+} as const;
+
+const CollectionSection = ({
+  detail,
+  onChanged,
+}: {
+  detail: AdminRideDetail;
+  onChanged: () => void;
+}) => {
+  const operator = useOperator();
+  const request = useApi();
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+  const ride = detail.ride;
+  const collection = ride.collection;
+  const canAct = operator?.permissions.includes("support") ?? false;
+
+  if (ride.paymentMethod !== "in_vehicle") return null;
+
+  const record = async (outcome: "pos" | "cash" | "waived") => {
+    setBusy(true);
+    try {
+      await request(`/api/admin/rides/${ride.id}/collection`, {
+        body: { outcome, note: note.trim() },
+      });
+      setResult({ tone: "success", text: "Payment record updated." });
+      setNote("");
+    } catch (e) {
+      setResult({ tone: "error", text: errorText(e) });
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
+
+  return (
+    <Section title="Payment in the vehicle">
+      <KeyValue
+        label="State"
+        value={
+          collection
+            ? `${COLLECTION_STATE[collection.status]}${
+                collection.method
+                  ? collection.method === "cash"
+                    ? " · cash"
+                    : " · card terminal"
+                  : ""
+              }`
+            : "Nothing to collect yet"
+        }
+      />
+      {collection?.collectedAt && (
+        <KeyValue label="Collected" value={when(collection.collectedAt)} />
+      )}
+      {collection?.recordedBy && (
+        <KeyValue label="Recorded by" value={collection.recordedBy} />
+      )}
+      {collection?.note && <KeyValue label="Note" value={collection.note} />}
+      <Text className="text-xs text-general-200 mt-2">
+        The passenger pays the driver on the card terminal or in cash. No card
+        is charged by this system. While a trip is reported unpaid, the
+        passenger can&apos;t request another ride.
+      </Text>
+      {result && <Notice tone={result.tone} text={result.text} />}
+      {collection?.canRecord && canAct && (
+        <View className="mt-3">
+          <Field
+            label="Note (required, kept in the audit log)"
+            value={note}
+            onChangeText={setNote}
+            multiline
+          />
+          <View className="flex flex-row flex-wrap">
+            <ActionButton
+              title="Paid on terminal"
+              disabled={busy || note.trim().length < 3}
+              onPress={() => record("pos")}
+            />
+            <ActionButton
+              title="Paid in cash"
+              disabled={busy || note.trim().length < 3}
+              onPress={() => record("cash")}
+            />
+            <ActionButton
+              title="Close without payment"
+              tone="danger"
+              disabled={busy || note.trim().length < 3}
+              onPress={() => record("waived")}
+            />
+          </View>
+        </View>
+      )}
+    </Section>
+  );
+};
+
 const RideDetailPage = () => {
   const { id } = useLocalSearchParams<{ id: string }>();
   const detail = useApiQuery<AdminRideDetail>(`/api/admin/rides/${id}`);
@@ -520,6 +622,8 @@ const RideDetailPage = () => {
       </Section>
 
       <ReviewPanel detail={d} onChanged={detail.refetch} />
+
+      <CollectionSection detail={d} onChanged={detail.refetch} />
 
       <Section title="Settlement">
         <KeyValue label="State" value={d.settlement.state} />

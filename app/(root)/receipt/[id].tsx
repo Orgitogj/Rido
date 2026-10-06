@@ -15,7 +15,12 @@ import { supportCategories, type SupportCategory } from "@/shared/account";
 
 import type { PassengerSupportRequest, Receipt } from "@/shared/contracts";
 
-const PENDING = ["hold_releasing", "charge_pending", "hold_active"];
+const PENDING = [
+  "hold_releasing",
+  "charge_pending",
+  "hold_active",
+  "collection_pending",
+];
 
 const isCategory = (value: string): value is SupportCategory =>
   (supportCategories as readonly string[]).includes(value);
@@ -169,7 +174,11 @@ const ReceiptScreen = () => {
                 value={money(r.quotedFareCents, r.currency)}
               />
               <Row
-                label={t("pay.receipt.charged")}
+                label={
+                  r.paymentMethod === "in_vehicle"
+                    ? t("pay.receipt.paidToDriver")
+                    : t("pay.receipt.charged")
+                }
                 value={money(r.chargedCents, r.currency)}
               />
               {r.refundedCents > 0 && (
@@ -228,9 +237,11 @@ const ReceiptScreen = () => {
               />
             )}
 
-            {r.outcome === "completed" && !r.isLegacyDemo && (
-              <TipSection rideId={r.rideId} />
-            )}
+            {r.outcome === "completed" &&
+              !r.isLegacyDemo &&
+              r.paymentMethod !== "in_vehicle" && (
+                <TipSection rideId={r.rideId} />
+              )}
 
             {(support.data ?? []).length > 0 && (
               <View className="bg-white rounded-2xl px-5 py-3 mt-4">

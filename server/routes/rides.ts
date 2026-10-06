@@ -15,6 +15,7 @@ import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
 import { ACTIVE_STATUSES, type RideRow, transitionRide } from "../lifecycle";
 import { paymentMode } from "../paymentMode";
+import { checkTripPin } from "../pin";
 import { startSearchWithoutPayment } from "../rides";
 import {
   advanceRideById,
@@ -205,21 +206,41 @@ export async function updateRideStatus(
   deps: Deps,
 ) {
   const user = await currentUser(request, deps);
-  const { rideId, viewer } = await resolveViewer(deps, user, params.id);
+  const { rideId, viewer, driverProfileId } = await resolveViewer(
+    deps,
+    user,
+    params.id,
+  );
   if (viewer !== "driver") {
     throw forbidden("Only the assigned driver can update the trip status.");
   }
-  const { status } = await readJson(request, driverStatusRequestSchema);
+  const { status, pin } = await readJson(request, driverStatusRequestSchema);
 
-  const ride: RideRow = await withLockedRide(deps, rideId, (tx, ride) =>
-    ride.status === status
-      ? Promise.resolve(ride)
-      : transitionRide(tx, ride, status, {
+  const outcome = await withLockedRide(
+    deps,
+    rideId,
+    async (tx, ride): Promise<{ ride: RideRow; error?: ApiError }> => {
+      if (ride.driver_profile_id !== driverProfileId) throw notFound("Ride");
+      if (ride.status === status) return { ride };
+      const now = deps.now();
+      let pinVerified = false;
+      if (status === "in_progress" && ride.status === "arrived") {
+        const check = await checkTripPin(tx, ride, pin, now);
+        if (!check.ok) return { ride: check.ride, error: check.error };
+        pinVerified = check.verified;
+      }
+      return {
+        ride: await transitionRide(tx, ride, status, {
           actor: "driver",
           actorUserId: user.id,
-          now: deps.now(),
+          now,
+          pinVerified,
         }),
+      };
+    },
   );
+  if (outcome.error) throw outcome.error;
+  const ride = outcome.ride;
   await settlePayment(deps, ride, { force: true });
   return Response.json({
     data: await rideView(deps.db, rideId, "driver", deps.now()),

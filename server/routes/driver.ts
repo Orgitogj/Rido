@@ -7,6 +7,7 @@ import {
   offerIdSchema,
   type RideOfferView,
 } from "../../shared/contracts";
+import { asCurrency } from "../../shared/currency";
 import { eligibleDriverSql } from "../eligibility";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
@@ -90,6 +91,7 @@ async function dashboard(
       profile: null,
       offer: null,
       activeRide: null,
+      collectionsDue: [],
       serverTime: now.toISOString(),
     };
   }
@@ -154,10 +156,32 @@ async function dashboard(
     now,
     "LIMIT 1",
   );
+  const { rows: due } = await deps.db.query<{
+    id: string;
+    fare_cents: number;
+    currency: string;
+    destination_address: string;
+    completed_at: Date | null;
+  }>(
+    `SELECT id, fare_cents, currency, destination_address, completed_at
+       FROM mobility.rides
+      WHERE driver_profile_id = $1 AND collection_status = 'pending'
+      ORDER BY completed_at LIMIT 10`,
+    [profile.id],
+  );
   return {
     profile: await profileView(deps, profile),
     offer,
     activeRide: activeRide ?? null,
+    collectionsDue: due.map((r) => ({
+      rideId: r.id,
+      fareCents: r.fare_cents,
+      currency: asCurrency(r.currency),
+      destinationAddress: r.destination_address,
+      completedAt: r.completed_at
+        ? new Date(r.completed_at).toISOString()
+        : null,
+    })),
     serverTime: now.toISOString(),
   };
 }

@@ -53,6 +53,8 @@ export default section(
       reason: {
         payment_pending:
           "You can add a tip once your fare payment is confirmed.",
+        not_available:
+          "Tips aren't taken in the app when the trip is paid in the vehicle.",
         window_closed: "The time to add a tip for this trip has passed.",
       },
     },
@@ -90,6 +92,16 @@ export default section(
         charged: "Charged {charged} to your card.",
         partially_refunded: "Charged {charged}; {refunded} refunded.",
         refunded: "Charged {charged}, fully refunded.",
+        pay_in_vehicle:
+          "You pay the driver {fare} by card or cash at the end of the trip.",
+        collection_pending:
+          "Pay the driver {fare} by card or cash. This receipt updates when the driver records it.",
+        paid_pos: "Paid {charged} by card on the driver's terminal.",
+        paid_cash: "Paid {charged} in cash to the driver.",
+        unpaid:
+          "The driver reported that {fare} was not paid. Contact support to settle it.",
+        waived: "Support closed this trip without a payment.",
+        nothing_due: "There is nothing to pay.",
         legacy_demo:
           "Booked with the earlier demo flow and a simulated driver. This is not a real charge record.",
       },
@@ -106,6 +118,7 @@ export default section(
       stopNotReached: "{address} (not reached)",
       category: "Vehicle category",
       passengers: "Passengers",
+      paidToDriver: "Paid to the driver",
       quotedFare: "Quoted fare",
       charged: "Charged",
       refunded: "Refunded",
@@ -174,6 +187,8 @@ export default section(
       reason: {
         payment_pending:
           "Mund të shtosh bakshish pasi të konfirmohet pagesa e udhëtimit.",
+        not_available:
+          "Bakshishi nuk merret në aplikacion kur udhëtimi paguhet në makinë.",
         window_closed:
           "Koha për të shtuar bakshish për këtë udhëtim ka kaluar.",
       },
@@ -212,6 +227,16 @@ export default section(
         charged: "U tarifuan {charged} në kartën tënde.",
         partially_refunded: "U tarifuan {charged}; {refunded} u rimbursuan.",
         refunded: "U tarifuan {charged}, të rimbursuara plotësisht.",
+        pay_in_vehicle:
+          "I paguan shoferit {fare} me kartë ose para në dorë në fund të udhëtimit.",
+        collection_pending:
+          "Paguaji shoferit {fare} me kartë ose para në dorë. Fatura përditësohet kur shoferi ta regjistrojë.",
+        paid_pos: "U paguan {charged} me kartë në pajisjen e shoferit.",
+        paid_cash: "U paguan {charged} me para në dorë te shoferi.",
+        unpaid:
+          "Shoferi raportoi se {fare} nuk u paguan. Kontakto ndihmën për ta zgjidhur.",
+        waived: "Ekipi i ndihmës e mbylli këtë udhëtim pa pagesë.",
+        nothing_due: "Nuk ka asgjë për të paguar.",
         legacy_demo:
           "U rezervua me versionin e mëparshëm demo dhe një shofer të simuluar. Ky nuk është regjistrim i një tarifimi real.",
       },
@@ -228,6 +253,7 @@ export default section(
       stopNotReached: "{address} (nuk u arrit)",
       category: "Kategoria e automjetit",
       passengers: "Pasagjerë",
+      paidToDriver: "Paguar te shoferi",
       quotedFare: "Çmimi i ofruar",
       charged: "Tarifuar",
       refunded: "Rimbursuar",

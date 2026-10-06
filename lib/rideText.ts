@@ -51,6 +51,7 @@ export const ACTION_LABEL = Object.fromEntries(
       "completed",
       "cancel",
       "interrupt",
+      "stop_reached",
     ] as RideAction[]
   ).map((action) => [action, actionLabel(action)]),
 ) as Record<RideAction, string>;
@@ -78,7 +79,9 @@ export function rideHeadline(
       case "arrived":
         return h("driverArrived");
       case "in_progress":
-        return h("driverInProgress");
+        return ride.stopsCompleted < ride.stops.length
+          ? h("driverToStop", { number: String(ride.stopsCompleted + 1) })
+          : h("driverInProgress");
       case "completed":
         return h("driverCompleted");
       case "cancelled":

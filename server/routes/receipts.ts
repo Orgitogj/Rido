@@ -9,6 +9,7 @@ import { type Deps, parseInput, readJson } from "../http";
 import { enforceRateLimit } from "../rateLimit";
 import { ratingEligibility } from "../ratings";
 import { RECEIPT_SQL, receiptFrom, type ReceiptRow } from "../receipts";
+import { createSupportRequest as createSupport } from "../support";
 import { ensureUser } from "../users";
 
 import { requireDriverProfile } from "./driver";
@@ -120,25 +121,16 @@ export async function createSupportRequest(
   const rideId = parseInput(receiptIdSchema, params.id);
   const { category, message } = await readJson(request, supportRequestSchema);
   await enforceRateLimit(deps.db, "supportRequests", user.id, deps.now());
-  const { rows: owned } = await deps.db.query(
-    `SELECT 1 FROM mobility.rides r WHERE r.id = $1 AND r.user_id = $2 AND ${VISIBLE}`,
-    [rideId, user.id],
-  );
-  if (!owned.length) throw notFound("Ride");
-  const { rows } = await deps.db.query<{ id: string; created_at: Date }>(
-    `INSERT INTO mobility.support_requests (ride_id, user_id, category, message)
-     VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
-    [rideId, user.id, category, message],
-  );
-  await deps.db.query(
-    `INSERT INTO mobility.support_events (support_request_id, action, to_status)
-     VALUES ($1, 'created', 'open')`,
-    [rows[0].id],
-  );
+  const created = await createSupport(deps, user.id, {
+    role: "passenger",
+    rideId,
+    category,
+    message,
+  });
   return Response.json(
     {
       data: {
-        id: rows[0].id,
+        id: created.id,
         status: "open",
         message:
           "Thanks. Our team will review this trip. You can follow the status here; any refund is decided by support and shown on your receipt once processed.",
@@ -167,14 +159,14 @@ export async function listRideSupport(
   }>(
     `SELECT id, ride_id, category, status, created_at, updated_at, resolved_at, resolution_message
        FROM mobility.support_requests
-      WHERE ride_id = $1 AND user_id = $2
+      WHERE ride_id = $1 AND user_id = $2 AND requester_role = 'passenger'
       ORDER BY created_at DESC LIMIT 20`,
     [rideId, user.id],
   );
   const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
   const items: PassengerSupportRequest[] = rows.map((r) => ({
     id: r.id,
-    rideId: r.ride_id,
+    rideId: r.ride_id ?? rideId,
     category: r.category,
     status: r.status,
     createdAt: iso(r.created_at)!,

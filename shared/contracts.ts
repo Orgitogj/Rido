@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import {
+  appCurrency,
+  type Currency,
+  formatAmount,
+  type PaymentMethod,
+} from "./currency";
+
 export const placeSchema = z.strictObject({
   address: z.string().trim().min(1).max(300),
   latitude: z.number().finite().min(-90).max(90),
@@ -230,7 +237,7 @@ export type DriverApplication = z.infer<typeof driverApplicationSchema>;
 export interface RideQuote {
   id: string;
   fareCents: number;
-  currency: "usd";
+  currency: Currency;
   distanceMeters: number;
   durationSeconds: number;
   expiresAt: string;
@@ -266,7 +273,7 @@ export interface RideView {
   paymentStatus: PaymentStatus;
   version: number;
   fareCents: number;
-  currency: "usd";
+  currency: Currency;
   pickup: Place;
   destination: Place;
   distanceMeters: number | null;
@@ -403,7 +410,7 @@ export interface Receipt {
   startedAt: string | null;
   completedAt: string | null;
   endedAt: string | null;
-  currency: "usd";
+  currency: Currency;
   quotedFareCents: number;
   chargedCents: number;
   refundedCents: number;
@@ -440,7 +447,7 @@ export interface DriverTrip {
   startedAt: string | null;
   completedAt: string | null;
   fareCents: number;
-  currency: "usd";
+  currency: Currency;
   distanceMeters: number | null;
   ratingPending: boolean;
 }
@@ -650,13 +657,11 @@ export interface ApiErrorBody {
   requestId?: string;
 }
 
-export function formatCents(cents: number, currency = "usd"): string {
-  if (!Number.isSafeInteger(cents)) return "--";
-  const sign = cents < 0 ? "-" : "";
-  const abs = Math.abs(cents);
-  const whole = Math.floor(abs / 100).toLocaleString("en-US");
-  const fraction = String(abs % 100).padStart(2, "0");
-  return `${sign}${currency === "usd" ? "$" : ""}${whole}.${fraction}`;
+export function formatCents(
+  cents: number,
+  currency: Currency = appCurrency(),
+): string {
+  return formatAmount(cents, currency);
 }
 
 export type OperatorPermission =
@@ -744,6 +749,7 @@ export interface OperatorMe {
   displayName: string;
   permissions: OperatorPermission[];
   stripeMode: "test" | "live" | "unconfigured";
+  paymentMode: PaymentMethod;
 }
 
 export interface ReviewItem {
@@ -804,7 +810,7 @@ export interface AdminRideDetail {
     fareCents: number;
     capturedCents: number | null;
     refundedCents: number;
-    currency: "usd";
+    currency: Currency;
     pickupAddress: string;
     destinationAddress: string;
     createdAt: string;
@@ -1051,7 +1057,7 @@ export type TipIneligibleReason =
 export interface TipView {
   id: string;
   amountCents: number;
-  currency: "usd";
+  currency: Currency;
   status: TipStatus;
   refundedCents: number;
   lastError: string | null;
@@ -1111,7 +1117,7 @@ export interface CommissionPolicyView {
 export interface EarningsSummary {
   from: string | null;
   to: string | null;
-  currency: "usd";
+  currency: Currency;
   confirmed: {
     rides: number;
     fareCents: number;
@@ -1139,7 +1145,7 @@ export interface DriverEarningRide {
   pickupAddress: string;
   destinationAddress: string;
   state: "confirmed" | "pending" | "not_charged";
-  currency: "usd";
+  currency: Currency;
   fareCents: number;
   commissionRateBps: number | null;
   commissionCents: number | null;

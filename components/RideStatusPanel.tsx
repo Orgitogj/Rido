@@ -6,6 +6,7 @@ import {
   Linking,
   Platform,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -392,6 +393,28 @@ const RideStatusPanel = ({
       )}
 
       <Route ride={ride} />
+
+      {!isDriver && ride.scheduledRideId && (
+        <View className="flex flex-row items-center justify-between mt-3">
+          <Text className="text-sm text-general-200 flex-1">
+            {t("ride.panel.fromSchedule")}
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="link"
+            className="min-h-[44px] justify-center ml-2"
+            onPress={() =>
+              router.push({
+                pathname: "/(root)/scheduled/[id]",
+                params: { id: ride.scheduledRideId! },
+              })
+            }
+          >
+            <Text className="text-sm text-[#0066CC] font-JakartaSemiBold">
+              {t("ride.panel.openSchedule")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {ride.status === "completed" && (
         <View className="bg-general-600 rounded-2xl px-4 py-2 mt-4">

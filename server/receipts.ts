@@ -13,6 +13,7 @@ import type {
 } from "../shared/contracts";
 
 export interface ReceiptRow extends RideRow {
+  scheduled_ride_id: string | null;
   driver_name: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
@@ -33,6 +34,7 @@ export interface ReceiptRow extends RideRow {
 export const RECEIPT_SQL = `
   SELECT r.*, dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model,
          dp.vehicle_plate,
+         (SELECT s.id FROM mobility.scheduled_rides s WHERE s.ride_id = r.id) AS scheduled_ride_id,
          CASE WHEN dd.id IS NULL THEN NULL
               ELSE dd.first_name || ' ' || dd.last_name END AS demo_driver_name,
          (SELECT COALESCE(sum(f.amount_cents), 0) FROM mobility.refunds f
@@ -216,6 +218,7 @@ export function receiptFrom(row: ReceiptRow, now: Date): Receipt {
       ? { id: row.vehicle_category_id, name: row.vehicle_category_name ?? "" }
       : null,
     passengerCount: row.passenger_count,
+    scheduledRideId: row.scheduled_ride_id,
     paymentMethod: row.payment_method,
     collection:
       row.payment_method === "in_vehicle" && row.collection_status

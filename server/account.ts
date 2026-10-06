@@ -177,6 +177,18 @@ async function anonymize(tx: SqlClient, userId: string, now: Date) {
     [userId],
   );
   await tx.query(
+    `DELETE FROM mobility.scheduled_rides s
+      WHERE s.user_id = $1 AND s.ride_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM mobility.quotes q WHERE q.scheduled_ride_id = s.id)`,
+    [userId],
+  );
+  await tx.query(
+    `UPDATE mobility.scheduled_rides
+        SET status = 'cancelled', end_reason = 'account_closed', ended_at = $2, updated_at = $2
+      WHERE user_id = $1 AND status IN ('scheduled', 'awaiting_confirmation')`,
+    [userId, now],
+  );
+  await tx.query(
     "UPDATE mobility.rides SET passenger_name = NULL WHERE user_id = $1",
     [userId],
   );

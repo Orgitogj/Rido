@@ -48,6 +48,7 @@ import { ratingState, summarySql, toSummary } from "./ratings";
 import { resubmitStaleRefunds, syncOpenRefunds } from "./refunds";
 import { pruneRoutingUsage } from "./routingBudget";
 import { redactExpiredEvidence } from "./safety";
+import { confirmScheduledRide, dispatchScheduledRides } from "./scheduled";
 import { purgeSupportAttachments } from "./supportAttachments";
 import { syncOpenTipRefunds } from "./tipRefunds";
 import { syncOpenTips } from "./tips";
@@ -252,6 +253,7 @@ export async function syncIntent(
           ),
         },
       });
+      await confirmScheduledRide(tx, ride.id, now);
       ride = await offerToNextDriver(tx, ride, now);
     }
     return ride;
@@ -279,6 +281,7 @@ export async function startSearchWithoutPayment(
         ),
       },
     });
+    await confirmScheduledRide(tx, ride.id, now);
     return offerToNextDriver(tx, ride, now);
   });
 }
@@ -453,6 +456,7 @@ export async function sweep(
       now: deps.now,
     };
     const steps: [string, () => Promise<unknown>][] = [
+      ["scheduled_rides", () => dispatchScheduledRides(deps)],
       ["collection_follow_up", () => flagUnrecordedCollections(deps.db, now)],
       ["refund_sync", () => syncOpenRefunds(deps)],
       ["tip_sync", () => syncOpenTips(deps)],
@@ -480,6 +484,7 @@ export async function sweep(
 }
 
 interface ViewRow extends RideRow {
+  scheduled_ride_id: string | null;
   passenger_name: string | null;
   driver_name: string | null;
   vehicle_make: string | null;
@@ -503,6 +508,7 @@ interface ViewRow extends RideRow {
 
 const viewSql = (nowRef: string) => `
   SELECT r.*, COALESCE(r.passenger_name, u.name) AS passenger_name,
+         (SELECT s.id FROM mobility.scheduled_rides s WHERE s.ride_id = r.id) AS scheduled_ride_id,
          dp.display_name AS driver_name, dp.vehicle_make, dp.vehicle_model,
          dp.vehicle_plate, dp.vehicle_seats, dp.vehicle_color,
          CASE WHEN dd.id IS NULL THEN NULL
@@ -596,6 +602,7 @@ function toView(
       ? { id: row.vehicle_category_id, name: row.vehicle_category_name ?? "" }
       : null,
     passengerCount: row.passenger_count,
+    scheduledRideId: viewer === "passenger" ? row.scheduled_ride_id : null,
     paymentMethod: row.payment_method,
     collection: collectionView(row, viewer),
     distanceMeters: row.distance_meters,

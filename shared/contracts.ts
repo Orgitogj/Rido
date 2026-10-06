@@ -401,6 +401,7 @@ export interface RideView {
   stopsCompleted: number;
   category: RideCategory | null;
   passengerCount: number;
+  scheduledRideId: string | null;
   paymentMethod: PaymentMethod;
   collection: CollectionView | null;
   distanceMeters: number | null;
@@ -543,6 +544,7 @@ export interface Receipt {
   stopsCompleted: number;
   category: RideCategory | null;
   passengerCount: number;
+  scheduledRideId: string | null;
   paymentMethod: PaymentMethod;
   collection: {
     status: CollectionStatus;

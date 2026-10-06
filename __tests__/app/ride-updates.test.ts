@@ -39,6 +39,7 @@ const ride = (patch: Partial<RideView> = {}): RideView => ({
   stopsCompleted: 0,
   category: null,
   passengerCount: 1,
+  scheduledRideId: null,
   paymentMethod: "card_online",
   collection: null,
   distanceMeters: 5000,

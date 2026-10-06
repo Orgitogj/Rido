@@ -92,6 +92,7 @@ const RideCard = ({ ride }: { ride: RideView }) => {
                   ride.stops.length > 0
                     ? tn("ride.offer.stops", ride.stops.length)
                     : null,
+                  ride.scheduledRideId ? t("pay.receipt.fromSchedule") : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

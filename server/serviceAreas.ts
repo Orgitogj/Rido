@@ -35,6 +35,7 @@ export interface ServiceAreaRow {
   max_longitude: number;
   dropoff_rule: DropoffRule;
   is_development: boolean;
+  timezone: string;
   version: number;
   created_at: Date;
   updated_at: Date;
@@ -112,6 +113,7 @@ const snapshot = (a: ServiceAreaRow) => ({
   boundary: a.boundary,
   dropoffRule: a.dropoff_rule,
   isDevelopment: a.is_development,
+  timezone: a.timezone,
   version: a.version,
 });
 
@@ -156,6 +158,7 @@ function item(
     status: a.status,
     dropoffRule: a.dropoff_rule,
     isDevelopment: a.is_development,
+    timezone: a.timezone,
     version: a.version,
     vertexCount: a.boundary.length,
     currentPolicy: current
@@ -256,6 +259,7 @@ export async function createServiceArea(
     boundary: Vertex[];
     dropoffRule: DropoffRule;
     isDevelopment: boolean;
+    timezone?: string;
     reason: string;
   },
 ) {
@@ -282,8 +286,8 @@ export async function createServiceArea(
       `INSERT INTO mobility.service_areas
          (code, name, status, boundary, min_latitude, max_latitude, min_longitude,
           max_longitude, dropoff_rule, is_development, created_by, updated_by,
-          created_at, updated_at)
-       VALUES ($1, $2, 'inactive', $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $11)
+          created_at, updated_at, timezone)
+       VALUES ($1, $2, 'inactive', $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $11, $12)
        ON CONFLICT (code) DO NOTHING
        RETURNING *`,
       [
@@ -298,6 +302,7 @@ export async function createServiceArea(
         input.isDevelopment,
         operator?.id ?? null,
         now,
+        input.timezone ?? "UTC",
       ],
     );
     if (!rows[0]) return null;
@@ -341,6 +346,7 @@ export async function updateServiceArea(
     boundary?: Vertex[];
     dropoffRule?: DropoffRule;
     status?: "active" | "inactive";
+    timezone?: string;
     expectedVersion: number;
     reason: string;
   },
@@ -408,6 +414,7 @@ export async function updateServiceArea(
               max_longitude = COALESCE($7, max_longitude),
               dropoff_rule = COALESCE($8, dropoff_rule),
               status = COALESCE($9, status),
+              timezone = COALESCE($12, timezone),
               version = version + 1, updated_by = $10, updated_at = $11
         WHERE id = $1 RETURNING *`,
       [
@@ -422,9 +429,11 @@ export async function updateServiceArea(
         input.status ?? null,
         operator.id,
         now,
+        input.timezone ?? null,
       ],
     );
     const changed = [
+      input.timezone !== undefined && "timezone",
       input.name !== undefined && "name",
       input.boundary !== undefined && "boundary",
       input.dropoffRule !== undefined && "dropoff_rule",

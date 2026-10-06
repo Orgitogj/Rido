@@ -7,6 +7,7 @@ import {
   interruptRequestSchema,
   rideIdSchema,
 } from "../../shared/contracts";
+import { asCurrency } from "../../shared/currency";
 import { driverCancel, interruptTrip, passengerCancel } from "../cancellation";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
@@ -330,7 +331,7 @@ export async function createBooking(
     intent = await deps.payments.createPaymentIntent(
       {
         amount: ride.fare_cents,
-        currency: "usd",
+        currency: asCurrency(ride.currency),
         customer: customerId,
         metadata: { ride_id: ride.id, app_user_id: user.id },
       },

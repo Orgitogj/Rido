@@ -181,10 +181,13 @@ export async function liveTrip(
     latitude: ride.origin_latitude,
     longitude: ride.origin_longitude,
   };
-  const destination = {
-    latitude: ride.destination_latitude,
-    longitude: ride.destination_longitude,
-  };
+  const nextStop = ride.stops[ride.stops_completed];
+  const destination = nextStop
+    ? { latitude: nextStop.latitude, longitude: nextStop.longitude }
+    : {
+        latitude: ride.destination_latitude,
+        longitude: ride.destination_longitude,
+      };
   const origin =
     ride.status === "arrived"
       ? pickup

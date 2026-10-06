@@ -12,6 +12,7 @@ import {
   RoutingUnavailableError,
 } from "../../server/routing";
 import { haversineMeters } from "../../shared/geo";
+import { DEFAULT_VEHICLE_CATEGORY_ID } from "../../shared/vehicleCategory";
 
 import type { IdentityAdmin } from "../../server/account";
 import type {
@@ -64,6 +65,18 @@ export async function resetDb(db: Pool) {
        mobility.ride_offers, mobility.match_rankings, mobility.rides, mobility.quotes,
        mobility.fare_policies, mobility.service_area_events, mobility.service_areas,
        mobility.routing_usage, mobility.driver_profiles, mobility.users CASCADE`,
+  );
+  await db.query(
+    "DELETE FROM mobility.vehicle_category_events WHERE vehicle_category_id <> $1",
+    [DEFAULT_VEHICLE_CATEGORY_ID],
+  );
+  await db.query(
+    "DELETE FROM mobility.vehicle_categories WHERE NOT is_default",
+  );
+  await db.query(
+    `UPDATE mobility.vehicle_categories
+        SET name = 'Standard', capacity = 4, status = 'active', version = 1
+      WHERE is_default`,
   );
   await db.query(
     `WITH area AS (
@@ -428,7 +441,8 @@ export const pointKey = (p: Point) =>
 
 export class FakeRouting implements RoutingProvider {
   source = "test_provider" as const;
-  calls: { from: Point; to: Point }[] = [];
+  calls: { from: Point; to: Point; via: Point[] }[] = [];
+  unreachable = new Set<string>();
   matrixCalls: { origins: Point[]; destination: Point }[] = [];
   fail = false;
   noRoute = false;
@@ -436,13 +450,16 @@ export class FakeRouting implements RoutingProvider {
   durationSeconds = 420;
   distanceMeters = 3100;
   matrixDurations = new Map<string, number | null>();
-  async route(from: Point, to: Point) {
-    this.calls.push({ from, to });
+  async route(from: Point, to: Point, via: Point[] = []) {
+    this.calls.push({ from, to, via });
     if (this.fail) throw new RoutingUnavailableError("routing unavailable");
     if (this.noRoute) return null;
+    if ([from, ...via, to].some((p) => this.unreachable.has(pointKey(p)))) {
+      return null;
+    }
     return {
-      durationSeconds: this.durationSeconds,
-      distanceMeters: this.distanceMeters,
+      durationSeconds: this.durationSeconds * (1 + via.length),
+      distanceMeters: this.distanceMeters * (1 + via.length),
       polyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
     };
   }

@@ -59,6 +59,7 @@ export const farePolicyCreateSchema = z.strictObject({
   perMinuteCents: centsSchema,
   minimumFareCents: z.number().int().min(50).max(1_000_000),
   effectiveFrom: z.iso.datetime({ offset: true }),
+  vehicleCategoryId: z.uuid().optional(),
   reason: reasonSchema,
 });
 
@@ -71,6 +72,8 @@ export type FarePolicyState =
 
 export interface FarePolicyView {
   id: string;
+  vehicleCategoryId: string;
+  vehicleCategoryName: string | null;
   version: number;
   label: string;
   isDevelopment: boolean;

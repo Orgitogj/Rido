@@ -18,6 +18,7 @@ import { enforceRateLimit } from "../rateLimit";
 import { summarySql, toSummary } from "../ratings";
 import { advanceRideById, rideViews, sweep, withLockedRide } from "../rides";
 import { type AppUser, ensureUser } from "../users";
+import { categoryMatchSql, driverCategories } from "../vehicleCategories";
 import {
   applicantView,
   completeUpload,
@@ -41,6 +42,7 @@ async function profileView(deps: Deps, p: ProfileRow) {
     await profileDocuments(deps.db, p.id),
     toSummary(p.rating_summary ?? null),
     deps.now(),
+    await driverCategories(deps.db, p.id),
   );
 }
 
@@ -108,12 +110,17 @@ async function dashboard(
     destination_longitude: number;
     fare_cents: number;
     trip_distance: number | null;
+    stop_count: number;
+    passenger_count: number;
+    vehicle_category_name: string | null;
     passenger_summary: { count: number; avg: number | null } | null;
   }>(
     `SELECT o.id, o.ride_id, o.expires_at, o.distance_meters,
             r.origin_address, r.origin_latitude, r.origin_longitude,
             r.destination_address, r.destination_latitude, r.destination_longitude,
             r.fare_cents, r.distance_meters AS trip_distance,
+            jsonb_array_length(r.stops) AS stop_count, r.passenger_count,
+            r.vehicle_category_name,
             ${summarySql("r.user_id", "driver", "$2::timestamptz")} AS passenger_summary
        FROM mobility.ride_offers o
        JOIN mobility.rides r ON r.id = o.ride_id
@@ -145,6 +152,9 @@ async function dashboard(
           Math.floor((new Date(o.expires_at).getTime() - now.getTime()) / 1000),
         ),
         passengerRating: toSummary(o.passenger_summary),
+        stopCount: o.stop_count,
+        passengerCount: o.passenger_count,
+        categoryName: o.vehicle_category_name,
       }
     : null;
 
@@ -427,9 +437,11 @@ async function respondToOffer(
           online: boolean;
           eligible: boolean;
         }>(
-          `SELECT dp.online, ${eligibleDriverSql("dp", "$2::timestamptz")} AS eligible
+          `SELECT dp.online,
+                  (${eligibleDriverSql("dp", "$2::timestamptz")}
+                   AND ${categoryMatchSql("dp", "$3", "$4")}) AS eligible
              FROM mobility.driver_profiles dp WHERE dp.id = $1 FOR UPDATE`,
-          [profile.id, now],
+          [profile.id, now, ride.vehicle_category_id, ride.passenger_count],
         );
         if (!me[0].online || !me[0].eligible) {
           return { ok: false as const, code: "OFFER_UNAVAILABLE" };

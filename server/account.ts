@@ -212,6 +212,10 @@ async function anonymize(tx: SqlClient, userId: string, now: Date) {
        VALUES ($1, 'system', 'account_deleted', $2, 'suspended', 'Account deletion requested by the user', $3)`,
       [profile.id, profile.status, now],
     );
+    await tx.query(
+      "DELETE FROM mobility.driver_vehicle_categories WHERE driver_profile_id = $1",
+      [profile.id],
+    );
     await clearDriverLocation(tx, profile.id);
   }
 }

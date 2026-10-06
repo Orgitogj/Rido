@@ -58,6 +58,7 @@ export async function onlineDriver(
   expect((await apply(ctx, clerkId)).status).toBe(201);
   await admin.setDriverStatus(ctx.db, clerkId, "approved", {
     waiveDocuments: true,
+    categories: ["general"],
     reason: "test fixture",
   });
   const res = await goOnline(ctx, clerkId, metersFromPickup);

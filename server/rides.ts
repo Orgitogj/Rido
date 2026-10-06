@@ -579,6 +579,12 @@ function toView(
       latitude: row.destination_latitude,
       longitude: row.destination_longitude,
     },
+    stops: row.stops,
+    stopsCompleted: row.stops_completed,
+    category: row.vehicle_category_id
+      ? { id: row.vehicle_category_id, name: row.vehicle_category_name ?? "" }
+      : null,
+    passengerCount: row.passenger_count,
     paymentMethod: row.payment_method,
     collection: collectionView(row, viewer),
     distanceMeters: row.distance_meters,
@@ -597,7 +603,11 @@ function toView(
     passengerName:
       viewer === "driver" ? (row.passenger_name ?? "Passenger") : null,
     legacyDemoDriver: row.status === "legacy" ? row.demo_driver_name : null,
-    allowedActions: allowedActions(row.status, viewer),
+    allowedActions: allowedActions(
+      row.status,
+      viewer,
+      row.stops.length - row.stops_completed,
+    ),
     cancellation: cancellationPreview(row, viewer),
     rematchCount: row.rematch_count,
     settlement: viewer === "passenger" ? settlementState(row) : "none",

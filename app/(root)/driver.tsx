@@ -335,6 +335,29 @@ const DriverScreen = () => {
                   ? t("driver.onlineBody")
                   : t("driver.offlineBody")}
               </Text>
+              {profile.categories.some((c) => c.active) ? (
+                <Text className="text-sm text-general-200 mt-1">
+                  {t("driver.categories", {
+                    names: profile.categories
+                      .map((c) =>
+                        c.active
+                          ? c.name
+                          : t("driver.categoriesInactive", { name: c.name }),
+                      )
+                      .join(", "),
+                  })}
+                </Text>
+              ) : (
+                <Text
+                  className="text-sm text-orange-800 mt-1"
+                  accessibilityRole="alert"
+                >
+                  {t("driver.noCategories")}
+                </Text>
+              )}
+              <Text className="text-xs text-general-200 mt-1">
+                {t("driver.categoriesNote")}
+              </Text>
               <Text className="text-sm text-general-200 mt-1">
                 {t("driver.yourRating", {
                   rating: formatRating(profile.rating, language),

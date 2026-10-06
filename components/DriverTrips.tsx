@@ -7,7 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import type { DriverTrip } from "@/shared/contracts";
 
 const DriverTrips = () => {
-  const { t, queryError, money, dateTime } = useI18n();
+  const { t, tn, queryError, money, dateTime } = useI18n();
   const trips = useApiQuery<DriverTrip[]>("/api/driver/trips", {
     refetchOnFocus: true,
   });
@@ -35,7 +35,14 @@ const DriverTrips = () => {
           </Text>
           <Text className="text-xs text-general-200 mt-1">
             {trip.completedAt ? `${dateTime(trip.completedAt)} · ` : ""}
-            {t("driver.trips.quotedFare", { amount: money(trip.fareCents) })}
+            {t("driver.trips.quotedFare", {
+              amount: money(trip.fareCents, trip.currency),
+            })}
+            {trip.categoryName ? ` · ${trip.categoryName}` : ""}
+            {` · ${tn("ride.offer.passengers", trip.passengerCount)}`}
+            {trip.stopCount > 0
+              ? ` · ${tn("ride.offer.stops", trip.stopCount)}`
+              : ""}
           </Text>
           <Pressable
             accessibilityRole="button"

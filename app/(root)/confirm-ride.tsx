@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 
 import CustomButton from "@/components/CustomButton";
 import ListState from "@/components/ListState";
+import RequestRide from "@/components/RequestRide";
 import RideLayout from "@/components/RideLayout";
 import StripeCheckout from "@/components/StripeCheckout";
 import { ApiRequestError, useApi } from "@/lib/fetch";
@@ -18,6 +19,7 @@ import {
 import { useLocationStore, useRideStore } from "@/store";
 
 import type { QuoteResponse } from "@/shared/contracts";
+import type { PaymentMethod } from "@/shared/currency";
 
 type Status = "loading" | "ready" | "expired" | "error";
 
@@ -54,12 +56,23 @@ const ConfirmRide = () => {
     destinationAddress,
     destinationLatitude,
     destinationLongitude,
+    stops,
   } = useLocationStore();
-  const { quote, driversNearby, setQuote, clear } = useRideStore();
+  const {
+    quote,
+    driversNearby,
+    categoryId,
+    passengerCount,
+    scheduledRideId,
+    setQuote,
+    clear,
+  } = useRideStore();
   const savedPlaces = usePlacesStore((s) => s.places);
   const [status, setStatus] = useState<Status>("loading");
   const [problem, setProblem] = useState<QuoteProblem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethod>("in_vehicle");
   const [now, setNow] = useState(() => Date.now());
   const latest = useRef(0);
   const previousFare = useRef<number | null>(null);
@@ -86,20 +99,28 @@ const ConfirmRide = () => {
     setStatus("loading");
     setNotice(null);
     try {
-      const result = await request<QuoteResponse>("/api/quotes", {
-        body: {
-          pickup: {
-            address: userAddress,
-            latitude: userLatitude,
-            longitude: userLongitude,
-          },
-          destination: {
-            address: destinationAddress,
-            latitude: destinationLatitude,
-            longitude: destinationLongitude,
-          },
-        },
-      });
+      const result = scheduledRideId
+        ? await request<QuoteResponse>(
+            `/api/scheduled-rides/${scheduledRideId}/quote`,
+            { method: "POST" },
+          )
+        : await request<QuoteResponse>("/api/quotes", {
+            body: {
+              pickup: {
+                address: userAddress,
+                latitude: userLatitude,
+                longitude: userLongitude,
+              },
+              destination: {
+                address: destinationAddress,
+                latitude: destinationLatitude,
+                longitude: destinationLongitude,
+              },
+              ...(stops.length ? { stops } : {}),
+              ...(categoryId ? { categoryId } : {}),
+              passengerCount,
+            },
+          });
       if (id !== latest.current) return;
       const before = previousFare.current;
       if (before !== null) {
@@ -113,6 +134,7 @@ const ConfirmRide = () => {
         );
       }
       previousFare.current = result.quote.fareCents;
+      setPaymentMethod(result.paymentMethod);
       setQuote(result.quote, result.driversNearby);
       setNow(Date.now());
       setStatus("ready");
@@ -139,6 +161,10 @@ const ConfirmRide = () => {
     destinationAddress,
     destinationLatitude,
     destinationLongitude,
+    stops,
+    categoryId,
+    passengerCount,
+    scheduledRideId,
   ]);
 
   useEffect(() => {
@@ -243,6 +269,16 @@ const ConfirmRide = () => {
               label={t("booking.confirm.tripTime")}
               value={duration(quote.durationSeconds / 60)}
             />
+            {quote.category && (
+              <Line
+                label={t("booking.confirm.category")}
+                value={quote.category.name}
+              />
+            )}
+            <Line
+              label={t("booking.confirm.passengers")}
+              value={String(quote.passengerCount)}
+            />
             <Line
               label={t("booking.confirm.driversNearby")}
               value={String(driversNearby ?? 0)}
@@ -253,21 +289,41 @@ const ConfirmRide = () => {
           <Text className="text-sm text-general-200 mt-4">
             {driversNearby
               ? t("booking.confirm.willOffer")
-              : t("booking.confirm.noDrivers")}
+              : paymentMethod === "in_vehicle"
+                ? t("booking.confirm.noDriversVehicle")
+                : t("booking.confirm.noDrivers")}
           </Text>
+          {quote.stops.length > 0 && (
+            <Text className="text-sm text-general-200 mt-2">
+              {t("booking.confirm.oneFare")}
+            </Text>
+          )}
           <Text className="text-sm text-general-200 mt-2">
-            {t("booking.confirm.priceNote")}{" "}
+            {paymentMethod === "in_vehicle"
+              ? t("booking.confirm.priceNoteVehicle")
+              : t("booking.confirm.priceNote")}{" "}
             {minutesLeft >= 1
               ? tn("booking.confirm.heldFor", minutesLeft)
               : t("booking.confirm.heldSeconds")}
           </Text>
 
-          <StripeCheckout
-            quoteId={quote.id}
-            fareCents={quote.fareCents}
-            onRequested={onRequested}
-            onExpired={() => setStatus("expired")}
-          />
+          {paymentMethod === "in_vehicle" ? (
+            <RequestRide
+              quoteId={quote.id}
+              fareCents={quote.fareCents}
+              currency={quote.currency}
+              onRequested={onRequested}
+              onExpired={() => setStatus("expired")}
+            />
+          ) : (
+            <StripeCheckout
+              quoteId={quote.id}
+              fareCents={quote.fareCents}
+              currency={quote.currency}
+              onRequested={onRequested}
+              onExpired={() => setStatus("expired")}
+            />
+          )}
           <CustomButton
             title={t("booking.confirm.refresh")}
             bgVariant="outline"

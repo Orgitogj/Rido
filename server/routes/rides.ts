@@ -6,6 +6,7 @@ import {
   driverStatusRequestSchema,
   interruptRequestSchema,
   rideIdSchema,
+  stopReachedSchema,
 } from "../../shared/contracts";
 import { asCurrency } from "../../shared/currency";
 import { driverCancel, interruptTrip, passengerCancel } from "../cancellation";
@@ -13,6 +14,7 @@ import { assertNoUnpaidRide } from "../collection";
 import { ApiError, notFound } from "../errors";
 import { type Deps, parseInput, readJson } from "../http";
 import { ACTIVE_STATUSES, type RideRow, transitionRide } from "../lifecycle";
+import { paymentMode } from "../paymentMode";
 import { startSearchWithoutPayment } from "../rides";
 import {
   advanceRideById,
@@ -276,21 +278,26 @@ export async function createBooking(
        origin_address, origin_latitude, origin_longitude,
        destination_address, destination_latitude, destination_longitude,
        distance_meters, duration_seconds, fare_cents, currency, created_at,
-       pricing_version, service_area_id, fare_policy_id, route_source, passenger_name)
+       pricing_version, service_area_id, fare_policy_id, route_source, passenger_name,
+       stops, vehicle_category_id, vehicle_category_name, passenger_count, payment_method)
      SELECT q.id, q.user_id,
             q.pickup_address, q.pickup_latitude, q.pickup_longitude,
             q.destination_address, q.destination_latitude, q.destination_longitude,
             q.distance_meters, q.duration_seconds, q.fare_cents, q.currency, $2,
             q.pricing_version, q.service_area_id, q.fare_policy_id, q.route_source,
-            (SELECT u.name FROM mobility.users u WHERE u.id = q.user_id)
+            (SELECT u.name FROM mobility.users u WHERE u.id = q.user_id),
+            q.stops, q.vehicle_category_id, q.vehicle_category_name, q.passenger_count, $3
        FROM mobility.quotes q
       WHERE q.id = $1 AND q.expires_at > $2
         AND (q.service_area_id IS NULL OR EXISTS (
               SELECT 1 FROM mobility.service_areas a
                WHERE a.id = q.service_area_id AND a.status = 'active'))
+        AND (q.vehicle_category_id IS NULL OR EXISTS (
+              SELECT 1 FROM mobility.vehicle_categories c
+               WHERE c.id = q.vehicle_category_id AND c.status = 'active'))
      ON CONFLICT (quote_id) DO NOTHING
      RETURNING *`,
-    [quoteId, deps.now()],
+    [quoteId, deps.now(), paymentMode()],
   );
   let ride = inserted.rows[0];
   const created = Boolean(ride);
@@ -301,12 +308,25 @@ export async function createBooking(
     );
     ride = existing.rows[0];
     if (!ride) {
-      const { rows: closed } = await deps.db.query<{ inactive: boolean }>(
-        `SELECT a.status <> 'active' AS inactive
-           FROM mobility.quotes q JOIN mobility.service_areas a ON a.id = q.service_area_id
+      const { rows: closed } = await deps.db.query<{
+        inactive: boolean;
+        category_inactive: boolean;
+      }>(
+        `SELECT a.status <> 'active' AS inactive,
+                COALESCE(c.status <> 'active', false) AS category_inactive
+           FROM mobility.quotes q
+           JOIN mobility.service_areas a ON a.id = q.service_area_id
+           LEFT JOIN mobility.vehicle_categories c ON c.id = q.vehicle_category_id
           WHERE q.id = $1 AND q.expires_at > $2`,
         [quoteId, deps.now()],
       );
+      if (closed[0]?.category_inactive && !closed[0].inactive) {
+        throw new ApiError(
+          409,
+          "CATEGORY_UNAVAILABLE",
+          "This vehicle category is no longer available. Please get a new price.",
+        );
+      }
       if (closed[0]?.inactive) {
         throw new ApiError(
           409,
@@ -395,6 +415,62 @@ export async function createBooking(
     customerEphemeralKeySecret: ephemeralKey.secret,
   };
   return Response.json({ data: body }, { status: created ? 201 : 200 });
+}
+
+export async function reachStop(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const user = await currentUser(request, deps);
+  const { rideId, viewer, driverProfileId } = await resolveViewer(
+    deps,
+    user,
+    params.id,
+  );
+  if (viewer !== "driver") {
+    throw forbidden("Only the assigned driver can update stops.");
+  }
+  const { index } = await readJson(request, stopReachedSchema);
+  await withLockedRide(deps, rideId, async (tx, ride) => {
+    if (ride.driver_profile_id !== driverProfileId) throw notFound("Ride");
+    if (index < ride.stops_completed) return;
+    if (ride.status !== "in_progress") {
+      throw new ApiError(
+        409,
+        "INVALID_TRANSITION",
+        "Stops can only be marked while the trip is in progress.",
+      );
+    }
+    if (index >= ride.stops.length) throw notFound("Stop");
+    if (index !== ride.stops_completed) {
+      throw new ApiError(
+        409,
+        "STOP_OUT_OF_ORDER",
+        "Mark the earlier stop as reached first.",
+      );
+    }
+    const now = deps.now();
+    await tx.query(
+      `UPDATE mobility.rides
+          SET stops_completed = stops_completed + 1, version = version + 1, updated_at = now()
+        WHERE id = $1`,
+      [rideId],
+    );
+    await tx.query(
+      `INSERT INTO mobility.ride_events
+         (ride_id, from_status, to_status, actor, actor_user_id, reason, created_at)
+       VALUES ($1, 'in_progress', 'in_progress', 'driver', $2, $3, $4)`,
+      [rideId, user.id, `stop_${index + 1}_reached`, now],
+    );
+    await tx.query(
+      "DELETE FROM mobility.ride_routes WHERE ride_id = $1 AND leg = 'destination'",
+      [rideId],
+    );
+  });
+  return Response.json({
+    data: await rideView(deps.db, rideId, "driver", deps.now()),
+  });
 }
 
 export async function interruptRide(

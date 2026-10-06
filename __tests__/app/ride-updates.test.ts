@@ -35,6 +35,10 @@ const ride = (patch: Partial<RideView> = {}): RideView => ({
   currency: "usd",
   pickup: { address: "A", latitude: 0, longitude: 0 },
   destination: { address: "B", latitude: 0, longitude: 0.05 },
+  stops: [],
+  stopsCompleted: 0,
+  category: null,
+  passengerCount: 1,
   paymentMethod: "card_online",
   collection: null,
   distanceMeters: 5000,
@@ -350,6 +354,7 @@ describe("ride text", () => {
         "completed",
         "in_progress",
         "interrupt",
+        "stop_reached",
       ].sort(),
     );
   });

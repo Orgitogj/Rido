@@ -255,7 +255,9 @@ export function useRide(rideId: string) {
           ? `/api/rides/${rideId}/cancel`
           : action === "interrupt"
             ? `/api/rides/${rideId}/interrupt`
-            : `/api/rides/${rideId}/status`;
+            : action === "stop_reached"
+              ? `/api/rides/${rideId}/stops`
+              : `/api/rides/${rideId}/status`;
       const body =
         action === "cancel"
           ? {}

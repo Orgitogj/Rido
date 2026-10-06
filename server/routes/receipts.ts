@@ -77,11 +77,16 @@ export async function listDriverTrips(
     demo_driver_id: number | null;
     driver_profile_id: string | null;
     rated: boolean;
+    stop_count: number;
+    vehicle_category_name: string | null;
+    passenger_count: number;
   }>(
     `SELECT r.id, r.origin_address, r.origin_latitude, r.origin_longitude,
             r.destination_address, r.destination_latitude, r.destination_longitude,
             r.accepted_at, r.started_at, r.completed_at, r.fare_cents, r.currency, r.distance_meters,
             r.status, r.payment_status, r.demo_driver_id, r.driver_profile_id,
+            jsonb_array_length(r.stops) AS stop_count,
+            r.vehicle_category_name, r.passenger_count,
             EXISTS (SELECT 1 FROM mobility.ratings g
                      WHERE g.ride_id = r.id AND g.rater_role = 'driver') AS rated
        FROM mobility.rides r
@@ -109,6 +114,9 @@ export async function listDriverTrips(
     fareCents: r.fare_cents,
     currency: asCurrency(r.currency),
     distanceMeters: r.distance_meters,
+    stopCount: r.stop_count,
+    categoryName: r.vehicle_category_name,
+    passengerCount: r.passenger_count,
     ratingPending: !r.rated && ratingEligibility(r, now).reason === null,
   }));
   return Response.json({ data: trips });

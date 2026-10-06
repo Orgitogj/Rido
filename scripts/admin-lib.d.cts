@@ -9,8 +9,15 @@ export function setDriverStatus(
   client: unknown,
   ref: string,
   status: "approved" | "suspended",
-  opts?: { waiveDocuments?: boolean; reason?: string },
+  opts?: {
+    waiveDocuments?: boolean;
+    reason?: string;
+    categories?: string | string[];
+  },
 ): Promise<{ id: string; display_name: string; status: string }>;
+export function listCategories(
+  client: unknown,
+): Promise<Record<string, unknown>[]>;
 export function grantOperator(
   client: unknown,
   input: {

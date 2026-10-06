@@ -210,6 +210,12 @@ export function receiptFrom(row: ReceiptRow, now: Date): Receipt {
       latitude: row.destination_latitude,
       longitude: row.destination_longitude,
     },
+    stops: row.stops,
+    stopsCompleted: row.stops_completed,
+    category: row.vehicle_category_id
+      ? { id: row.vehicle_category_id, name: row.vehicle_category_name ?? "" }
+      : null,
+    passengerCount: row.passenger_count,
     paymentMethod: row.payment_method,
     collection:
       row.payment_method === "in_vehicle" && row.collection_status

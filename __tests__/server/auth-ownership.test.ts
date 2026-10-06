@@ -186,6 +186,7 @@ describe("driver role", () => {
 
     await admin.setDriverStatus(db, DRIVER, "approved", {
       waiveDocuments: true,
+      categories: ["general"],
       reason: "test fixture",
     });
     const approved = await call(ctx, setAvailability, {
@@ -200,6 +201,7 @@ describe("driver role", () => {
     await apply(ctx, DRIVER);
     await admin.setDriverStatus(db, DRIVER, "approved", {
       waiveDocuments: true,
+      categories: ["general"],
       reason: "test fixture",
     });
     const res = await apply(ctx, DRIVER);
@@ -227,6 +229,7 @@ describe("driver role", () => {
     await apply(ctx, DRIVER);
     await admin.setDriverStatus(db, DRIVER, "approved", {
       waiveDocuments: true,
+      categories: ["general"],
       reason: "test fixture",
     });
     const res = await call(ctx, setAvailability, {

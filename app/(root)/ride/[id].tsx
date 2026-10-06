@@ -56,6 +56,8 @@ const RideScreen = () => {
         <RideMap
           pickup={ride.pickup}
           destination={ride.destination}
+          stops={ride.stops}
+          stopsCompleted={ride.stopsCompleted}
           leg={live?.leg ?? null}
           driverLocation={live?.driverLocation ?? null}
           polyline={polyline}

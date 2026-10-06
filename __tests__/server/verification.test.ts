@@ -13,9 +13,11 @@ import {
   decideDriverApplication,
   getDriverApplication,
   listDriverApplications,
+  changeDriverCategories,
 } from "../../server/routes/verification";
 import { presignS3 } from "../../server/storage";
 import { purgeDriverDocuments } from "../../server/verification";
+import { DEFAULT_VEHICLE_CATEGORY_ID } from "../../shared/vehicleCategory";
 
 import {
   call,
@@ -194,6 +196,7 @@ async function approveAll(op: string, id: string) {
   const d = (await detail(op, id)).json.data as AdminDriverDetail;
   const res = await decide(op, id, {
     action: "approve",
+    categoryIds: [DEFAULT_VEHICLE_CATEGORY_ID],
     reason: "Documents checked by eye",
     expectedVersion: d.version,
     documents: d.documents
@@ -422,6 +425,7 @@ describe("operator review", () => {
         (
           await decide(user, id, {
             action: "approve",
+            categoryIds: [DEFAULT_VEHICLE_CATEGORY_ID],
             reason: "trying",
             expectedVersion: 1,
           })
@@ -497,6 +501,7 @@ describe("operator review", () => {
     expect(d.ownApplication).toBe(true);
     const res = await decide(OPS, id, {
       action: "approve",
+      categoryIds: [DEFAULT_VEHICLE_CATEGORY_ID],
       reason: "It's me",
       expectedVersion: d.version,
       documents: d.documents.map((x) => ({
@@ -572,6 +577,7 @@ describe("operator review", () => {
     const d = (await detail(OPS, id)).json.data as AdminDriverDetail;
     const res = await decide(OPS, id, {
       action: "approve",
+      categoryIds: [DEFAULT_VEHICLE_CATEGORY_ID],
       reason: "Looks fine",
       expectedVersion: d.version,
       documents: d.documents
@@ -593,6 +599,7 @@ describe("operator review", () => {
     const [x, y] = await Promise.all([
       decide(OPS, id, {
         action: "approve",
+        categoryIds: [DEFAULT_VEHICLE_CATEGORY_ID],
         reason: "All good",
         expectedVersion: d.version,
         documents: d.documents.map((doc) => ({
@@ -861,6 +868,7 @@ describe("CLI recovery tool", () => {
     ).rejects.toThrow(/reason/);
     const row = await admin.setDriverStatus(ctx.db, A, "approved", {
       waiveDocuments: true,
+      categories: ["general"],
       reason: "local dev",
     });
     await admin.auditDriverStatus(
@@ -946,5 +954,201 @@ describe("storage signing", () => {
       "content-type": "application/pdf",
       "content-length": "400",
     });
+  });
+});
+
+describe("vehicle categories in driver verification", () => {
+  const newCategory = async (code: string, capacity: number) => {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO mobility.vehicle_categories
+         (code, name, capacity, status, is_development, created_at, updated_at)
+       VALUES ($1, $2, $3, 'active', true, now(), now()) RETURNING id`,
+      [code, `Example ${code}`, capacity],
+    );
+    return rows[0].id;
+  };
+
+  it("won't approve a vehicle without at least one category, and records the ones granted", async () => {
+    await verifier();
+    const id = await readyApplicant(A);
+    const d = (await detail(OPS, id)).json.data as AdminDriverDetail;
+    const documents = d.documents
+      .filter((x) => x.status === "uploaded")
+      .map((x) => ({ documentId: x.id, decision: "accept" }));
+    const without = await decide(OPS, id, {
+      action: "approve",
+      reason: "Documents checked by eye",
+      expectedVersion: d.version,
+      documents,
+    });
+    expect(without.status).toBe(409);
+    expect(without.json.error.code).toBe("CATEGORY_REQUIRED");
+    expect((await profileOf(A)).status).toBe("submitted");
+    expect((await docRows(id)).every((r) => r.status === "uploaded")).toBe(
+      true,
+    );
+
+    const unknown = await decide(OPS, id, {
+      action: "approve",
+      reason: "Documents checked by eye",
+      expectedVersion: d.version,
+      categoryIds: ["3f2c1a54-9b1d-4c7e-8a2f-0d9e6b7c5a41"],
+      documents,
+    });
+    expect(unknown.status).toBe(422);
+
+    const large = await newCategory("example-large", 6);
+    const approved = await decide(OPS, id, {
+      action: "approve",
+      reason: "Documents checked by eye",
+      expectedVersion: d.version,
+      categoryIds: [DEFAULT_VEHICLE_CATEGORY_ID, large],
+      documents,
+    });
+    expect(approved.status).toBe(200);
+    expect(
+      (approved.json.data as AdminDriverDetail).categories
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual([DEFAULT_VEHICLE_CATEGORY_ID, large].sort());
+    expect((await profileOf(A)).categories).toHaveLength(2);
+    const { rows: audit } = await db.query<{
+      detail: { categories?: string[] };
+    }>(
+      "SELECT detail FROM mobility.audit_log WHERE action = 'driver_approve' AND result = 'succeeded'",
+    );
+    expect(audit[0].detail.categories).toEqual([
+      "Example example-large",
+      "Standard",
+    ]);
+  });
+
+  it("never lets a driver grant their own vehicle a category", async () => {
+    const large = await newCategory("example-large", 6);
+    for (const extra of [
+      { categoryIds: [large] },
+      { categories: [large] },
+      { vehicleCategoryId: large },
+    ]) {
+      const res = await call(ctx, applyToDrive, {
+        user: A,
+        body: {
+          displayName: "Driver A",
+          vehicleMake: "Toyota",
+          vehicleModel: "Sienna",
+          vehiclePlate: "SF 1000",
+          vehicleSeats: 6,
+          vehicleColor: "Blue",
+          ...extra,
+        },
+      });
+      expect(res.status).toBe(400);
+    }
+    await apply(ctx, A);
+    expect((await profileOf(A)).categories).toEqual([]);
+    const self = await adminPost(
+      ctx,
+      A,
+      changeDriverCategories,
+      { id: (await profileOf(A)).id },
+      { categoryIds: [large], reason: "I want this", expectedVersion: 1 },
+    );
+    expect(self.status).toBe(403);
+    const { rows } = await db.query(
+      "SELECT 1 FROM mobility.driver_vehicle_categories",
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("lets only verify operators change categories, never for their own vehicle, with an audit trail", async () => {
+    await verifier();
+    await makeOperator(ctx, "user_viewer", "view,support");
+    const large = await newCategory("example-large", 6);
+    const id = await readyApplicant(A);
+    const approved = await approveAll(OPS, id);
+
+    const body = {
+      categoryIds: [large],
+      reason: "Vehicle inspected: six passenger seats",
+      expectedVersion: approved.version,
+    };
+    expect(
+      (
+        await adminPost(
+          ctx,
+          "user_viewer",
+          changeDriverCategories,
+          { id },
+          body,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await adminPost(
+          ctx,
+          OPS,
+          changeDriverCategories,
+          { id },
+          {
+            ...body,
+            expectedVersion: approved.version - 1,
+          },
+        )
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await adminPost(
+          ctx,
+          OPS,
+          changeDriverCategories,
+          { id },
+          {
+            ...body,
+            categoryIds: [],
+          },
+        )
+      ).status,
+    ).toBe(400);
+    const changed = await adminPost(
+      ctx,
+      OPS,
+      changeDriverCategories,
+      { id },
+      body,
+    );
+    expect(changed.status).toBe(200);
+    expect(
+      (changed.json.data as AdminDriverDetail).categories.map((c) => c.id),
+    ).toEqual([large]);
+    expect(
+      (changed.json.data as AdminDriverDetail).history.some(
+        (h) => h.action === "categories_changed",
+      ),
+    ).toBe(true);
+
+    await verifier(A);
+    const own = await adminPost(
+      ctx,
+      A,
+      changeDriverCategories,
+      { id },
+      {
+        ...body,
+        expectedVersion: (changed.json.data as AdminDriverDetail).version,
+      },
+    );
+    expect(own.status).toBe(403);
+    expect(own.json.error.code).toBe("CANNOT_REVIEW_OWN_APPLICATION");
+    const { rows: audit } = await db.query<{ result: string }>(
+      "SELECT result FROM mobility.audit_log WHERE action LIKE 'driver_categories%' ORDER BY id",
+    );
+    expect(audit.map((a) => a.result)).toEqual([
+      "denied",
+      "failed",
+      "succeeded",
+      "denied",
+    ]);
   });
 });

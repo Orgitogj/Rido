@@ -7,6 +7,7 @@ import { loadEnv } from "./db-lib.mjs";
 
 const {
   listDrivers,
+  listCategories,
   setDriverStatus,
   grantOperator,
   revokeOperator,
@@ -16,9 +17,11 @@ const {
 
 const USAGE = `Usage: npm run admin -- <command>
   drivers                                          list driver applications
-  approve <ref> --waive-documents --reason "<text>"
+  categories                                       list vehicle categories
+  approve <ref> --waive-documents --categories <code,...> --reason "<text>"
                                                    development/recovery override: approve
-                                                   without reviewed documents (audited)
+                                                   without reviewed documents, for the named
+                                                   vehicle categories (audited)
   suspend <ref> --reason "<text>"                  suspend a driver with no active ride
   operators                                        list operator accounts
   grant-operator <clerkUserId> --name "<name>" [--permissions view,support,refund,verify,configure]
@@ -57,12 +60,18 @@ try {
       client,
       ref,
       command === "approve" ? "approved" : "suspended",
-      { waiveDocuments: args.includes("--waive-documents"), reason },
+      {
+        waiveDocuments: args.includes("--waive-documents"),
+        categories: flag("categories"),
+        reason,
+      },
     );
     await auditDriverStatus(client, actor, row.id, row.status, reason);
     console.log(
       `${row.display_name} (${row.id}) is now ${row.status}${command === "approve" ? " with documents waived. Operators will see the waiver in the console." : "."}`,
     );
+  } else if (command === "categories") {
+    console.table(await listCategories(client));
   } else if (command === "operators") {
     console.table(await listOperators(client));
   } else if (command === "grant-operator" && ref) {

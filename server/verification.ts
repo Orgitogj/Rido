@@ -31,6 +31,9 @@ import { NOTIFY } from "./notificationText";
 import { audit, type OperatorRow } from "./operators";
 import { flagRideReview } from "./review";
 import { type DocumentStorage, matchesSignature } from "./storage";
+import { driverCategories, replaceDriverCategories } from "./vehicleCategories";
+
+import type { DriverCategoryView } from "../shared/vehicleCategory";
 
 const DAY_MS = 24 * 3600 * 1000;
 const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
@@ -197,6 +200,7 @@ export function applicantView(
   docs: DocumentRow[],
   rating: RatingSummary,
   now: Date,
+  categories: DriverCategoryView[] = [],
 ): DriverProfileView {
   const requirements = requirementsFor(profile, docs, now);
   const { eligible, reasons } = driverEligibility(profile, now);
@@ -224,6 +228,7 @@ export function applicantView(
     canEdit: editable,
     canSubmit: editable && requirements.every((r) => r.met),
     canReopen: profile.status === "approved" || profile.status === "rejected",
+    categories,
   };
 }
 
@@ -801,6 +806,7 @@ export async function applicationDetail(
     ineligibleReasons: eligibility.reasons,
     requirements: requirementsFor(p, docs, now),
     ownApplication: p.user_id === operator.user_id,
+    categories: await driverCategories(db, profileId),
     activeRide: ride.rows[0] ?? null,
     documents: docs
       .filter((d) => d.status !== "pending_upload")
@@ -914,6 +920,7 @@ export async function decideApplication(
     reason: string;
     applicantMessage?: string;
     expectedVersion: number;
+    categoryIds?: string[];
     documents: {
       documentId: string;
       decision: "accept" | "reject";
@@ -1065,6 +1072,39 @@ export async function decideApplication(
       }
     }
 
+    let categoryNames: string[] | null = null;
+    if (input.action === "approve") {
+      if (input.categoryIds) {
+        const replaced = await replaceDriverCategories(
+          tx,
+          profileId,
+          input.categoryIds,
+          { operator },
+          now,
+        );
+        if (!replaced.ok) {
+          return {
+            error: [
+              422,
+              "CATEGORY_UNAVAILABLE",
+              "One of the vehicle categories doesn't exist. Reload and choose again.",
+            ] as const,
+          };
+        }
+        categoryNames = replaced.names;
+      }
+      const granted = await driverCategories(tx, profileId);
+      if (!granted.length) {
+        return {
+          error: [
+            409,
+            "CATEGORY_REQUIRED",
+            "Choose at least one vehicle category this vehicle may serve before approving.",
+          ] as const,
+        };
+      }
+    }
+
     const to = TO[input.action];
     const set: string[] = [
       "status = $2",
@@ -1121,7 +1161,7 @@ export async function decideApplication(
       },
       now,
     );
-    return { from: profile.status, to };
+    return { from: profile.status, to, categoryNames };
   };
   const outcome = await transaction(deps.db, async (tx) => {
     const result = await decideInTx(tx);
@@ -1150,12 +1190,102 @@ export async function decideApplication(
         id: d.documentId,
         decision: d.decision,
       })),
+      ...(outcome.categoryNames ? { categories: outcome.categoryNames } : {}),
     },
   });
   if (input.action === "suspend") {
     await handleIneligibleDriver(deps, profileId, "driver_suspended");
   }
   await deliverPending(deps).catch(() => undefined);
+}
+
+export async function setDriverCategories(
+  deps: { db: Database; now: () => Date },
+  profileId: string,
+  operator: OperatorRow,
+  input: { categoryIds: string[]; reason: string; expectedVersion: number },
+) {
+  const now = deps.now();
+  const outcome = await transaction(deps.db, async (tx) => {
+    const { rows } = await tx.query<ProfileRow>(
+      "SELECT * FROM mobility.driver_profiles WHERE id = $1 FOR UPDATE",
+      [profileId],
+    );
+    const profile = rows[0];
+    if (!profile)
+      return { error: [404, "NOT_FOUND", "Driver not found."] as const };
+    if (profile.user_id === operator.user_id) {
+      return {
+        error: [
+          403,
+          "CANNOT_REVIEW_OWN_APPLICATION",
+          "You can't change the categories of your own vehicle.",
+        ] as const,
+      };
+    }
+    if (profile.review_version !== input.expectedVersion) {
+      return {
+        error: [
+          409,
+          "VERSION_CONFLICT",
+          "This application changed since you opened it. Reload and review again.",
+        ] as const,
+      };
+    }
+    const replaced = await replaceDriverCategories(
+      tx,
+      profileId,
+      input.categoryIds,
+      { operator },
+      now,
+    );
+    if (!replaced.ok) {
+      return {
+        error: [
+          422,
+          "CATEGORY_UNAVAILABLE",
+          "One of the vehicle categories doesn't exist. Reload and choose again.",
+        ] as const,
+      };
+    }
+    await tx.query(
+      `UPDATE mobility.driver_profiles
+          SET review_version = review_version + 1, updated_at = now() WHERE id = $1`,
+      [profileId],
+    );
+    await event(tx, {
+      profileId,
+      actor: "operator",
+      operatorId: operator.id,
+      action: "categories_changed",
+      from: profile.status,
+      to: profile.status,
+      reason: `${input.reason} [${replaced.names.join(", ")}]`.slice(0, 1000),
+      now,
+    });
+    return { names: replaced.names };
+  });
+  await audit(deps.db, {
+    operator,
+    action: "driver_categories",
+    targetType: "driver_profile",
+    targetId: profileId,
+    reason: input.reason,
+    result:
+      "error" in outcome && outcome.error
+        ? outcome.error[0] === 403
+          ? "denied"
+          : "failed"
+        : "succeeded",
+    detail:
+      "error" in outcome && outcome.error
+        ? { error: outcome.error[1] }
+        : { categories: outcome.names },
+  });
+  if ("error" in outcome && outcome.error) {
+    const [status, code, message] = outcome.error;
+    throw new ApiError(status, code, message);
+  }
 }
 
 export async function handleIneligibleDriver(

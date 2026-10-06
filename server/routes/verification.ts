@@ -5,6 +5,7 @@ import {
   type Page,
   rideIdSchema,
 } from "../../shared/contracts";
+import { driverCategoriesSchema } from "../../shared/vehicleCategory";
 import { type Deps, parseInput, readJson } from "../http";
 import { requireOperator } from "../operators";
 import {
@@ -12,6 +13,7 @@ import {
   decideApplication,
   documentAccess,
   listApplications,
+  setDriverCategories,
 } from "../verification";
 
 import { decodeCursor, encodeCursor } from "./admin";
@@ -92,6 +94,24 @@ export async function decideDriverApplication(
   });
   const input = await readJson(request, driverDecisionSchema);
   await decideApplication(deps, profileId, operator, input);
+  return Response.json({
+    data: await applicationDetail(deps.db, profileId, operator, deps.now()),
+  });
+}
+
+export async function changeDriverCategories(
+  request: Request,
+  params: { id?: string },
+  deps: Deps,
+) {
+  const profileId = parseInput(rideIdSchema, params.id);
+  const operator = await requireOperator(request, deps, "verify", {
+    type: "driver_profile",
+    id: profileId,
+    action: "driver_categories",
+  });
+  const input = await readJson(request, driverCategoriesSchema);
+  await setDriverCategories(deps, profileId, operator, input);
   return Response.json({
     data: await applicationDetail(deps.db, profileId, operator, deps.now()),
   });

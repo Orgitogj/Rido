@@ -6,6 +6,7 @@ import { ASSIGNED_STATUSES, type RideRow, transitionRide } from "./lifecycle";
 import { enqueueOffer } from "./notifications";
 import { ROUTING, type RoutingProvider } from "./routing";
 import { reserveRouting } from "./routingBudget";
+import { categoryMatchSql } from "./vehicleCategories";
 
 import type { SqlClient } from "./db";
 
@@ -36,8 +37,18 @@ export interface Candidate {
 
 type SearchRide = Pick<
   RideRow,
-  "id" | "user_id" | "origin_latitude" | "origin_longitude"
+  | "id"
+  | "user_id"
+  | "origin_latitude"
+  | "origin_longitude"
+  | "vehicle_category_id"
+  | "passenger_count"
 >;
+
+export interface VehicleRequirement {
+  categoryId: string | null;
+  passengerCount: number;
+}
 
 interface DriverLocationRow {
   id: string;
@@ -50,6 +61,7 @@ export async function onlineDriversNear(
   point: { latitude: number; longitude: number },
   now: Date,
   excludeUserId?: string,
+  requirement: VehicleRequirement = { categoryId: null, passengerCount: 1 },
 ): Promise<Candidate[]> {
   const { rows } = await db.query<DriverLocationRow>(
     `SELECT dp.id, dp.latitude, dp.longitude
@@ -57,12 +69,15 @@ export async function onlineDriversNear(
       WHERE ${eligibleDriverSql("dp", "$4::timestamptz")} AND dp.online
         AND dp.last_seen_at >= $1
         AND dp.location_updated_at >= $2
-        AND ($3::uuid IS NULL OR dp.user_id <> $3::uuid)`,
+        AND ($3::uuid IS NULL OR dp.user_id <> $3::uuid)
+        AND ${categoryMatchSql("dp", "$5", "$6")}`,
     [
       secondsBefore(now, MATCHING.driverFreshSeconds),
       secondsBefore(now, MATCHING.locationMaxAgeSeconds),
       excludeUserId ?? null,
       now,
+      requirement.categoryId,
+      requirement.passengerCount,
     ],
   );
   return rows
@@ -90,6 +105,10 @@ export async function eligibleDrivers(
     { latitude: ride.origin_latitude, longitude: ride.origin_longitude },
     now,
     ride.user_id,
+    {
+      categoryId: ride.vehicle_category_id,
+      passengerCount: ride.passenger_count,
+    },
   );
   if (!near.length) return [];
   const { rows: busy } = await db.query<{ id: string }>(
@@ -115,12 +134,20 @@ async function driverStillAvailable(
   db: SqlClient,
   driverProfileId: string,
   now: Date,
+  ride: Pick<RideRow, "vehicle_category_id" | "passenger_count">,
 ): Promise<boolean> {
   const { rows } = await db.query(
     `SELECT 1 FROM mobility.driver_profiles dp
       WHERE dp.id = $1 AND ${eligibleDriverSql("dp", "$3::timestamptz")}
-        AND dp.online AND dp.last_seen_at >= $2`,
-    [driverProfileId, secondsBefore(now, MATCHING.driverFreshSeconds), now],
+        AND dp.online AND dp.last_seen_at >= $2
+        AND ${categoryMatchSql("dp", "$4", "$5")}`,
+    [
+      driverProfileId,
+      secondsBefore(now, MATCHING.driverFreshSeconds),
+      now,
+      ride.vehicle_category_id,
+      ride.passenger_count,
+    ],
   );
   return rows.length > 0;
 }
@@ -186,7 +213,8 @@ export async function advanceRide(
     const offer = rows[0];
     const expired = !offer || new Date(offer.expires_at) <= now;
     const gone =
-      offer && !(await driverStillAvailable(tx, offer.driver_profile_id, now));
+      offer &&
+      !(await driverStillAvailable(tx, offer.driver_profile_id, now, ride));
     if (!expired && !gone) return ride;
     if (offer) {
       await tx.query(
@@ -293,7 +321,8 @@ export async function refreshMatchRanking(
         AND (ranking_computed_at IS NULL OR ranking_computed_at <= $3)
         AND (ranking_claimed_at IS NULL OR ranking_claimed_at <= $4)
         AND (ranking_retry_at IS NULL OR ranking_retry_at <= $2)
-      RETURNING id, user_id, origin_latitude, origin_longitude, ranking_failures`,
+      RETURNING id, user_id, origin_latitude, origin_longitude, ranking_failures,
+                vehicle_category_id, passenger_count`,
     [
       rideId,
       now,

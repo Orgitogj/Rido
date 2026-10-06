@@ -20,9 +20,22 @@ export const coordinatesSchema = z.strictObject({
   longitude: z.number().finite().min(-180).max(180),
 });
 
+export const RIDE_STOPS = { max: 2 } as const;
+
 export const quoteRequestSchema = z.strictObject({
   pickup: placeSchema,
   destination: placeSchema,
+  stops: z.array(placeSchema).max(RIDE_STOPS.max).optional(),
+  categoryId: z.uuid().optional(),
+  passengerCount: z.number().int().min(1).max(8).optional(),
+});
+
+export const stopReachedSchema = z.strictObject({
+  index: z
+    .number()
+    .int()
+    .min(0)
+    .max(RIDE_STOPS.max - 1),
 });
 
 export const bookingRequestSchema = z.strictObject({
@@ -230,7 +243,12 @@ export const paymentStatuses = [
 export type PaymentStatus = (typeof paymentStatuses)[number];
 
 export type DriverAction = "arriving" | "arrived" | "in_progress" | "completed";
-export type RideAction = DriverAction | "cancel" | "interrupt";
+export type RideAction = DriverAction | "cancel" | "interrupt" | "stop_reached";
+
+export interface RideCategory {
+  id: string;
+  name: string;
+}
 
 export type Place = z.infer<typeof placeSchema>;
 export type QuoteRequest = z.infer<typeof quoteRequestSchema>;
@@ -243,11 +261,15 @@ export interface RideQuote {
   distanceMeters: number;
   durationSeconds: number;
   expiresAt: string;
+  stops: Place[];
+  category: RideCategory | null;
+  passengerCount: number;
 }
 
 export interface QuoteResponse {
   quote: RideQuote;
   driversNearby: number;
+  paymentMethod: PaymentMethod;
 }
 
 export type BookingResponse =
@@ -352,6 +374,10 @@ export interface RideView {
   currency: Currency;
   pickup: Place;
   destination: Place;
+  stops: Place[];
+  stopsCompleted: number;
+  category: RideCategory | null;
+  passengerCount: number;
   paymentMethod: PaymentMethod;
   collection: CollectionView | null;
   distanceMeters: number | null;
@@ -488,6 +514,10 @@ export interface Receipt {
   isLegacyDemo: boolean;
   pickup: Place;
   destination: Place;
+  stops: Place[];
+  stopsCompleted: number;
+  category: RideCategory | null;
+  passengerCount: number;
   paymentMethod: PaymentMethod;
   collection: {
     status: CollectionStatus;
@@ -539,6 +569,9 @@ export interface DriverTrip {
   fareCents: number;
   currency: Currency;
   distanceMeters: number | null;
+  stopCount: number;
+  categoryName: string | null;
+  passengerCount: number;
   ratingPending: boolean;
 }
 
@@ -662,6 +695,7 @@ export interface DriverProfileView {
   canEdit: boolean;
   canSubmit: boolean;
   canReopen: boolean;
+  categories: { id: string; name: string; capacity: number; active: boolean }[];
 }
 
 export interface RideOfferView {
@@ -675,6 +709,9 @@ export interface RideOfferView {
   expiresAt: string;
   expiresInSeconds: number;
   passengerRating: RatingSummary;
+  stopCount: number;
+  passengerCount: number;
+  categoryName: string | null;
 }
 
 export interface DriverDashboard {
@@ -915,6 +952,11 @@ export interface AdminRideDetail {
       collectedAt: string | null;
       canRecord: boolean;
     } | null;
+    stopAddresses: string[];
+    stopsCompleted: number;
+    categoryName: string | null;
+    passengerCount: number;
+    fromScheduledRequest: boolean;
     createdAt: string;
     requestedAt: string | null;
     completedAt: string | null;
@@ -1487,6 +1529,12 @@ export const driverDecisionSchema = z
     reason: z.string().trim().min(3).max(1000),
     applicantMessage: z.string().trim().min(3).max(1000).optional(),
     expectedVersion: z.number().int().min(1),
+    categoryIds: z
+      .array(z.uuid())
+      .min(1)
+      .max(20)
+      .refine((ids) => new Set(ids).size === ids.length)
+      .optional(),
     documents: z
       .array(
         z.strictObject({
@@ -1537,6 +1585,7 @@ export interface AdminDriverDetail extends AdminDriverItem {
   ineligibleReasons: string[];
   requirements: RequirementView[];
   ownApplication: boolean;
+  categories: { id: string; name: string; capacity: number; active: boolean }[];
   activeRide: { id: string; status: RideStatus } | null;
   documents: (DriverDocumentView & {
     reviewedAt: string | null;

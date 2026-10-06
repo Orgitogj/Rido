@@ -15,6 +15,11 @@ import EtaCard from "@/components/EtaCard";
 import InterruptReasonSheet from "@/components/InterruptReasonSheet";
 import RatingCard from "@/components/RatingCard";
 import StatusBadge from "@/components/StatusBadge";
+import {
+  DriverPinEntry,
+  PassengerPin,
+  useLockSeconds,
+} from "@/components/TripPin";
 import { icons } from "@/constants";
 import { ApiRequestError } from "@/lib/fetch";
 import { useI18n } from "@/lib/i18n";
@@ -28,12 +33,12 @@ import {
   rideHeadline,
   vehiclePaymentNote,
 } from "@/lib/rideText";
-
-import type {
-  LiveTripView,
-  Place,
-  RideAction,
-  RideView,
+import {
+  type LiveTripView,
+  type Place,
+  RIDE_PIN,
+  type RideAction,
+  type RideView,
 } from "@/shared/contracts";
 
 function useSecondsLeft(deadline: string | null, serverTime: string) {
@@ -151,6 +156,20 @@ const RideStatusPanel = ({
     ride.serverTime,
   );
   const isDriver = ride.viewer === "driver";
+  const [pin, setPin] = useState("");
+  const pinEntry =
+    isDriver && ride.status === "arrived" && ride.pinEntry?.required
+      ? ride.pinEntry
+      : null;
+  const pinLockSeconds = useLockSeconds(
+    pinEntry?.lockedUntil ?? null,
+    ride.serverTime,
+  );
+  const pinReady =
+    !pinEntry ||
+    (!pinEntry.blocked &&
+      pinLockSeconds === 0 &&
+      pin.length === RIDE_PIN.digits);
   const preview = ride.cancellation
     ? cancellationText(
         ride.cancellation,
@@ -171,6 +190,7 @@ const RideStatusPanel = ({
     setConfirming(null);
     try {
       const result = await perform(action, reason);
+      if (action === "in_progress") setPin("");
       if (result === "left") router.replace("/(root)/driver");
     } catch (e) {
       if (
@@ -206,6 +226,12 @@ const RideStatusPanel = ({
     ride.status === "in_progress" && upcoming.stopIndex !== null
       ? upcoming.stopIndex + 1
       : null;
+  const actionDetail = (action: RideAction) =>
+    action === "in_progress" && pinEntry
+      ? pin
+      : action === "stop_reached"
+        ? String(ride.stopsCompleted)
+        : undefined;
 
   return (
     <View className="pb-10">
@@ -434,6 +460,18 @@ const RideStatusPanel = ({
         </Text>
       )}
 
+      {!isDriver && ride.pin && <PassengerPin pin={ride.pin} />}
+
+      {pinEntry && ride.allowedActions.includes("in_progress") && (
+        <DriverPinEntry
+          entry={pinEntry}
+          serverTime={ride.serverTime}
+          value={pin}
+          onChange={setPin}
+          disabled={busy !== null}
+        />
+      )}
+
       {ride.allowedActions
         .filter((a) => a !== "cancel" && a !== "interrupt")
         .map((action) => (
@@ -444,11 +482,26 @@ const RideStatusPanel = ({
                 ? busyLabel(action)
                 : actionLabel(action, language)
             }
-            disabled={busy !== null}
+            disabled={busy !== null || (action === "in_progress" && !pinReady)}
             className="mt-5"
-            onPress={() => run(action)}
+            onPress={() => run(action, actionDetail(action))}
           />
         ))}
+
+      {pinEntry?.blocked && (
+        <CustomButton
+          title={t("safety.contactSupport")}
+          bgVariant="outline"
+          textVariant="primary"
+          className="mt-3"
+          onPress={() =>
+            router.push({
+              pathname: "/(root)/support/new",
+              params: { rideId: ride.id, role: "driver" },
+            })
+          }
+        />
+      )}
 
       {confirming && preview && (
         <View

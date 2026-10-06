@@ -517,7 +517,7 @@ export async function requestUpload(
     await tx.query(
       `UPDATE mobility.driver_documents
           SET status = 'replaced', updated_at = $3,
-              delete_after = $3::timestamptz + make_interval(days => $4)
+              delete_after = $3::timestamptz + make_interval(hours => $4 * 24)
         WHERE driver_profile_id = $1 AND kind = $2
           AND status IN ('uploaded', 'rejected')`,
       [profile.id, input.kind, now, VERIFICATION_RULES.replacedRetentionDays],
@@ -991,7 +991,7 @@ export async function decideApplication(
         await tx.query(
           `UPDATE mobility.driver_documents
               SET status = 'replaced', updated_at = $3,
-                  delete_after = $3::timestamptz + make_interval(days => $4)
+                  delete_after = $3::timestamptz + make_interval(hours => $4 * 24)
             WHERE driver_profile_id = $1 AND kind = $2 AND status = 'accepted'`,
           [profileId, doc.kind, now, VERIFICATION_RULES.replacedRetentionDays],
         );
@@ -1088,7 +1088,7 @@ export async function decideApplication(
       set.push(`rejected_at = $${values.length}`);
       await tx.query(
         `UPDATE mobility.driver_documents
-            SET delete_after = $2::timestamptz + make_interval(days => $3), updated_at = $2
+            SET delete_after = $2::timestamptz + make_interval(hours => $3 * 24), updated_at = $2
           WHERE driver_profile_id = $1 AND status <> 'deleted'`,
         [profileId, now, VERIFICATION_RULES.rejectedApplicationRetentionDays],
       );

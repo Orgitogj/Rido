@@ -210,9 +210,32 @@ export const supportRequestSchema = z.strictObject({
   message: z.string().trim().min(5).max(1000),
 });
 
+export const RIDE_PIN = {
+  digits: 4,
+  maxAttempts: 5,
+  lockoutSeconds: 120,
+  maxLockouts: 3,
+  minSecretLength: 32,
+} as const;
+
 export const driverStatusRequestSchema = z.strictObject({
   status: z.enum(["arriving", "arrived", "in_progress", "completed"]),
+  pin: z
+    .string()
+    .regex(/^\d{4}$/)
+    .optional(),
 });
+
+export const pinWaiverSchema = z.strictObject({
+  reason: z.string().trim().min(10).max(500),
+});
+
+export interface PinEntryView {
+  required: boolean;
+  attemptsLeft: number;
+  lockedUntil: string | null;
+  blocked: boolean;
+}
 
 export const rideStatuses = [
   "awaiting_payment",
@@ -402,6 +425,8 @@ export interface RideView {
   chat: RideChatSummary;
   rating: RideRatingState;
   counterpartRating: RatingSummary | null;
+  pin: string | null;
+  pinEntry: PinEntryView | null;
   serverTime: string;
 }
 
@@ -983,6 +1008,16 @@ export interface AdminRideDetail {
     resolvedAt: string | null;
     resolvedBy: string | null;
     note: string | null;
+  };
+  pin: {
+    required: boolean;
+    verifiedAt: string | null;
+    waivedAt: string | null;
+    waivedBy: string | null;
+    failedAttempts: number;
+    lockouts: number;
+    blocked: boolean;
+    canWaive: boolean;
   };
   events: {
     fromStatus: string;

@@ -38,6 +38,27 @@ async function setDriverStatus(client, ref, status, opts = {}) {
       "The CLI can only approve with --waive-documents, as a development or recovery override. Review applications in the operations console.",
     );
   const driver = await findDriver(client, ref);
+  let categoryIds = [];
+  if (status === "approved") {
+    const codes = Array.isArray(opts.categories)
+      ? opts.categories
+      : String(opts.categories || "")
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean);
+    if (!codes.length)
+      throw new Error(
+        'Name the vehicle categories this vehicle may serve (--categories general). Run "categories" to list them.',
+      );
+    const found = await client.query(
+      "SELECT id, code FROM mobility.vehicle_categories WHERE code = ANY($1::text[])",
+      [codes],
+    );
+    const missing = codes.filter((c) => !found.rows.some((r) => r.code === c));
+    if (missing.length)
+      throw new Error(`Unknown vehicle category: ${missing.join(", ")}.`);
+    categoryIds = found.rows.map((r) => r.id);
+  }
   if (status === "suspended") {
     const busy = await client.query(
       "SELECT 1 FROM mobility.rides WHERE driver_profile_id = $1 AND status = ANY($2::text[])",
@@ -62,6 +83,22 @@ async function setDriverStatus(client, ref, status, opts = {}) {
           WHERE id = $1 RETURNING id, display_name, status`,
     status === "approved" ? [driver.id, reason] : [driver.id],
   );
+  if (status === "approved") {
+    await client.query(
+      `DELETE FROM mobility.driver_vehicle_categories
+        WHERE driver_profile_id = $1 AND NOT (vehicle_category_id = ANY($2::uuid[]))`,
+      [driver.id, categoryIds],
+    );
+    for (const id of categoryIds) {
+      await client.query(
+        `INSERT INTO mobility.driver_vehicle_categories
+           (driver_profile_id, vehicle_category_id, source, created_at)
+         VALUES ($1, $2, 'cli', now())
+         ON CONFLICT (driver_profile_id, vehicle_category_id) DO NOTHING`,
+        [driver.id, id],
+      );
+    }
+  }
   await client.query(
     `INSERT INTO mobility.driver_review_events
        (driver_profile_id, actor, action, from_status, to_status, reason, created_at)
@@ -77,7 +114,14 @@ async function setDriverStatus(client, ref, status, opts = {}) {
   return rows[0];
 }
 
-module.exports = { findDriver, listDrivers, setDriverStatus };
+async function listCategories(client) {
+  const { rows } = await client.query(
+    "SELECT code, name, capacity, status, is_default FROM mobility.vehicle_categories ORDER BY is_default DESC, code",
+  );
+  return rows;
+}
+
+module.exports = { findDriver, listDrivers, setDriverStatus, listCategories };
 
 const PERMISSIONS = ["view", "support", "refund", "verify", "configure"];
 

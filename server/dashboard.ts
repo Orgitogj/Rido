@@ -155,6 +155,11 @@ async function live(
                     WHERE d.driver_profile_id = dp.id AND d.status = 'uploaded'))`,
       )
     : null;
+  const collections = await one<{ unpaid: number; pending: number }>(
+    `SELECT count(*) FILTER (WHERE collection_status = 'unpaid')::int AS unpaid,
+            count(*) FILTER (WHERE collection_status = 'pending')::int AS pending
+       FROM mobility.rides WHERE collection_status IN ('unpaid', 'pending')`,
+  );
   const scheduled = await one<{ upcoming: number; awaiting: number }>(
     `SELECT count(*) FILTER (WHERE status = 'scheduled')::int AS upcoming,
             count(*) FILTER (WHERE status = 'awaiting_confirmation')::int AS awaiting
@@ -186,6 +191,8 @@ async function live(
       reviewOpen: review.open,
       financialIssues: review.financial,
       disputesOpen: disputes.n,
+      unpaidRides: collections.unpaid,
+      collectionsPending: collections.pending,
     },
     scheduled: {
       upcoming: scheduled.upcoming,
@@ -257,6 +264,21 @@ async function period(
        FROM mobility.scheduled_rides
       WHERE (created_at >= $1 AND created_at < $2) OR (ended_at >= $1 AND ended_at < $2)`,
   );
+  const collected = await one<{ pos: string | number; cash: string | number }>(
+    `SELECT COALESCE(sum(captured_cents) FILTER (WHERE collection_method = 'pos'), 0) AS pos,
+            COALESCE(sum(captured_cents) FILTER (WHERE collection_method = 'cash'), 0) AS cash
+       FROM mobility.rides
+      WHERE collected_at >= $1 AND collected_at < $2`,
+  );
+  const transfers = await one<{
+    paid: string | number;
+    received: string | number;
+  }>(
+    `SELECT COALESCE(sum(amount_cents) FILTER (WHERE direction = 'to_driver'), 0) AS paid,
+            COALESCE(sum(amount_cents) FILTER (WHERE direction = 'from_driver'), 0) AS received
+       FROM mobility.driver_settlements
+      WHERE created_at >= $1 AND created_at < $2`,
+  );
   const cancelled =
     requests.by_passenger + requests.by_driver + requests.by_system;
   const rate = (n: number) =>
@@ -285,6 +307,10 @@ async function period(
       refundedCents: num(refunds.cents),
       ledgerDriverEarningsCents: num(ledger.driver),
       ledgerCommissionCents: num(ledger.commission),
+      collectedPosCents: num(collected.pos),
+      collectedCashCents: num(collected.cash),
+      transfersToDriversCents: num(transfers.paid),
+      transfersFromDriversCents: num(transfers.received),
       payouts: { available: false, paidOutCents: 0 },
     },
     scheduled: { created: scheduled.created, expired: scheduled.expired },

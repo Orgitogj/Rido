@@ -25,6 +25,7 @@ import {
   type ServiceAreaDetail,
 } from "@/shared/adminPricing";
 import { formatCents } from "@/shared/contracts";
+import { isValidTimeZone } from "@/shared/quietHours";
 import {
   BOUNDARY_PROBLEM_TEXT,
   boundaryProblem,
@@ -51,6 +52,7 @@ const ServiceArea = () => {
     allowed ? "/api/admin/vehicle-categories" : null,
   );
   const [categoryId, setCategoryId] = useState(DEFAULT_VEHICLE_CATEGORY_ID);
+  const [timezone, setTimezone] = useState("");
   const [message, setMessage] = useState<{ tone: Tone; text: string } | null>(
     null,
   );
@@ -76,6 +78,7 @@ const ServiceArea = () => {
     setName(d.name);
     setBoundaryText(formatBoundary(d.boundary));
     setDropoffRule(d.dropoffRule);
+    setTimezone(d.timezone);
   }, [d]);
 
   const run = async (fn: () => Promise<unknown>, success: string) => {
@@ -140,6 +143,8 @@ const ServiceArea = () => {
   const effectiveFrom = parseEffectiveFrom(effective);
   const ratesValid = Object.values(rates).every((v) => v !== null);
   const inEffect = d.policies.find((p) => p.state === "in_effect");
+  const zone = timezone.trim();
+  const zoneValid = isValidTimeZone(zone);
   const pricedCategories = new Set(
     d.policies
       .filter((p) => p.state === "in_effect")
@@ -173,6 +178,7 @@ const ServiceArea = () => {
           label="Drop-off rule"
           value={DROPOFF_RULE_LABEL[d.dropoffRule]}
         />
+        <KeyValue label="Time zone" value={d.timezone} />
         <KeyValue label="Points" value={String(d.boundary.length)} />
         <KeyValue
           label="Bounds"
@@ -184,7 +190,26 @@ const ServiceArea = () => {
       </Section>
 
       <Section title="Change area">
-        <Field label="Name" value={name} onChangeText={setName} width="w-80" />
+        <View className="flex flex-row flex-wrap">
+          <Field
+            label="Name"
+            value={name}
+            onChangeText={setName}
+            width="w-80"
+          />
+          <Field
+            label="Time zone (IANA name, e.g. Europe/Tirane)"
+            value={timezone}
+            onChangeText={setTimezone}
+            width="w-80"
+          />
+        </View>
+        {!zoneValid && (
+          <Notice
+            tone="warning"
+            text="Enter a valid IANA time zone name. Scheduled requests use the area's time zone."
+          />
+        )}
         <Field
           label="Boundary: one 'latitude, longitude' per line"
           value={boundaryText}
@@ -224,7 +249,9 @@ const ServiceArea = () => {
               busy ||
               reason.trim().length < 3 ||
               Boolean(problem) ||
+              !zoneValid ||
               (name.trim() === d.name &&
+                zone === d.timezone &&
                 !boundaryChanged &&
                 dropoffRule === d.dropoffRule)
             }
@@ -232,6 +259,7 @@ const ServiceArea = () => {
               update(
                 {
                   ...(name.trim() !== d.name ? { name: name.trim() } : {}),
+                  ...(zone !== d.timezone ? { timezone: zone } : {}),
                   ...(boundaryChanged ? { boundary } : {}),
                   ...(dropoffRule !== d.dropoffRule ? { dropoffRule } : {}),
                 },

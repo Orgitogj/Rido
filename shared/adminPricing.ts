@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { isValidTimeZone } from "./quietHours";
 import { AREA_RULES, type Vertex } from "./serviceArea";
 
 export const dropoffRules = ["inside_area", "anywhere"] as const;
@@ -11,6 +12,10 @@ const vertexSchema = z.tuple([
 ]);
 
 const reasonSchema = z.string().trim().min(3).max(500);
+
+const timezoneSchema = z.string().min(1).max(64).refine(isValidTimeZone, {
+  message: "Unknown time zone.",
+});
 
 export const serviceAreaCreateSchema = z.strictObject({
   code: z
@@ -24,6 +29,7 @@ export const serviceAreaCreateSchema = z.strictObject({
     .max(AREA_RULES.maxVertices),
   dropoffRule: z.enum(dropoffRules),
   isDevelopment: z.boolean(),
+  timezone: timezoneSchema.optional(),
   reason: reasonSchema,
 });
 
@@ -37,11 +43,13 @@ export const serviceAreaUpdateSchema = z
       .optional(),
     dropoffRule: z.enum(dropoffRules).optional(),
     status: z.enum(["active", "inactive"]).optional(),
+    timezone: timezoneSchema.optional(),
     expectedVersion: z.number().int().min(1),
     reason: reasonSchema,
   })
   .refine(
     (u) =>
+      u.timezone !== undefined ||
       u.name !== undefined ||
       u.boundary !== undefined ||
       u.dropoffRule !== undefined ||
@@ -104,6 +112,7 @@ export interface ServiceAreaItem {
   status: "active" | "inactive";
   dropoffRule: DropoffRule;
   isDevelopment: boolean;
+  timezone: string;
   version: number;
   vertexCount: number;
   currentPolicy: {

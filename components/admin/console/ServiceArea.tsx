@@ -334,15 +334,15 @@ const ServiceArea = () => {
           />
         </View>
         <View className="flex flex-row flex-wrap">
-          <Field label="Base ($)" value={base} onChangeText={setBase} />
-          <Field label="Per km ($)" value={perKm} onChangeText={setPerKm} />
+          <Field label="Base (lek)" value={base} onChangeText={setBase} />
+          <Field label="Per km (lek)" value={perKm} onChangeText={setPerKm} />
           <Field
-            label="Per minute ($)"
+            label="Per minute (lek)"
             value={perMinute}
             onChangeText={setPerMinute}
           />
           <Field
-            label="Minimum fare ($)"
+            label="Minimum fare (lek)"
             value={minimum}
             onChangeText={setMinimum}
           />

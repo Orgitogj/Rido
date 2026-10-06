@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import CollectionPanel from "@/components/CollectionPanel";
 import CustomButton from "@/components/CustomButton";
 import EtaCard from "@/components/EtaCard";
 import InterruptReasonSheet from "@/components/InterruptReasonSheet";
@@ -24,6 +25,7 @@ import {
   isTerminal,
   paymentNote,
   rideHeadline,
+  vehiclePaymentNote,
 } from "@/lib/rideText";
 
 import type {
@@ -87,11 +89,13 @@ const RideStatusPanel = ({
   live,
   connection,
   perform,
+  recordCollection,
 }: {
   ride: RideView;
   live: LiveTripView | null;
   connection: "connecting" | "live" | "reconnecting";
   perform: (action: RideAction, reason?: string) => Promise<"ok" | "left">;
+  recordCollection?: (method: "pos" | "cash" | "unpaid") => Promise<void>;
 }) => {
   const {
     t,
@@ -114,7 +118,12 @@ const RideStatusPanel = ({
   );
   const isDriver = ride.viewer === "driver";
   const preview = ride.cancellation
-    ? cancellationText(ride.cancellation, money(ride.fareCents), language)
+    ? cancellationText(
+        ride.cancellation,
+        money(ride.fareCents, ride.currency),
+        language,
+        ride.paymentMethod === "in_vehicle",
+      )
     : null;
 
   useEffect(() => {
@@ -342,13 +351,23 @@ const RideStatusPanel = ({
 
       {!isDriver && ride.status !== "legacy" && (
         <Text className="text-sm text-general-200 mt-4">
-          {paymentNote(
-            ride.paymentStatus,
-            ride.status,
-            ride.settlement,
-            language,
-          )}
+          {ride.paymentMethod === "in_vehicle"
+            ? vehiclePaymentNote(ride, language)
+            : paymentNote(
+                ride.paymentStatus,
+                ride.status,
+                ride.settlement,
+                language,
+              )}
         </Text>
+      )}
+
+      {isDriver && ride.collection && recordCollection && (
+        <CollectionPanel
+          collection={ride.collection}
+          fare={money(ride.fareCents, ride.currency)}
+          onRecord={recordCollection}
+        />
       )}
 
       {error && (

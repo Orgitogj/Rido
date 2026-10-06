@@ -84,6 +84,45 @@ export function paymentState(row: RideRow): {
       text: `Booked with the earlier demo flow and a simulated driver. Recorded payment: ${row.payment_status === "paid" ? formatCents(captured || row.fare_cents) : "none"}.`,
     };
   }
+  if (row.payment_method === "in_vehicle") {
+    if (row.collection_status === "collected") {
+      return row.collection_method === "cash"
+        ? { state: "paid_cash", text: `Paid ${fare} in cash to the driver.` }
+        : {
+            state: "paid_pos",
+            text: `Paid ${fare} by card on the driver's terminal.`,
+          };
+    }
+    if (row.collection_status === "unpaid") {
+      return {
+        state: "unpaid",
+        text: `The driver reported that ${fare} was not paid. Contact support to settle it.`,
+      };
+    }
+    if (row.collection_status === "waived") {
+      return {
+        state: "waived",
+        text: "Support closed this trip without a payment.",
+      };
+    }
+    if (row.collection_status === "pending") {
+      return {
+        state: "collection_pending",
+        text: `Pay the driver ${fare} by card or cash. The receipt updates when the driver records it.`,
+      };
+    }
+    if (
+      row.status === "cancelled" ||
+      row.status === "no_driver" ||
+      row.status === "interrupted"
+    ) {
+      return { state: "nothing_due", text: "There is nothing to pay." };
+    }
+    return {
+      state: "pay_in_vehicle",
+      text: `You pay the driver ${fare} by card or cash at the end of the trip.`,
+    };
+  }
   if (row.payment_status === "paid") {
     if (row.refunded_cents >= captured && captured > 0) {
       return {
@@ -171,6 +210,11 @@ export function receiptFrom(row: ReceiptRow, now: Date): Receipt {
       latitude: row.destination_latitude,
       longitude: row.destination_longitude,
     },
+    paymentMethod: row.payment_method,
+    collection:
+      row.payment_method === "in_vehicle" && row.collection_status
+        ? { status: row.collection_status, method: row.collection_method }
+        : null,
     driver:
       row.driver_profile_id && row.driver_name
         ? {

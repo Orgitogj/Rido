@@ -163,12 +163,36 @@ export function cancellationText(
   preview: CancellationPreview,
   hold: string,
   language: Language = "en",
+  inVehicle = false,
 ) {
   if (!preview.variant) {
     return { title: preview.title, body: preview.consequence };
   }
   return {
     title: translate(language, `ride.cancel.${preview.variant}_title`),
-    body: translate(language, `ride.cancel.${preview.variant}_body`, { hold }),
+    body: inVehicle
+      ? translate(language, `ride.cancel.${preview.variant}_body_vehicle`)
+      : translate(language, `ride.cancel.${preview.variant}_body`, { hold }),
   };
+}
+
+export function vehiclePaymentNote(
+  ride: Pick<RideView, "status" | "collection">,
+  language: Language = "en",
+): string {
+  const p = (key: string) => translate(language, `ride.payment.${key}` as TKey);
+  if (ride.collection) {
+    if (ride.collection.status === "pending") return p("collectionPending");
+    if (ride.collection.status === "unpaid") return p("unpaid");
+    if (ride.collection.status === "waived") return p("waived");
+    return ride.collection.method === "cash" ? p("paidCash") : p("paidPos");
+  }
+  if (
+    ride.status === "cancelled" ||
+    ride.status === "no_driver" ||
+    ride.status === "interrupted"
+  ) {
+    return p("nothingDue");
+  }
+  return p("payInVehicle");
 }

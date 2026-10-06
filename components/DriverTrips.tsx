@@ -37,6 +37,20 @@ const DriverTrips = () => {
             {trip.completedAt ? `${dateTime(trip.completedAt)} · ` : ""}
             {t("driver.trips.quotedFare", { amount: money(trip.fareCents) })}
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() =>
+              router.push({
+                pathname: "/(root)/support/new",
+                params: { rideId: trip.rideId, role: "driver" },
+              })
+            }
+            className="mt-1 min-h-[44px] justify-center"
+          >
+            <Text className="text-sm text-[#0066CC] font-JakartaSemiBold">
+              {t("support.getHelpRide")}
+            </Text>
+          </Pressable>
           {trip.ratingPending && (
             <Pressable
               accessibilityRole="button"
